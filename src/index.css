@@ -1,0 +1,106 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+@theme inline {
+  --color-primary: #1E40AF;
+  --color-primary-hover: #1D3A9E;
+  --color-primary-light: #DBEAFE;
+  --color-accent: #3B82F6;
+  --color-success: #16A34A;
+  --color-warning: #D97706;
+  --color-danger: #DC2626;
+  --color-bg: #F1F5F9;
+  --color-card: #FFFFFF;
+  --color-border: #E2E8F0;
+  --color-muted: #64748B;
+  --color-subtle: #F8FAFC;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #F1F5F9;
+  color: #0F172A;
+  margin: 0;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+.mono { font-family: var(--font-mono); }
+
+.marquee {
+  display: inline-block;
+  padding-left: 100%;
+  animation: marquee 25s linear infinite;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0%);
+  }
+
+  100% {
+    transform: translateX(-100%);
+  }
+}
+.alert-container {
+  height: 120px;
+  overflow: hidden;
+  position: relative;
+}
+
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  animation: scrollAlerts 15s linear infinite;
+}
+
+.alert-list:hover {
+  animation-play-state: paused;
+}
+
+.alert-item {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #fecaca;
+  font-size: 13px;
+}
+
+.risk-register { display: none; }
+
+.project-page > .risk-form-primary {
+  order: 5;
+}
+
+.project-page > .risk-details {
+  order: 6;
+}
+
+.project-page > .risk-register > .mt-5 {
+  display: none;
+}
+
+.risk-register label:has(input[type="file"]) {
+  display: none;
+}
+
+@keyframes scrollAlerts {
+  0% {
+    transform: translateY(100%);
+  }
+
+  100% {
+    transform: translateY(-100%);
+  }
+}
