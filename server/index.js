@@ -76,18 +76,6 @@ app.use((error, req, res, next) => {
   res.status(500).json({ message: 'Internal server error.' });
 });
 
-initializeDatabase()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`CloudOrbix API listening at http://localhost:${PORT}`);
-      console.log(process.env.NODE_ENV === 'production' ? 'Running in production mode.' : 'Running in development mode.');
-    });
-  })
-  .catch((error) => {
-    console.error('API startup failed:', error);
-    process.exit(1);
-  });
-
 async function startServer() {
   try {
     await initializeDatabase();
