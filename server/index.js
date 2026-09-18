@@ -17,7 +17,6 @@ import reportRoutes from './routes/reports.js';
 import projectRoutes from './routes/projects.js';
 import serviceRoutes from './routes/services.js';
 import profileTasksRoutes from './routes/profile-tasks.js';
-import { containerClient } from "./storage.js";
 import { initializeDatabase } from './db.js';
 
 const app = express();
