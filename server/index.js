@@ -18,6 +18,7 @@ import projectRoutes from './routes/projects.js';
 import serviceRoutes from './routes/services.js';
 import profileTasksRoutes from './routes/profile-tasks.js';
 import { initializeDatabase } from './db.js';
+import { initializeStorage } from './storage.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -86,3 +87,24 @@ initializeDatabase()
     console.error('API startup failed:', error);
     process.exit(1);
   });
+
+async function startServer() {
+  try {
+    await initializeDatabase();
+    await initializeStorage();
+
+    app.listen(PORT, () => {
+      console.log(`CloudOrbix API listening at http://localhost:${PORT}`);
+      console.log(
+        process.env.NODE_ENV === 'production'
+          ? 'Running in production mode.'
+          : 'Running in development mode.'
+      );
+    });
+  } catch (error) {
+    console.error('API startup failed:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
