@@ -1,8 +1,6 @@
-import pg from 'pg';
+import sql from 'mssql';
 import bcrypt from 'bcryptjs';
 import 'dotenv/config';
-
-const { Pool } = pg;
 
 export const appState = {
   roles: [],
@@ -16,14 +14,66 @@ export const appState = {
 };
 
 let pool = null;
-
 const databaseUrl = process.env.DATABASE_URL?.trim();
 
 if (databaseUrl) {
-  pool = new Pool({
-    connectionString: databaseUrl,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
+  pool = new sql.ConnectionPool(databaseUrl);
+}
+
+function normalizeRow(row) {
+  if (!row || typeof row !== 'object') return row;
+
+  const normalized = { ...row };
+  for (const [key, value] of Object.entries(normalized)) {
+    if ((key === 'roles' || key === 'services') && typeof value === 'string') {
+      normalized[key] = value.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  return normalized;
+}
+
+export function normalizeQueryForAzureSql(sqlText, values = []) {
+  let text = String(sqlText || '').trim();
+  if (!text) return { text, values };
+
+  text = text.replace(/\$(\d+)/g, (_, index) => `@p${Number(index)}`);
+  text = text.replace(/\bCURRENT_DATE\b/gi, 'CAST(GETDATE() AS date)');
+  text = text.replace(/\bCURRENT_TIMESTAMP\b/gi, 'GETDATE()');
+  text = text.replace(/\bNOW\(\)/gi, 'GETDATE()');
+  text = text.replace(/::\s*(int|numeric|date|text)/gi, '');
+  text = text.replace(/\bNULLS\s+LAST\b/gi, '');
+
+  text = text.replace(/COALESCE\(array_agg\(([^)]+?)\)\s*FILTER\s*\(\s*WHERE\s+([^)]*?)\s*\),\s*'\{\}'\)/gi, (_, agg, condition) => `COALESCE(STRING_AGG(DISTINCT ${agg}, ','), '')`);
+  text = text.replace(/COALESCE\(array_agg\(([^)]+?)\),\s*'\{\}'\)/gi, (_, agg) => `COALESCE(STRING_AGG(DISTINCT ${agg}, ','), '')`);
+  text = text.replace(/COUNT\(\s*\*\s*\)\s*::\s*int/gi, 'CAST(COUNT(*) AS int)');
+  text = text.replace(/COUNT\(\s*DISTINCT\s+([^)]*?)\s*\)\s*::\s*int/gi, 'CAST(COUNT(DISTINCT $1) AS int)');
+
+  text = text.replace(/\bRETURNING\b\s+([A-Za-z0-9_\*,\s]+)/gi, (_, returningClause) => {
+    const identifier = returningClause.trim() === '*' ? '*' : returningClause.split(',').map((part) => part.trim()).filter(Boolean).map((part) => (part.includes(' AS ') ? part.split(/\s+AS\s+/i).pop() : part)).join(', ');
+    return `OUTPUT INSERTED.${identifier}`;
   });
+
+  return { text, values };
+}
+
+async function ensurePoolConnected() {
+  if (!pool) throw new Error('Database is not configured.');
+  if (!pool.connected) await pool.connect();
+}
+
+async function executeQuery(sqlText, params = []) {
+  await ensurePoolConnected();
+  const normalized = normalizeQueryForAzureSql(sqlText, params);
+  const request = pool.request();
+  const values = Array.isArray(params) ? params : [params];
+  values.forEach((value, index) => {
+    request.input(`p${index + 1}`, value);
+  });
+  const result = await request.query(normalized.text);
+  return {
+    rows: (result.recordset || []).map(normalizeRow),
+    rowCount: result.recordset?.length || 0,
+  };
 }
 
 export async function initializeDatabase() {
@@ -34,21 +84,28 @@ export async function initializeDatabase() {
   }
 
   try {
-    await pool.query('SELECT 1');
+    await ensurePoolConnected();
+    await pool.request().query('SELECT 1 AS ok');
     console.log('Database connection successful.');
-    return { source: 'postgres', initialized: true };
+    return { source: 'azure-sql', initialized: true };
   } catch (error) {
-    await pool.end().catch(() => {});
+    await pool.close().catch(() => undefined);
     pool = null;
-    console.warn(
-      `Database connection failed (${error.code || 'unknown'}): ${error.message || 'Unable to connect to PostgreSQL.'}`,
-    );
+    console.warn(`Database connection failed (${error.number || 'unknown'}): ${error.message || 'Unable to connect to Azure SQL.'}`);
     throw error;
   }
 }
 
 export function getPool() {
-  return pool;
+  if (!pool) return null;
+  return {
+    async query(sqlText, params = []) {
+      return executeQuery(sqlText, params);
+    },
+    async end() {
+      if (pool && pool.connected) await pool.close();
+    },
+  };
 }
 
 export function getState() {
@@ -60,7 +117,7 @@ export async function getUserByEmail(email) {
   if (!value) return null;
 
   if (pool) {
-    const result = await pool.query(`
+    const result = await executeQuery(`
       SELECT
         u.id,
         u.email,
@@ -68,16 +125,22 @@ export async function getUserByEmail(email) {
         u.first_name,
         u.last_name,
         u.is_active,
-        COALESCE(array_agg(r.name) FILTER (WHERE r.name IS NOT NULL), '{}') AS roles
+        STRING_AGG(DISTINCT r.name, ',') AS roles
       FROM users u
       LEFT JOIN user_roles ur ON ur.user_id = u.id
       LEFT JOIN roles r ON r.id = ur.role_id
-      WHERE LOWER(u.email) = $1
-      GROUP BY u.id
+      WHERE LOWER(u.email) = @p1
+      GROUP BY u.id, u.email, u.password_hash, u.first_name, u.last_name, u.is_active
     `, [value]);
 
     const row = result.rows[0];
     if (!row) return null;
+
+    const roles = typeof row.roles === 'string'
+      ? row.roles.split(',').map((item) => item.trim()).filter(Boolean)
+      : Array.isArray(row.roles)
+        ? row.roles
+        : [];
 
     return {
       id: row.id,
@@ -86,7 +149,7 @@ export async function getUserByEmail(email) {
       firstName: row.first_name,
       lastName: row.last_name,
       isActive: row.is_active,
-      roles: row.roles,
+      roles,
     };
   }
 
@@ -116,7 +179,7 @@ export async function verifyPassword(password, hash) {
 export async function updateUserPassword(userId, password) {
   const hashedPassword = await hashPassword(password);
   if (pool) {
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashedPassword, userId]);
+    await executeQuery('UPDATE users SET password_hash = @p1 WHERE id = @p2', [hashedPassword, userId]);
     return;
   }
   throw new Error('Password updates require a configured database.');
@@ -133,7 +196,7 @@ export function createAuditEntry(userEmail, action, oldValue, newValue) {
   };
   appState.auditLogs.unshift(entry);
   if (pool) {
-    pool.query('INSERT INTO audit_logs (user_email, action, old_value, new_value) VALUES ($1, $2, $3, $4)', [userEmail, action, oldValue ?? '—', newValue ?? '—']).catch(() => undefined);
+    executeQuery('INSERT INTO audit_logs (user_email, action, old_value, new_value) VALUES (@p1, @p2, @p3, @p4)', [userEmail, action, oldValue ?? '—', newValue ?? '—']).catch(() => undefined);
   }
 }
 

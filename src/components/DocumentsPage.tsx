@@ -10,6 +10,7 @@ type ProjectDocument = { id: number; file_name: string; blob_url: string; docume
 export default function DocumentsPage({ dark, clientId, onBack, readOnly = false }: DocumentsPageProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
+  const [templates, setTemplates] = useState<Array<{ id: string; fileName: string; blobUrl: string; uploadedBy?: string; createdAt?: string }>>([]);
   const [customFile, setCustomFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
@@ -29,7 +30,13 @@ export default function DocumentsPage({ dark, clientId, onBack, readOnly = false
     setDocuments(body.documents || []);
   };
 
-  useEffect(() => { void load().catch((error) => { setMessage(error.message); showCloudOrbixAlert(error.message, "error"); }); }, [clientId]);
+  useEffect(() => {
+    void load().catch((error) => { setMessage(error.message); showCloudOrbixAlert(error.message, "error"); });
+    void fetch("/api/templates", { headers })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Unable to load templates.")))
+      .then((payload) => setTemplates(Array.isArray(payload.templates) ? payload.templates : []))
+      .catch(() => setTemplates([]));
+  }, [clientId]);
 
   const upload = async (file: File, documentType: string) => {
     setBusy(documentType);
@@ -82,6 +89,11 @@ export default function DocumentsPage({ dark, clientId, onBack, readOnly = false
       <div className="flex items-center justify-between gap-3 mb-3"><div><h2 className="font-semibold text-sm">Extra project documents</h2><p className="text-xs mt-1" style={{ color: muted }}>Upload supporting files that are not part of the mandatory checklist.</p></div><label className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold text-white cursor-pointer" style={{ background: "#1E40AF" }}><Upload className="w-3.5 h-3.5" /> Add document<input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0] || null; setCustomFile(file); if (file) void upload(file, "custom"); event.currentTarget.value = ""; }} /></label></div>
       {customFile && <p className="text-xs" style={{ color: muted }}>{customFile.name} {busy === "custom" ? "is uploading..." : "uploaded"}</p>}
     </section>}
+
+    <section className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
+      <div className="flex items-center justify-between gap-3 mb-3"><div><h2 className="font-semibold text-sm">Document templates</h2><p className="text-xs mt-1" style={{ color: muted }}>Admin-managed templates for project documentation.</p></div></div>
+      {templates.length === 0 ? <p className="text-xs" style={{ color: muted }}>No templates uploaded yet.</p> : <div className="space-y-2">{templates.map((template) => <div key={template.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2" style={{ borderColor: border, background: inputBg }}><div className="flex-1 min-w-0"><div className="text-xs font-semibold truncate">{template.fileName}</div><div className="text-[10px] mt-1" style={{ color: muted }}>Stored in Azure · {template.uploadedBy || "Admin"}</div></div><a href={template.blobUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-white" style={{ background: "#1E40AF" }}><Download className="w-3.5 h-3.5" /> Download</a></div>)}</div>}
+    </section>
 
     <section className="rounded-xl border overflow-hidden" style={{ background: bg, borderColor: border }}><div className="px-5 py-4 border-b" style={{ borderColor: border }}><h2 className="font-semibold text-sm">All project documents</h2></div><div className="divide-y" style={{ borderColor: border }}>{documents.length === 0 ? <p className="p-5 text-xs" style={{ color: muted }}>No documents uploaded yet.</p> : documents.map((document) => <div key={document.id} className="px-5 py-3 flex items-center gap-3"><FileText className="w-4 h-4" style={{ color: "#1E40AF" }} /><span className="flex-1 text-xs font-semibold">{document.file_name}</span><span className="text-[10px]" style={{ color: muted }}>{document.document_type === "custom" ? "Custom" : "Mandatory"}</span><a href={document.blob_url} target="_blank" rel="noreferrer" className="p-1.5" style={{ color: "#1E40AF" }} title="View or download document"><Download className="w-4 h-4" /></a></div>)}</div></section>
   </div>;

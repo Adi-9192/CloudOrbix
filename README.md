@@ -6,9 +6,9 @@ CloudOrbix is a React and Vite application for CIS professional-services operati
 
 - Node.js 20 or newer
 - npm 10 or newer
-- PostgreSQL 14 or newer
+- Azure SQL Database or Azure SQL Managed Instance
 
-The API currently uses PostgreSQL through the `pg` package. `DATABASE_URL` must therefore be a PostgreSQL connection string; SQLite URLs such as `sqlite:./cloudorbix.sqlite` are not supported by the current database layer.
+The API now targets Azure SQL via the `mssql` driver. `DATABASE_URL` must therefore be an Azure SQL connection string such as `Server=tcp:<server>.database.windows.net,1433;Database=<database>;User ID=<user>;Password=<password>;Encrypt=true;TrustServerCertificate=false;HostNameInCertificate=*.database.windows.net;LoginTimeout=30;`.
 
 ## Install
 
@@ -21,7 +21,7 @@ The main runtime dependencies are:
 - React and React DOM for the frontend
 - Vite and Tailwind CSS for the client build
 - Express, CORS, Helmet, and rate limiting for the API
-- `pg` for PostgreSQL access
+- `mssql` for Azure SQL access
 - `bcryptjs` and `jsonwebtoken` for authentication
 - ExcelJS for spreadsheet imports
 - Azure Blob Storage for document storage
@@ -33,7 +33,7 @@ Create a `.env` file in the project root:
 
 ```env
 NODE_ENV=development
-DATABASE_URL=postgresql://postgres:password@localhost:5432/cloudorbix
+DATABASE_URL=Server=tcp:cloudorbix-prod.database.windows.net,1433;Database=cloudorbix;User ID=cloudorbix_admin;Password=replace-with-a-strong-password;Encrypt=true;TrustServerCertificate=false;HostNameInCertificate=*.database.windows.net;LoginTimeout=30;
 PORT=4000
 CORS_ORIGINS=http://localhost:5173
 JWT_SECRET=replace-with-a-long-random-secret
@@ -50,7 +50,7 @@ Do not commit `.env` files or production secrets.
 
 ## Database setup
 
-Create the PostgreSQL database, then apply the schema migrations:
+Create the Azure SQL database, then apply the schema migrations:
 
 ```bash
 npm run migrate
@@ -86,7 +86,7 @@ The frontend runs on `http://localhost:5173` and the API runs on `http://localho
 | `npm run dev` | Start the frontend and API in development mode |
 | `npm run dev:client` | Start the Vite frontend |
 | `npm run dev:server` | Start the Express API with Nodemon |
-| `npm run migrate` | Apply pending PostgreSQL migrations |
+| `npm run migrate` | Apply pending Azure SQL migrations |
 | `npm run bootstrap-admin` | Create the initial administrator |
 | `npm run build` | Create a production frontend build |
 | `npm test` | Run server unit tests |

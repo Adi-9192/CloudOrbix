@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Shield, Users, Settings, Plus, Edit2, Trash2, Check, X, Eye, EyeOff, ToggleLeft, ToggleRight } from "lucide-react";
+import { Shield, Users, Settings, Plus, Edit2, Trash2, Check, X, Eye, EyeOff, ToggleLeft, ToggleRight, Upload } from "lucide-react";
 import { showCloudOrbixAlert } from "../alert";
 
 type UserStatus = "active" | "inactive";
-type TabKey = "users" | "roles" | "permissions" | "approvals";
+type TabKey = "users" | "roles" | "permissions" | "approvals" | "templates";
 
 type UserRecord = {
   id: number;
@@ -79,6 +79,40 @@ const PERMISSIONS = [
   { module: "Admin Panel", admin: true, manager: false, ops: false, viewer: false },
 ];
 
+function TemplateLibraryList() {
+  const [templates, setTemplates] = useState<Array<{ id: string; fileName: string; blobUrl: string; uploadedBy?: string; createdAt?: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem("clmp-token");
+    fetch("/api/templates", { headers: { Authorization: `Bearer ${token}` } })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Unable to load templates.")))
+      .then((payload: { templates?: Array<{ id: string; fileName: string; blobUrl: string; uploadedBy?: string; createdAt?: string }> }) => {
+        setTemplates(Array.isArray(payload.templates) ? payload.templates : []);
+      })
+      .catch(() => setTemplates([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <div className="p-5 text-xs" style={{ color: "#64748B" }}>Loading template library…</div>;
+  }
+
+  if (!templates.length) {
+    return <div className="p-5 text-xs" style={{ color: "#64748B" }}>No templates found in Azure storage yet.</div>;
+  }
+
+  return <div className="divide-y">{templates.map((template) => (
+    <div key={template.id} className="px-5 py-3 flex items-center justify-between gap-3" style={{ borderColor: "#E2E8F0" }}>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-semibold truncate">{template.fileName}</div>
+        <div className="text-[10px] mt-1" style={{ color: "#64748B" }}>{template.uploadedBy || "Admin"} · {template.createdAt ? new Date(template.createdAt).toLocaleString() : "Recently uploaded"}</div>
+      </div>
+      <a href={template.blobUrl} target="_blank" rel="noreferrer" className="px-2.5 py-1.5 rounded-md text-xs font-semibold text-white" style={{ background: "#1E40AF" }}>Download</a>
+    </div>
+  ))}</div>;
+}
+
 export default function Admin({ dark }: AdminProps) {
   const [tab, setTab] = useState<TabKey>("users");
   const [users, setUsers] = useState<UserRecord[]>(INITIAL_USERS);
@@ -105,7 +139,7 @@ export default function Admin({ dark }: AdminProps) {
   };
 
   const roles = useMemo<string[]>(() => ["Admin", "Manager", "Account Manager", "Viewer"], []);
-  const tabs: TabKey[] = ["users", "roles", "permissions", "approvals"];
+  const tabs: TabKey[] = ["users", "roles", "permissions", "approvals", "templates"];
 
   useEffect(() => {
     const token = localStorage.getItem("clmp-token");
@@ -322,7 +356,7 @@ export default function Admin({ dark }: AdminProps) {
             className="px-5 py-2.5 text-xs font-semibold capitalize transition-colors border-b-2 -mb-px"
             style={{ borderColor: tab === item ? "#1E40AF" : "transparent", color: tab === item ? "#1E40AF" : muted }}
           >
-            {item === "users" ? "Users" : item === "roles" ? "Roles" : item === "permissions" ? "Permissions" : "Approvals"}
+            {item === "users" ? "Users" : item === "roles" ? "Roles" : item === "permissions" ? "Permissions" : item === "templates" ? "Templates" : "Approvals"}
           </button>
         ))}
       </div>
@@ -450,6 +484,37 @@ export default function Admin({ dark }: AdminProps) {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {tab === "templates" && (
+        <div className="rounded-xl border overflow-hidden" style={{ background: bg, borderColor: border }}>
+          <div className="flex items-center justify-between gap-3 px-5 py-4 border-b" style={{ borderColor: border }}>
+            <div>
+              <h3 className="font-semibold text-sm">Document templates</h3>
+              <p className="text-xs mt-1" style={{ color: muted }}>Admin-only template library stored in Azure Blob Storage.</p>
+            </div>
+            <label className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold text-white cursor-pointer" style={{ background: "#1E40AF" }}>
+              <Upload className="w-3.5 h-3.5" /> Upload template
+              <input type="file" className="hidden" onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                const token = localStorage.getItem("clmp-token");
+                const form = new FormData();
+                form.append("file", file);
+                const response = await fetch("/api/templates/upload", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                  showCloudOrbixAlert(payload.message || "Unable to upload template.", "error");
+                  return;
+                }
+                showCloudOrbixAlert("Template uploaded successfully.", "success");
+                window.location.reload();
+                event.currentTarget.value = "";
+              }} />
+            </label>
+          </div>
+          <TemplateLibraryList />
         </div>
       )}
 

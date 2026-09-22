@@ -1,12 +1,12 @@
 # CloudOrbix Azure Deployment Guide
 
-This guide deploys CloudOrbix with Azure Database for PostgreSQL Flexible Server, an Azure App Service API, and a separately hosted Vite frontend or same-origin frontend deployment.
+This guide deploys CloudOrbix with Azure SQL Database, an Azure App Service API, and a separately hosted Vite frontend or same-origin frontend deployment.
 
 ## Architecture
 
 Recommended production components:
 
-- Azure Database for PostgreSQL Flexible Server for application data
+- Azure SQL Database for application data
 - Azure App Service for the Node.js/Express API
 - Azure Static Web Apps or Azure App Service for the Vite frontend
 - Azure Key Vault for secrets
@@ -51,7 +51,7 @@ Use a PowerShell session for the deployment variables. Do not commit these value
 ```powershell
 $ResourceGroup = "cloudorbix-prod-rg"
 $Location = "eastus"
-$PostgresServer = "cloudorbix-prod-db"
+$SqlServer = "cloudorbix-prod-sql"
 $DatabaseName = "cloudorbix"
 $AppServicePlan = "cloudorbix-prod-plan"
 $ApiAppName = "cloudorbix-prod-api"
@@ -69,39 +69,35 @@ az group create `
   --location $Location
 ```
 
-## 3. Create PostgreSQL Flexible Server
+## 3. Create Azure SQL Database
 
 Create a strong database administrator password outside the repository. Use a password manager or secret generator.
 
 ```powershell
 $DbAdmin = "cloudorbixadmin"
-$DbAdminPassword = Read-Host "Enter the PostgreSQL administrator password" -AsSecureString
+$DbAdminPassword = Read-Host "Enter the Azure SQL administrator password" -AsSecureString
 $DbAdminPasswordPlain = [System.Net.NetworkCredential]::new("", $DbAdminPassword).Password
 ```
 
-Create the server:
+Create the logical server:
 
 ```powershell
-az postgres flexible-server create `
+az sql server create `
   --resource-group $ResourceGroup `
-  --name $PostgresServer `
+  --name $SqlServer `
   --location $Location `
   --admin-user $DbAdmin `
-  --admin-password $DbAdminPasswordPlain `
-  --sku-name Standard_B1ms `
-  --tier Burstable `
-  --storage-size 32 `
-  --version 16 `
-  --public-access 0.0.0.0
+  --admin-password $DbAdminPasswordPlain
 ```
 
 Create the application database:
 
 ```powershell
-az postgres flexible-server db create `
+az sql db create `
   --resource-group $ResourceGroup `
-  --server-name $PostgresServer `
-  --database-name $DatabaseName
+  --server $SqlServer `
+  --name $DatabaseName `
+  --service-objective S0
 ```
 
 The temporary public access rule is useful for the initial migration. Restrict it before production traffic is enabled. Prefer private networking for a mature production environment.
@@ -109,13 +105,13 @@ The temporary public access rule is useful for the initial migration. Restrict i
 The connection string format is:
 
 ```text
-postgresql://<user>:<url-encoded-password>@<server>.postgres.database.azure.com:5432/<database>?sslmode=require
+Server=tcp:<server>.database.windows.net,1433;Database=<database>;User ID=<user>;Password=<password>;Encrypt=true;TrustServerCertificate=false;HostNameInCertificate=*.database.windows.net;LoginTimeout=30;
 ```
 
 For this deployment:
 
 ```powershell
-$DatabaseUrl = "postgresql://$DbAdmin`:$DbAdminPasswordPlain@$PostgresServer.postgres.database.azure.com:5432/$DatabaseName?sslmode=require"
+$DatabaseUrl = "Server=tcp:$SqlServer.database.windows.net,1433;Database=$DatabaseName;User ID=$DbAdmin;Password=$DbAdminPasswordPlain;Encrypt=true;TrustServerCertificate=false;HostNameInCertificate=*.database.windows.net;LoginTimeout=30;"
 ```
 
 If the password contains `@`, `:`, `/`, `#`, or other URL-reserved characters, URL-encode it before constructing the connection string.
@@ -143,7 +139,7 @@ The migration command:
 Verify the migration through Node.js if `psql` is unavailable:
 
 ```powershell
-node --input-type=module -e "import pg from 'pg'; const {Pool}=pg; const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:true}}); const r=await pool.query(\"select table_name from information_schema.tables where table_schema='public' order by table_name\"); console.log(r.rows.map(x=>x.table_name).join('\\n')); await pool.end();"
+node --input-type=module -e "import sql from 'mssql'; const pool = new sql.ConnectionPool(process.env.DATABASE_URL); await pool.connect(); const r = await pool.request().query('SELECT TABLE_NAME AS table_name FROM INFORMATION_SCHEMA.TABLES ORDER BY TABLE_NAME'); console.log(r.recordset.map(x => x.table_name).join('\\n')); await pool.close();"
 ```
 
 Expected tables include:
