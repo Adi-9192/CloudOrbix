@@ -185,7 +185,7 @@ export async function updateUserPassword(userId, password) {
   throw new Error('Password updates require a configured database.');
 }
 
-export function createAuditEntry(userEmail, action, oldValue, newValue) {
+export async function createAuditEntry(userEmail, action, oldValue, newValue) {
   const entry = {
     id: Date.now(),
     userEmail,
@@ -196,7 +196,18 @@ export function createAuditEntry(userEmail, action, oldValue, newValue) {
   };
   appState.auditLogs.unshift(entry);
   if (pool) {
-    executeQuery('INSERT INTO audit_logs (user_email, action, old_value, new_value) VALUES (@p1, @p2, @p3, @p4)', [userEmail, action, oldValue ?? '—', newValue ?? '—']).catch(() => undefined);
+    try {
+      await executeQuery('INSERT INTO audit_logs (user_email, action, old_value, new_value) VALUES (@p1, @p2, @p3, @p4)', [userEmail, action, oldValue ?? '—', newValue ?? '—']);
+    } catch (error) {
+      console.error('Audit persistence error:', {
+        userEmail,
+        action,
+        message: error.message,
+        code: error.code,
+        number: error.number,
+        stack: error.stack,
+      });
+    }
   }
 }
 
