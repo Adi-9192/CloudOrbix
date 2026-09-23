@@ -92,4 +92,47 @@ try {
       );
     }
 
-    const roleId = role.recordset
+        const roleId = role.recordset[0].id;
+
+    // Assign Admin role to the new user.
+    const userRoleRequest = new sql.Request(transaction);
+
+    await userRoleRequest
+      .input('userId', sql.Int, userId)
+      .input('roleId', sql.Int, roleId)
+      .query(`
+        INSERT INTO dbo.user_roles (
+          user_id,
+          role_id
+        )
+        VALUES (
+          @userId,
+          @roleId
+        )
+      `);
+
+    await transaction.commit();
+    transactionStarted = false;
+
+    console.log(`Bootstrap administrator created: ${email}`);
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await transaction.rollback();
+      } catch (rollbackError) {
+        console.error(
+          'Failed to rollback administrator transaction:',
+          rollbackError.message
+        );
+      }
+    }
+
+    throw error;
+  }
+} catch (error) {
+  console.error('Bootstrap administrator failed:');
+  console.error(error);
+  process.exitCode = 1;
+} finally {
+  await pool.close();
+}
