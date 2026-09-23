@@ -16,14 +16,13 @@ try {
 
   console.log('Connected to Azure SQL Database.');
 
-  // Create migration tracking table if it does not already exist.
   await pool.request().query(`
     IF OBJECT_ID(N'schema_migrations', N'U') IS NULL
     BEGIN
       CREATE TABLE schema_migrations (
         version NVARCHAR(255) PRIMARY KEY,
         applied_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
-      )
+      );
     END
   `);
 
@@ -37,6 +36,8 @@ try {
     .filter((file) => file.endsWith('.sql'))
     .sort();
 
+  console.log(`Found ${files.length} migration file(s).`);
+
   for (const file of files) {
     const applied = await pool
       .request()
@@ -47,12 +48,12 @@ try {
         WHERE version = @version
       `);
 
-    if (applied.recordset.length) {
-      console.log(`Skipping already applied migration ${file}`);
+    if (applied.recordset.length > 0) {
+      console.log(`Skipping already applied migration: ${file}`);
       continue;
     }
 
-    console.log(`Applying migration ${file}...`);
+    console.log(`Applying migration: ${file}`);
 
     const sqlText = await fs.readFile(
       path.join(migrationDirectory, file),
@@ -60,33 +61,43 @@ try {
     );
 
     const transaction = new sql.Transaction(pool);
+    let transactionStarted = false;
 
     try {
       await transaction.begin();
+      transactionStarted = true;
 
       const migrationRequest = new sql.Request(transaction);
+
       await migrationRequest.query(sqlText);
 
       const trackingRequest = new sql.Request(transaction);
 
-      await trackingRequest
-        .input('version', sql.NVarChar(255), file)
-        .query(`
-          INSERT INTO schema_migrations(version)
-          VALUES(@version)
-        `);
+      trackingRequest.input(
+        'version',
+        sql.NVarChar(255),
+        file
+      );
+
+      await trackingRequest.query(`
+        INSERT INTO schema_migrations (version)
+        VALUES (@version)
+      `);
 
       await transaction.commit();
+      transactionStarted = false;
 
-      console.log(`Applied migration ${file}`);
+      console.log(`Applied migration: ${file}`);
     } catch (error) {
-      try {
-        await transaction.rollback();
-      } catch (rollbackError) {
-        console.error(
-          `Rollback failed for ${file}:`,
-          rollbackError.message
-        );
+      if (transactionStarted) {
+        try {
+          await transaction.rollback();
+        } catch (rollbackError) {
+          console.error(
+            `Rollback failed for ${file}:`,
+            rollbackError.message
+          );
+        }
       }
 
       console.error(`Migration failed: ${file}`);
@@ -95,6 +106,10 @@ try {
   }
 
   console.log('All database migrations completed successfully.');
+} catch (error) {
+  console.error('Database migration failed:');
+  console.error(error);
+  process.exitCode = 1;
 } finally {
   await pool.close();
 }
