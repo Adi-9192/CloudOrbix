@@ -29,7 +29,7 @@ try {
     await transaction.begin();
     transactionStarted = true;
 
-    // Check whether the administrator already exists
+    // Check whether the user already exists.
     const existingRequest = new sql.Request(transaction);
 
     const existing = await existingRequest
@@ -46,10 +46,10 @@ try {
       );
     }
 
-    // Generate password hash
+    // Hash administrator password.
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Create administrator user
+    // Create administrator.
     const userRequest = new sql.Request(transaction);
 
     const user = await userRequest
@@ -77,7 +77,7 @@ try {
 
     const userId = user.recordset[0].id;
 
-    // Find Admin role created by database migration
+    // Get Admin role.
     const roleRequest = new sql.Request(transaction);
 
     const role = await roleRequest.query(`
@@ -92,9 +92,4 @@ try {
       );
     }
 
-    const roleId = role.recordset[0].id;
-
-    // Assign Admin role to the new user
-    const userRoleRequest = new sql.Request(transaction);
-
-    await 
+    const roleId = role.recordset
