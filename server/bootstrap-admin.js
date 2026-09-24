@@ -4,135 +4,35 @@ import 'dotenv/config';
 
 const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
 const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
-
 if (!email || !password || password.length < 12) {
-  throw new Error(
-    'Set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD (minimum 12 characters) for this one-time command.'
-  );
+  throw new Error('Set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD (minimum 12 characters) for this one-time command.');
 }
-
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL is required.');
-}
+if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required.');
 
 const pool = new sql.ConnectionPool(process.env.DATABASE_URL);
 
 try {
   await pool.connect();
-
-  console.log('Connected to Azure SQL Database.');
-
-  const transaction = new sql.Transaction(pool);
-  let transactionStarted = false;
-
-  try {
-    await transaction.begin();
-    transactionStarted = true;
-
-    // Check whether the user already exists.
-    const existingRequest = new sql.Request(transaction);
-
-    const existing = await existingRequest
-      .input('email', sql.VarChar(255), email)
-      .query(`
-        SELECT id
-        FROM dbo.users
-        WHERE LOWER(email) = @email
-      `);
-
-    if (existing.recordset.length > 0) {
-      throw new Error(
-        `A user with ${email} already exists; no changes made.`
-      );
-    }
-
-    // Hash administrator password.
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    // Create administrator.
-    const userRequest = new sql.Request(transaction);
-
-    const user = await userRequest
-      .input('email', sql.VarChar(255), email)
-      .input('passwordHash', sql.VarChar(255), passwordHash)
-      .input('firstName', sql.VarChar(100), 'System')
-      .input('lastName', sql.VarChar(100), 'Administrator')
-      .query(`
-        INSERT INTO dbo.users (
-          email,
-          password_hash,
-          first_name,
-          last_name,
-          is_active
-        )
-        OUTPUT INSERTED.id AS id
-        VALUES (
-          @email,
-          @passwordHash,
-          @firstName,
-          @lastName,
-          1
-        )
-      `);
-
-    const userId = user.recordset[0].id;
-
-    // Get Admin role.
-    const roleRequest = new sql.Request(transaction);
-
-    const role = await roleRequest.query(`
-      SELECT id
-      FROM dbo.roles
-      WHERE name = 'Admin'
-    `);
-
-    if (role.recordset.length === 0) {
-      throw new Error(
-        'Admin role is missing. Run npm run migrate first.'
-      );
-    }
-
-        const roleId = role.recordset[0].id;
-
-    // Assign Admin role to the new user.
-    const userRoleRequest = new sql.Request(transaction);
-
-    await userRoleRequest
-      .input('userId', sql.Int, userId)
-      .input('roleId', sql.Int, roleId)
-      .query(`
-        INSERT INTO dbo.user_roles (
-          user_id,
-          role_id
-        )
-        VALUES (
-          @userId,
-          @roleId
-        )
-      `);
-
-    await transaction.commit();
-    transactionStarted = false;
-
-    console.log(`Bootstrap administrator created: ${email}`);
-  } catch (error) {
-    if (transactionStarted) {
-      try {
-        await transaction.rollback();
-      } catch (rollbackError) {
-        console.error(
-          'Failed to rollback administrator transaction:',
-          rollbackError.message
-        );
-      }
-    }
-
-    throw error;
-  }
+  await pool.request().query('BEGIN TRANSACTION');
+  const existing = await pool.request().input('email', sql.VarChar(255), email).query('SELECT id FROM users WHERE LOWER(email) = @email');
+  if (existing.recordset.length) throw new Error(`A user with ${email} already exists; no changes made.`);
+  const user = await pool.request()
+    .input('email', sql.VarChar(255), email)
+    .input('passwordHash', sql.VarChar(255), await bcrypt.hash(password, 12))
+    .input('firstName', sql.VarChar(100), 'System')
+    .input('lastName', sql.VarChar(100), 'Administrator')
+    .query('INSERT INTO users(email,password_hash,first_name,last_name,is_active) OUTPUT INSERTED.id AS id VALUES(@email,@passwordHash,@firstName,@lastName,1)');
+  const role = await pool.request().query("SELECT id FROM roles WHERE name = 'Admin'");
+  if (!role.recordset.length) throw new Error('Admin role is missing. Run npm run migrate first.');
+  await pool.request()
+    .input('userId', sql.Int, user.recordset[0].id)
+    .input('roleId', sql.Int, role.recordset[0].id)
+    .query('INSERT INTO user_roles(user_id,role_id) VALUES(@userId,@roleId)');
+  await pool.request().query('COMMIT TRANSACTION');
+  console.log(`Bootstrap administrator created: ${email}`);
 } catch (error) {
-  console.error('Bootstrap administrator failed:');
-  console.error(error);
-  process.exitCode = 1;
+  await pool.request().query('ROLLBACK TRANSACTION').catch(() => undefined);
+  throw error;
 } finally {
   await pool.close();
 }
