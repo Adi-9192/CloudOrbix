@@ -6,8 +6,14 @@ const router = express.Router();
 
 router.get('/', protectRoute, async (req, res, next) => {
   try {
-    const result = await getPool().query(`SELECT s.name, COUNT(DISTINCT cs.client_id)::int project_count, COALESCE(array_agg(DISTINCT jsonb_build_object('clientId', c.client_id, 'clientName', c.client_name, 'status', c.current_status, 'completion', c.completion)) FILTER (WHERE c.id IS NOT NULL), '{}') projects FROM services s LEFT JOIN client_services cs ON cs.service_id=s.id LEFT JOIN clients c ON c.id=cs.client_id GROUP BY s.id,s.name ORDER BY s.name`);
-    return res.json({ services: result.rows });
+    const result = await getPool().query(`SELECT s.name, CAST(COUNT(DISTINCT cs.client_id) AS int) AS project_count, STRING_AGG(DISTINCT CONCAT(c.client_id, ':', c.client_name), ',') AS projects FROM services s LEFT JOIN client_services cs ON cs.service_id=s.id LEFT JOIN clients c ON c.id=cs.client_id GROUP BY s.id, s.name ORDER BY s.name`);
+    return res.json({
+      services: result.rows.map((row) => ({
+        name: row.name,
+        project_count: row.project_count,
+        projects: row.projects ? String(row.projects).split(',').map((item) => item.trim()).filter(Boolean) : [],
+      })),
+    });
   } catch (error) { return next(error); }
 });
 

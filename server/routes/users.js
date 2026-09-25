@@ -12,12 +12,12 @@ const publicUser = (user) => ({
 async function findDbUser(id) {
   const result = await getPool().query(`
     SELECT u.id, u.email, u.first_name, u.last_name, u.is_active,
-      COALESCE(array_agg(r.name) FILTER (WHERE r.name IS NOT NULL), '{}') roles
+      STRING_AGG(DISTINCT r.name, ',') AS roles
     FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id
-    WHERE u.id = $1 GROUP BY u.id
+    WHERE u.id = @p1 GROUP BY u.id, u.email, u.first_name, u.last_name, u.is_active
   `, [id]);
   const row = result.rows[0];
-  return row && { id: row.id, email: row.email, firstName: row.first_name, lastName: row.last_name, isActive: row.is_active, roles: row.roles };
+  return row && { id: row.id, email: row.email, firstName: row.first_name, lastName: row.last_name, isActive: row.is_active, roles: row.roles ? String(row.roles).split(',').map((role) => role.trim()).filter(Boolean) : [] };
 }
 
 router.get('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team'), async (req, res, next) => {
@@ -26,11 +26,11 @@ router.get('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team')
     if (!pool) return res.json({ users: appState.users.map(publicUser) });
     const result = await pool.query(`
       SELECT u.id, u.email, u.first_name, u.last_name, u.is_active,
-        COALESCE(array_agg(r.name) FILTER (WHERE r.name IS NOT NULL), '{}') roles
+        STRING_AGG(DISTINCT r.name, ',') AS roles
       FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id
-      GROUP BY u.id ORDER BY u.id
+      GROUP BY u.id, u.email, u.first_name, u.last_name, u.is_active ORDER BY u.id
     `);
-    return res.json({ users: result.rows.map((row) => publicUser({ id: row.id, email: row.email, firstName: row.first_name, lastName: row.last_name, isActive: row.is_active, roles: row.roles })) });
+    return res.json({ users: result.rows.map((row) => publicUser({ id: row.id, email: row.email, firstName: row.first_name, lastName: row.last_name, isActive: row.is_active, roles: row.roles ? String(row.roles).split(',').map((role) => role.trim()).filter(Boolean) : [] })) });
   } catch (error) { return next(error); }
 });
 
@@ -51,10 +51,12 @@ router.post('/', protectRoute, requireRole('Admin'), async (req, res, next) => {
       appState.users.push(user);
       return res.status(201).json({ user: publicUser(user) });
     }
-    const inserted = await pool.query(`INSERT INTO users (email,password_hash,first_name,last_name,is_active) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [normalizedEmail, await hashPassword(password), String(firstName).trim(), String(lastName).trim(), isActive !== false]);
+    const inserted = await pool.query(`INSERT INTO users (email,password_hash,first_name,last_name,is_active) OUTPUT INSERTED.id AS id VALUES (@p1,@p2,@p3,@p4,@p5)`, [normalizedEmail, await hashPassword(password), String(firstName).trim(), String(lastName).trim(), isActive !== false]);
     const userId = inserted.rows[0].id;
-    const roleResult = await pool.query('SELECT id FROM roles WHERE name = $1', [dbRole(role)]);
-    if (roleResult.rows[0]) await pool.query('INSERT INTO user_roles (user_id,role_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [userId, roleResult.rows[0].id]);
+    const roleResult = await pool.query('SELECT id FROM roles WHERE name = @p1', [dbRole(role)]);
+    if (roleResult.rows[0]) {
+      await pool.query('INSERT INTO user_roles (user_id,role_id) SELECT @p1, @p2 WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = @p1 AND role_id = @p2)', [userId, roleResult.rows[0].id]);
+    }
     return res.status(201).json({ user: publicUser(await findDbUser(userId)) });
   } catch (error) { return error.code === '23505' ? res.status(409).json({ message: 'A user with this email already exists.' }) : next(error); }
 });
