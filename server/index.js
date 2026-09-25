@@ -31,7 +31,7 @@ const app = express();
 
 const PORT = Number(process.env.PORT || 4000);
 
-const BUILD_ID = process.env.BUILD_ID || 'feature-SQL-aa7b21b';
+const BUILD_ID = process.env.BUILD_ID || 'feature-SQL-9789868';
 
 const isProduction =
   process.env.NODE_ENV === 'production';
@@ -165,26 +165,6 @@ app.use(
 
 
 /*
- * Normalize client IP address for rate limiting.
- *
- * Azure proxies can provide an IPv4 address containing
- * a source port, for example:
- *
- * 167.103.72.103:16568
- *
- * The port must not become part of the rate-limit key.
- */
-const rateLimitKeyGenerator = (req) => {
-  const ip =
-    req.ip ||
-    req.socket?.remoteAddress ||
-    'unknown';
-
-  return ipKeyGenerator(ip);
-};
-
-
-/*
  * Authentication rate limiter.
  *
  * Maximum:
@@ -203,7 +183,7 @@ const authLimiter = rateLimit({
     false,
 
   keyGenerator:
-    rateLimitKeyGenerator,
+    ipKeyGenerator,
 });
 
 
@@ -226,7 +206,7 @@ const apiLimiter = rateLimit({
     false,
 
   keyGenerator:
-    rateLimitKeyGenerator,
+    ipKeyGenerator,
 });
 
 
