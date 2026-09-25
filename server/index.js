@@ -31,6 +31,8 @@ const app = express();
 
 const PORT = Number(process.env.PORT || 4000);
 
+const BUILD_ID = process.env.BUILD_ID || 'feature-SQL-aa7b21b';
+
 const isProduction =
   process.env.NODE_ENV === 'production';
 
@@ -258,6 +260,9 @@ app.get(
     res.json({
       ok: true,
 
+      buildId:
+        BUILD_ID,
+
       service:
         'CloudOrbix API',
 
@@ -405,6 +410,10 @@ app.use(
     res.status(500).json({
       message:
         'Internal server error.',
+
+      requestId:
+        req.requestId,
+
       error: isProduction ? undefined : {
         message: error.message,
         code: error.code,
