@@ -165,26 +165,6 @@ app.use(
 
 
 /*
- * Normalize client IP address for rate limiting.
- *
- * Azure proxies can provide an IPv4 address containing
- * a source port, for example:
- *
- * 167.103.72.103:16568
- *
- * The port must not become part of the rate-limit key.
- */
-const rateLimitKeyGenerator = (req) => {
-  const ip =
-    req.ip ||
-    req.socket?.remoteAddress ||
-    'unknown';
-
-  return ipKeyGenerator(ip);
-};
-
-
-/*
  * Authentication rate limiter.
  *
  * Maximum:
@@ -203,7 +183,7 @@ const authLimiter = rateLimit({
     false,
 
   keyGenerator:
-    rateLimitKeyGenerator,
+    ipKeyGenerator,
 });
 
 
@@ -226,7 +206,7 @@ const apiLimiter = rateLimit({
     false,
 
   keyGenerator:
-    rateLimitKeyGenerator,
+    ipKeyGenerator,
 });
 
 
