@@ -31,7 +31,7 @@ export function buildTaskUpdateQuery(updates) {
     values.push(updates.done);
   }
 
-  assignments.push('updated_at = CURRENT_TIMESTAMP');
+  assignments.push('updated_at = GETDATE()');
   return {
     text: `UPDATE user_profile_tasks SET ${assignments.join(', ')} WHERE id = $${nextParam++} AND user_id = $${nextParam}`,
     values: [...values, updates.taskId, updates.userId],
@@ -48,7 +48,7 @@ router.get('/', protectRoute, async (req, res, next) => {
         SELECT id, task_text, due_date, is_done, created_at, updated_at
         FROM user_profile_tasks
         WHERE user_id = $1
-        ORDER BY is_done ASC, due_date NULLS LAST, created_at DESC
+        ORDER BY is_done ASC, CASE WHEN due_date IS NULL THEN 1 ELSE 0 END, created_at DESC
       `,
       [req.user.id],
     );
@@ -71,8 +71,8 @@ router.post('/', protectRoute, async (req, res, next) => {
     const result = await pool.query(
       `
         INSERT INTO user_profile_tasks (user_id, task_text, due_date, is_done)
+        OUTPUT INSERTED.id, INSERTED.task_text, INSERTED.due_date, INSERTED.is_done, INSERTED.created_at, INSERTED.updated_at
         VALUES ($1, $2, $3, $4)
-        RETURNING id, task_text, due_date, is_done, created_at, updated_at
       `,
       [req.user.id, text, dueDate, false],
     );
@@ -115,7 +115,7 @@ router.put('/:id', protectRoute, async (req, res, next) => {
     const { text: queryText, values } = buildTaskUpdateQuery(updateData);
 
     const result = await pool.query(
-      `${queryText} RETURNING id, task_text, due_date, is_done, created_at, updated_at`,
+      `${queryText} OUTPUT INSERTED.id, INSERTED.task_text, INSERTED.due_date, INSERTED.is_done, INSERTED.created_at, INSERTED.updated_at`,
       values,
     );
 
@@ -133,7 +133,7 @@ router.delete('/:id', protectRoute, async (req, res, next) => {
 
     const taskId = Number(req.params.id);
     const result = await pool.query(
-      'DELETE FROM user_profile_tasks WHERE id = $1 AND user_id = $2 RETURNING id',
+      'DELETE FROM user_profile_tasks OUTPUT DELETED.id WHERE id = $1 AND user_id = $2',
       [taskId, req.user.id],
     );
 

@@ -383,6 +383,21 @@ app.use(
         message:
           error.message,
 
+        code:
+          error.code,
+
+        number:
+          error.number,
+
+        state:
+          error.state,
+
+        sql:
+          error.sql,
+
+        params:
+          error.params,
+
         stack:
           isProduction
             ? undefined
@@ -393,6 +408,13 @@ app.use(
     res.status(500).json({
       message:
         'Internal server error.',
+      error: isProduction ? undefined : {
+        message: error.message,
+        code: error.code,
+        number: error.number,
+        sql: error.sql,
+        params: error.params,
+      },
     });
   }
 );

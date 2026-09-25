@@ -17,7 +17,7 @@ const reportQueries = {
   'status-distribution': 'SELECT client_id, client_name, current_status, updated_at FROM clients',
   'risk-management': 'SELECT * FROM project_risks',
   'task-management': 'SELECT * FROM project_tasks',
-  'service-adoption': 'SELECT s.name service, COUNT(cs.client_id)::int usage_count FROM services s LEFT JOIN client_services cs ON cs.service_id=s.id GROUP BY s.name ORDER BY usage_count DESC',
+  'service-adoption': 'SELECT s.name service, CAST(COUNT(cs.client_id) AS int) usage_count FROM services s LEFT JOIN client_services cs ON cs.service_id=s.id GROUP BY s.name ORDER BY usage_count DESC',
   'audit-activity': 'SELECT * FROM audit_logs ORDER BY created_at DESC',
   'excel-import': 'SELECT * FROM excel_import_logs ORDER BY created_at DESC',
   'project-updates': 'SELECT * FROM project_updates ORDER BY created_at DESC',

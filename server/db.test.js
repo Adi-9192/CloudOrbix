@@ -32,3 +32,16 @@ test('rewrites Postgres array aggregation for Azure SQL string aggregation', () 
   assert.match(text, /STRING_AGG\(DISTINCT r\.name/i);
   assert.doesNotMatch(text, /array_agg/i);
 });
+
+test('rewrites PostgreSQL FILTER aggregates and TO_CHAR ordering patterns for Azure SQL', () => {
+  const { text } = normalizeQueryForAzureSql(
+    "SELECT COUNT(*) FILTER (WHERE current_status = 'Open')::int open_risks, TO_CHAR(COALESCE(actual_onboard_date, planned_onboard_date), 'Mon') AS month FROM clients ORDER BY expected_start_date NULLS LAST",
+    [],
+  );
+
+  assert.match(text, /CASE WHEN current_status = 'Open' THEN 1 ELSE 0 END/i);
+  assert.match(text, /FORMAT\(COALESCE\(actual_onboard_date, planned_onboard_date\), 'MMM'\)/i);
+  assert.doesNotMatch(text, /FILTER \(WHERE/i);
+  assert.doesNotMatch(text, /TO_CHAR/i);
+  assert.doesNotMatch(text, /NULLS LAST/i);
+});
