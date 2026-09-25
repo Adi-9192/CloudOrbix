@@ -84,24 +84,36 @@ export function normalizeQueryForAzureSql(sqlText, values = []) {
     /COUNT\(\s*DISTINCT\s+([^)]*?)\s*\)\s*::\s*int/gi,
     "CAST(COUNT(DISTINCT $1) AS int)",
   );
+  text = text.replace(/\bLIMIT\s+(\d+)\b/gi, "OFFSET 0 ROWS FETCH NEXT $1 ROWS ONLY");
   text = text.replace(
-    /\bRETURNING\b\s+([A-Za-z0-9_\*,\s]+)/gi,
-    (_, returningClause) => {
-      const identifier =
-        returningClause.trim() === "*"
-          ? "*"
-          : returningClause
-              .split(",")
-              .map((part) => part.trim())
-              .filter(Boolean)
-              .map((part) =>
-                part.includes(" AS ") ? part.split(/\s+AS\s+/i).pop() : part,
-              )
-              .join(", ");
-      return `OUTPUT INSERTED.${identifier}`;
-    },
+    /\b(INSERT\s+INTO[\s\S]*?)\s+VALUES\s*([\s\S]*?)\s+RETURNING\s+([A-Za-z0-9_*,\s]+)/i,
+    (_, insertPrefix, valuesClause, returningClause) =>
+      `${insertPrefix} OUTPUT ${formatOutputColumns(returningClause, "INSERTED")} VALUES ${valuesClause}`,
+  );
+  text = text.replace(
+    /\b(UPDATE\s+[\s\S]*?)(\s+WHERE\s+[\s\S]*?)\s+RETURNING\s+([A-Za-z0-9_*,\s]+)/i,
+    (_, updateClause, whereClause, returningClause) =>
+      `${updateClause} OUTPUT ${formatOutputColumns(returningClause, "INSERTED")}${whereClause}`,
+  );
+  text = text.replace(
+    /\b(DELETE\s+FROM\s+[\s\S]*?)\s+RETURNING\s+([A-Za-z0-9_*,\s]+)/i,
+    (_, deleteClause, returningClause) =>
+      `${deleteClause.replace(/\s+WHERE\s+/i, ` OUTPUT ${formatOutputColumns(returningClause, "DELETED")} WHERE `)}`,
   );
   return { text, values };
+}
+
+function formatOutputColumns(returningClause, prefix) {
+  return returningClause
+    .trim()
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const [column, alias] = part.split(/\s+AS\s+/i);
+      return `${prefix}.${column}${alias ? ` AS ${alias}` : ""}`;
+    })
+    .join(", ");
 }
 async function ensurePoolConnected() {
   if (!pool) {
@@ -127,6 +139,8 @@ async function executeQuery(sqlText, params = []) {
       rowCount: result.recordset?.length || 0,
     };
   } catch (error) {
+    error.sql = normalized.text;
+    error.params = values;
     console.error('Database query failed:', {
       sql: normalized.text,
       params: values,

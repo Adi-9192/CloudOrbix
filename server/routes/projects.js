@@ -17,7 +17,7 @@ const canManage = (project, user) => {
 
 async function projectFor(clientId) {
   const pool = getPool();
-  const result = await pool.query(`SELECT c.*, COALESCE(AVG(t.progress), c.completion, 0) project_progress FROM clients c LEFT JOIN project_tasks t ON t.client_id = c.id WHERE c.client_id = $1 GROUP BY c.id`, [clientId]);
+  const result = await pool.query(`SELECT c.*, COALESCE((SELECT AVG(t.progress) FROM project_tasks t WHERE t.client_id = c.id), c.completion, 0) project_progress FROM clients c WHERE c.client_id = $1`, [clientId]);
   return result.rows[0] || null;
 }
 
@@ -52,7 +52,7 @@ router.get('/risks', protectRoute, async (req, res, next) => {
 
 router.get('/repository', protectRoute, async (req, res, next) => {
   try {
-    const result = await getPool().query(`SELECT c.client_id,c.client_name,c.project_manager,c.completion,c.current_status,COUNT(pd.id)::int document_count FROM clients c LEFT JOIN project_documents pd ON pd.client_id=c.id WHERE c.current_status='Completed' OR c.completion >= 100 GROUP BY c.id ORDER BY c.updated_at DESC`);
+    const result = await getPool().query(`SELECT c.client_id,c.client_name,c.project_manager,c.completion,c.current_status,CAST((SELECT COUNT(*) FROM project_documents pd WHERE pd.client_id=c.id) AS int) document_count FROM clients c WHERE c.current_status='Completed' OR c.completion >= 100 ORDER BY c.updated_at DESC`);
     return res.json({ projects: result.rows });
   } catch (error) { return next(error); }
 });
