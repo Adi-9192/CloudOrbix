@@ -14,13 +14,32 @@ test('normalizes PostgreSQL parameter placeholders for Azure SQL', () => {
 });
 
 test('rewrites RETURNING clauses to SQL Server OUTPUT clauses', () => {
-  const { text } = normalizeQueryForAzureSql(
+  const { text: insertText } = normalizeQueryForAzureSql(
     'INSERT INTO users(email) VALUES($1) RETURNING id',
     ['admin@example.com'],
   );
 
-  assert.match(text, /OUTPUT INSERTED\.id/i);
-  assert.doesNotMatch(text, /RETURNING/i);
+  assert.match(insertText, /INSERT INTO users\(email\) OUTPUT INSERTED\.id VALUES/i);
+  assert.doesNotMatch(insertText, /RETURNING/i);
+
+  const { text: updateText } = normalizeQueryForAzureSql(
+    'UPDATE users SET email=$1 WHERE id=$2 RETURNING id',
+  );
+  assert.match(updateText, /SET email=@p1 OUTPUT INSERTED\.id WHERE id=@p2/i);
+
+  const { text: deleteText } = normalizeQueryForAzureSql(
+    'DELETE FROM users WHERE id=$1 RETURNING id,email',
+  );
+  assert.match(deleteText, /DELETE FROM users OUTPUT DELETED\.id, DELETED\.email WHERE id=@p1/i);
+});
+
+test('rewrites PostgreSQL LIMIT pagination for Azure SQL', () => {
+  const { text } = normalizeQueryForAzureSql(
+    'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 500',
+  );
+
+  assert.match(text, /OFFSET 0 ROWS FETCH NEXT 500 ROWS ONLY/i);
+  assert.doesNotMatch(text, /LIMIT/i);
 });
 
 test('rewrites Postgres array aggregation for Azure SQL string aggregation', () => {

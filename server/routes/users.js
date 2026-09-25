@@ -12,7 +12,7 @@ const publicUser = (user) => ({
 async function findDbUser(id) {
   const result = await getPool().query(`
     SELECT u.id, u.email, u.first_name, u.last_name, u.is_active,
-      STRING_AGG(DISTINCT r.name, ',') AS roles
+      STRING_AGG(r.name, ',') AS roles
     FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id
     WHERE u.id = @p1 GROUP BY u.id, u.email, u.first_name, u.last_name, u.is_active
   `, [id]);
@@ -26,7 +26,7 @@ router.get('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team')
     if (!pool) return res.json({ users: appState.users.map(publicUser) });
     const result = await pool.query(`
       SELECT u.id, u.email, u.first_name, u.last_name, u.is_active,
-        STRING_AGG(DISTINCT r.name, ',') AS roles
+        STRING_AGG(r.name, ',') AS roles
       FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id
       GROUP BY u.id, u.email, u.first_name, u.last_name, u.is_active ORDER BY u.id
     `);

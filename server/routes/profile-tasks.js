@@ -115,7 +115,10 @@ router.put('/:id', protectRoute, async (req, res, next) => {
     const { text: queryText, values } = buildTaskUpdateQuery(updateData);
 
     const result = await pool.query(
-      `${queryText} OUTPUT INSERTED.id, INSERTED.task_text, INSERTED.due_date, INSERTED.is_done, INSERTED.created_at, INSERTED.updated_at`,
+      queryText.replace(
+        /\s+WHERE\s+/i,
+        ' OUTPUT INSERTED.id, INSERTED.task_text, INSERTED.due_date, INSERTED.is_done, INSERTED.created_at, INSERTED.updated_at WHERE ',
+      ),
       values,
     );
 

@@ -6,7 +6,7 @@ import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 import * as Sentry from '@sentry/node';
 
@@ -178,10 +178,7 @@ const rateLimitKeyGenerator = (req) => {
     req.socket?.remoteAddress ||
     'unknown';
 
-  return String(ip).replace(
-    /:\d+[^:]*$/,
-    ''
-  );
+  return ipKeyGenerator(ip);
 };
 
 
