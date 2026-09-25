@@ -2,19 +2,19 @@ import sql from "mssql";
 import bcrypt from "bcryptjs";
 import "dotenv/config";
 export const appState = {
-  roles: [],
-  users: [],
-  services: [],
-  clients: [],
-  statusHistory: [],
-  auditLogs: [],
-  excelImportLogs: [],
-  notifications: [],
+roles: [],
+users: [],
+services: [],
+clients: [],
+statusHistory: [],
+auditLogs: [],
+excelImportLogs: [],
+notifications: [],
 };
 let pool = null;
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (databaseUrl) {
-  pool = new sql.ConnectionPool(databaseUrl);
+pool = new sql.ConnectionPool(databaseUrl);
 }
 function normalizeRow(row) {
   if (!row || typeof row !== "object") return row;
@@ -187,7 +187,7 @@ export function getPool() {
   };
 }
 export function getState() {
-  return appState;
+return appState;
 }
 export async function getUserByEmail(email) {
   const value = email?.trim().toLowerCase();
