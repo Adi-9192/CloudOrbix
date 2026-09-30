@@ -131,7 +131,7 @@ export default function App() {
       case "documents":  return projectId ? <DocumentsPage dark={dark} clientId={projectId} readOnly={repositoryDocuments} onBack={() => navigateTo(repositoryDocuments ? "repository" : "project")} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
       case "repository": return <ProjectRepository dark={dark} onOpenProject={(id) => openProject(id, "documents")} />;
       case "projectframework": return <ProjectFramework dark={dark} />;
-      case "servicecatalogue": return <ServiceCatalogue />;
+      case "servicecatalogue": return <ServiceCatalogue dark={dark} />;
       case "excel":       return user.roles.includes("Admin") ? <ExcelImport dark={dark} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
       case "reports":     return <Reports dark={dark} />;
       case "audit":       return user.roles.includes("Admin") ? <AuditLogs dark={dark} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;

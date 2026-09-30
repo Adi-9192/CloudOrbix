@@ -12,7 +12,7 @@ export type Page =
 
 const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "servicecatalogue", label: "Service Catalogue", icon: BookOpen },
+  { id: "servicecatalogue", label: "Portfolio", icon: BookOpen },
   { id: "reports", label: "Reports", icon: FileText },
   { id: "excel", label: "Excel Import", icon: Upload },
   { id: "audit", label: "Audit Logs", icon: ClipboardList },
