@@ -73,12 +73,12 @@ export default function Login({ onLogin }: LoginProps) {
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to reset password."); }
   };
 
-  const features = [
-    { icon: Cloud, title: "Multi-Cloud Management", desc: "Azure, AWS, GCP lifecycle visibility" },
-    { icon: BarChart3, title: "Executive Analytics", desc: "10-year trend dashboards & KPIs" },
-    { icon: Users, title: "Project Lifecycle Portal", desc: "End-to-end onboarding & offboarding" },
-    // { icon: Shield, title: "Enterprise Security", desc: "Role-based access with Entra ID SSO" },
-  ];
+  // const features = [
+  //   // { icon: Cloud, title: "Multi-Cloud Management", desc: "Azure, AWS, GCP lifecycle visibility" },
+  //   // { icon: BarChart3, title: "Executive Analytics", desc: "10-year trend dashboards & KPIs" },
+  //   // { icon: Users, title: "Project Lifecycle Portal", desc: "End-to-end onboarding & offboarding" },
+  //   // { icon: Shield, title: "Enterprise Security", desc: "Role-based access with Entra ID SSO" },
+  // ];
 
   return (
     <div className="min-h-screen flex" style={{ 
@@ -124,7 +124,7 @@ export default function Login({ onLogin }: LoginProps) {
         </div>
 
         <div className="relative z-10 space-y-4">
-          {features.map(({ icon: Icon, title, desc }) => (
+          {/* {features.map(({ icon: Icon, title, desc }) => (
             <div key={title} className="flex items-center gap-4 p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
               <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
                 <Icon className="w-5 h-5 text-white" />
@@ -134,7 +134,7 @@ export default function Login({ onLogin }: LoginProps) {
                 <div className="text-blue-200 text-xs">{desc}</div>
               </div>
             </div>
-          ))}
+          ))} */}
         </div>
 
         <div className="relative z-10 flex items-center gap-6 text-blue-200 text-xs">

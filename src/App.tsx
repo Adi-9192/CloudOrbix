@@ -46,7 +46,7 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [loggedIn, setLoggedIn] = useState(Boolean(localStorage.getItem("clmp-token")));
   const [page, setPage] = useState<Page>(getInitialPage);
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(() => localStorage.getItem("clmp-theme") !== "light");
   const [user, setUser] = useState<AuthUser | null>(getStoredUser());
   const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem("clmp-project-id"));
   const [repositoryDocuments, setRepositoryDocuments] = useState(() => localStorage.getItem("clmp-repository-documents") === "true");
@@ -56,6 +56,10 @@ export default function App() {
     const timer = window.setTimeout(() => setBooting(false), 700);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("clmp-theme", dark ? "dark" : "light");
+  }, [dark]);
 
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
