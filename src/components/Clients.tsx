@@ -88,13 +88,10 @@ interface ClientRow {
 
 const PROJECT_STATUSES = [
   "On-track",
-  "Onboarded",
-  "Pending Onboarding",
+  "ON Hold",
   "Delayed",
   "Completed",
   "Cancelled",
-  "Offboarding Scheduled",
-  "Offboarded",
 ] as const;
 
 const STATUS_PRIORITY = new Map(
@@ -108,11 +105,13 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> =
   {
     "On-track": { bg: "rgb(233, 253, 81)", text: "#4e6310", dot: "#204b04" },
     "On track": { bg: "rgb(233, 253, 81)", text: "#4e6310", dot: "#204b04" },
-    Onboarded: { bg: "#DCFCE7", text: "#16A34A", dot: "#16A34A" },
-    "Pending Onboarding": { bg: "#DBEAFE", text: "#1D4ED8", dot: "#1D4ED8" },
+    "ON Hold": { bg: "#FEF3C7", text: "#B45309", dot: "#D97706" },
+    "On Hold": { bg: "#FEF3C7", text: "#B45309", dot: "#D97706" },
     Delayed: { bg: "#FEF3C7", text: "#B45309", dot: "#D97706" },
     Completed: { bg: "#DCFCE7", text: "#15803D", dot: "#16A34A" },
     Cancelled: { bg: "#FEE2E2", text: "#B91C1C", dot: "#DC2626" },
+    Onboarded: { bg: "#DCFCE7", text: "#16A34A", dot: "#16A34A" },
+    "Pending Onboarding": { bg: "#DBEAFE", text: "#1D4ED8", dot: "#1D4ED8" },
     "Offboarding Scheduled": { bg: "#FEF3C7", text: "#D97706", dot: "#D97706" },
     Offboarded: { bg: "#F1F5F9", text: "#64748B", dot: "#94A3B8" },
   };
@@ -204,7 +203,7 @@ const EMPTY_FORM = {
   contractStart: "",
   contractEnd: "",
   notes: "",
-  status: "Onboarded",
+  status: "On-track",
 };
 
 export default function Clients({
@@ -321,9 +320,7 @@ export default function Clients({
       .then((payload) => {
         const names = (payload?.users || [])
           .filter((item: { roles?: string[] }) =>
-            item.roles?.some(
-              (role) => role === "Manager" || role === "Operations Team",
-            ),
+            item.roles?.includes("Admin"),
           )
           .map(
             (item: {
@@ -507,7 +504,7 @@ export default function Clients({
       estimatedEndDate: form.plannedEndDate || null,
       actualStartDate: form.actualStartDate || null,
       actualEndDate: form.actualEndDate || null,
-      currentStatus: form.status || "Onboarded",
+      currentStatus: form.status || "On-track",
       services: form.services,
       remarks: form.notes || "",
       plannedOnboardDate: form.plannedStartDate || null,
@@ -592,7 +589,7 @@ export default function Clients({
     } catch (error) {
       console.error(error);
       showCloudOrbixAlert(
-        error instanceof Error ? error.message : "Unable to save client.",
+        error instanceof Error ? error.message : "Unable to save project.",
         "error",
       );
       return;
@@ -828,7 +825,7 @@ export default function Clients({
                 <Th col="id" label="Project ID" />
                 <Th col="year" label="Year" />
                 <Th col="name" label="Project Name" />
-                <Th col="accountManager" label="Account Manager" />
+                <Th col="accountManager" label="Manager" />
                 <Th col="projectBillingCode" label="Project Billing Code" />
                 <Th col="voumetric" label="Volumetric" />
                 <Th col="region" label="Region" />
@@ -1265,9 +1262,9 @@ export default function Clients({
                       placeholder: "e.g. 1200000",
                     },
                     {
-                      label: "Account Manager / Manager",
+                      label: "Project Manager",
                       key: "manager",
-                      placeholder: "Select manager",
+                      placeholder: "Select project manager",
                       type: "select",
                       options: managers,
                     },
@@ -1304,13 +1301,13 @@ export default function Clients({
                       key: "projectType",
                       placeholder: "e.g. Cloud Migration",
                     },
-                    {
-                      label: "Project Manager",
-                      key: "projectManager",
-                      placeholder: "Select project manager",
-                      type: "select",
-                      options: managers,
-                    },
+                    // {
+                    //   label: "Project Manager",
+                    //   key: "projectManager",
+                    //   placeholder: "Select project manager",
+                    //   type: "select",
+                    //   options: managers,
+                    // },
                     {
                       label: "Project Billing Code",
                       key: "projectBillingCode",
@@ -1650,7 +1647,7 @@ export default function Clients({
                 ) : (
                   <>
                     <Check className="w-3.5 h-3.5" />{" "}
-                    {editingClientId ? "Update Client" : "Save Client"}
+                    {editingClientId ? "Update Project" : "Save Project"}
                   </>
                 )}
               </button>
