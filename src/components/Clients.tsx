@@ -7,7 +7,6 @@ import {
   ChevronDown,
   Edit2,
   Trash2,
-  Eye,
   CheckSquare,
   Square,
   X,
@@ -49,11 +48,19 @@ interface ApiClient {
   projectType?: string | null;
   projectBrief?: string | null;
   projectManager?: string | null;
+  projectBillingCode?: string | null;
+  resources?: ResourceAllocation[];
+  voumetric?: number | null;
   estimatedStartDate?: string | null;
   estimatedEndDate?: string | null;
   actualStartDate?: string | null;
   actualEndDate?: string | null;
   isow?: string | null;
+}
+
+interface ResourceAllocation {
+  resourceName: string;
+  fte: number | null;
 }
 
 interface ClientRow {
@@ -63,10 +70,13 @@ interface ClientRow {
   region: string;
   industry: string;
   status: string;
-  plannedOnboard: string;
-  actualOnboard: string;
-  plannedOffboard: string;
-  actualOffboard: string | null;
+  projectBillingCode: string;
+  resources: ResourceAllocation[];
+  voumetric: number | null;
+  plannedStartDate: string;
+  plannedEndDate: string;
+  actualStartDate: string;
+  actualEndDate: string;
   contractStart: string;
   contractEnd: string;
   notes: string;
@@ -76,14 +86,35 @@ interface ClientRow {
   [key: string]: unknown;
 }
 
+const PROJECT_STATUSES = [
+  "On-track",
+  "Onboarded",
+  "Pending Onboarding",
+  "Delayed",
+  "Completed",
+  "Cancelled",
+  "Offboarding Scheduled",
+  "Offboarded",
+] as const;
+
+const STATUS_PRIORITY = new Map(
+  PROJECT_STATUSES.map((status, index) => [
+    status.toLowerCase(),
+    PROJECT_STATUSES.length - index,
+  ]),
+);
+
 const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> =
   {
+    "On-track": { bg: "rgb(233, 253, 81)", text: "#4e6310", dot: "#204b04" },
+    "On track": { bg: "rgb(233, 253, 81)", text: "#4e6310", dot: "#204b04" },
     Onboarded: { bg: "#DCFCE7", text: "#16A34A", dot: "#16A34A" },
     "Pending Onboarding": { bg: "#DBEAFE", text: "#1D4ED8", dot: "#1D4ED8" },
+    Delayed: { bg: "#FEF3C7", text: "#B45309", dot: "#D97706" },
+    Completed: { bg: "#DCFCE7", text: "#15803D", dot: "#16A34A" },
+    Cancelled: { bg: "#FEE2E2", text: "#B91C1C", dot: "#DC2626" },
     "Offboarding Scheduled": { bg: "#FEF3C7", text: "#D97706", dot: "#D97706" },
     Offboarded: { bg: "#F1F5F9", text: "#64748B", dot: "#94A3B8" },
-    Completed: { bg: "#DCFCE7", text: "#15803D", dot: "#16A34A" },
-    "On-track": { bg: "rgb(233, 253, 81)", text: "#4e6310", dot: "#204b04" },
   };
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -115,7 +146,10 @@ const ALL_SERVICES = [
   "FinOps",
   "Backup & DR",
 ];
+
+// aDDED NEW variable og list of regions, hyperscalers, 
 const REGIONS = ["North America", "Europe", "APAC", "Middle East", "LATAM"];
+const HYPERSCALERS = ["GCP", "AZURE", "AWS", "Oracle", "Other"];
 const INDUSTRIES = [
   "Financial Services",
   "Healthcare",
@@ -128,7 +162,23 @@ const INDUSTRIES = [
 ];
 const MANAGERS: string[] = [];
 
-const WIZARD_STEPS = ["Project Info", "Services", "Lifecycle", "Documents"];
+const WIZARD_STEPS = ["Project Info", "Services", "Lifecycle", "Resources"];
+const toPercentage = (value: number | string | null | undefined) => {
+  const percentage = Number(value || 0);
+  return percentage > 0 && percentage <= 1
+    ? Math.round(percentage * 100)
+    : percentage;
+};
+
+// Adding fucntuon that generates the next project ID based on the existing clients. It finds the highest numeric suffix in the client IDs and increments it to create a new unique ID.
+const nextProjectId = (clients: ClientRow[]) => {
+  const highestId = clients.reduce((highest, client) => {
+    const suffix = client.id.match(/(\d+)$/)?.[1];
+    return suffix ? Math.max(highest, Number(suffix)) : highest;
+  }, 0);
+  return `CLT-${String(highestId + 1).padStart(3, "0")}`;
+};
+
 const EMPTY_FORM = {
   name: "",
   id: "",
@@ -143,15 +193,14 @@ const EMPTY_FORM = {
   projectType: "",
   projectBrief: "",
   projectManager: "",
+  projectBillingCode: "",
+  voumetric: "",
+  resources: [{ resourceName: "", fte: null }] as ResourceAllocation[],
   isow: "",
-  estimatedStartDate: "",
-  estimatedEndDate: "",
+  plannedStartDate: "",
+  plannedEndDate: "",
   actualStartDate: "",
   actualEndDate: "",
-  plannedOnboard: "",
-  actualOnboard: "",
-  plannedOffboard: "",
-  actualOffboard: "",
   contractStart: "",
   contractEnd: "",
   notes: "",
@@ -168,8 +217,8 @@ export default function Clients({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [regionFilter, setRegionFilter] = useState("All");
-  const [sortCol, setSortCol] = useState("name");
-  const [sortAsc, setSortAsc] = useState(true);
+  const [sortCol, setSortCol] = useState("status");
+  const [sortAsc, setSortAsc] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [showAdd, setShowAdd] = useState(false);
@@ -197,8 +246,12 @@ export default function Clients({
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const payload = response.ok ? await response.json() : null;
-      if (!payload?.clients?.length) return;
+      if (!response.ok) {
+        throw new Error(
+          "Unable to load projects. Check that the latest database migrations have been applied.",
+        );
+      }
+      const payload = await response.json();
 
       const mapped = payload.clients.map((client: ApiClient) => ({
         id: client.clientId,
@@ -207,10 +260,20 @@ export default function Clients({
         region: client.region,
         industry: client.industry,
         status: client.currentStatus,
-        plannedOnboard: client.plannedOnboardDate || "",
-        actualOnboard: client.actualOnboardDate || "",
-        plannedOffboard: client.plannedOffboardDate || "",
-        actualOffboard: client.actualOffboardDate || null,
+        projectBillingCode: client.projectBillingCode || "",
+        resources:
+          client.resources?.length
+            ? client.resources
+            : [{ resourceName: "", fte: null }],
+        voumetric: client.voumetric ?? null,
+        plannedStartDate:
+          client.estimatedStartDate || client.plannedOnboardDate || "",
+        plannedEndDate:
+          client.estimatedEndDate || client.plannedOffboardDate || "",
+        actualStartDate:
+          client.actualStartDate || client.actualOnboardDate || "",
+        actualEndDate:
+          client.actualEndDate || client.actualOffboardDate || "",
         contractStart: client.contractStartDate || "",
         contractEnd: client.contractEndDate || "",
         notes: client.remarks || "",
@@ -218,27 +281,33 @@ export default function Clients({
         services: client.services || [],
         lastUpdated: client.updatedDate || client.lastUpdated || "",
         year: client.year || new Date().getFullYear(),
-        completion: Number(client.completion || 0),
+        completion: toPercentage(client.completion),
         hyperscaler: client.hyperscaler || "",
         projectType: client.projectType || "",
         projectBrief: client.projectBrief || "",
         projectManager: client.projectManager || "",
         isow: client.isow || "",
-        estimatedStartDate: client.estimatedStartDate || "",
-        estimatedEndDate: client.estimatedEndDate || "",
-        actualStartDate: client.actualStartDate || "",
-        actualEndDate: client.actualEndDate || "",
       }));
 
       setClientList(mapped);
-    } catch {
-      return;
+    } catch (error) {
+      console.error("Unable to load projects:", error);
+      showCloudOrbixAlert(
+        error instanceof Error
+          ? error.message
+          : "Unable to load projects. Check that the latest database migrations have been applied.",
+        "error",
+      );
     }
   };
 
   useEffect(() => {
     setSearch(initialSearch);
   }, [initialSearch]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, regionFilter]);
 
   useEffect(() => {
     void loadClients();
@@ -273,6 +342,7 @@ export default function Clients({
 
   const PAGE_SIZE = 8;
 
+  const searchTerm = search.trim().toLowerCase();
   const filtered = clientList
     .filter(
       (c) =>
@@ -281,14 +351,42 @@ export default function Clients({
     )
     .filter(
       (c) =>
-        !search ||
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.id.toLowerCase().includes(search.toLowerCase()) ||
-        c.accountManager.toLowerCase().includes(search.toLowerCase()),
+        !searchTerm ||
+        [
+          c.id,
+          c.name,
+          c.accountManager,
+          c.region,
+          c.industry,
+          c.status,
+          c.projectBillingCode,
+          c.voumetric,
+          c.hyperscaler,
+          c.projectType,
+          c.projectBrief,
+          c.projectManager,
+          c.isow,
+          ...c.resources.flatMap((resource) => [
+            resource.resourceName,
+            resource.fte,
+          ]),
+        ].some((value) =>
+          String(value ?? "")
+            .toLowerCase()
+            .includes(searchTerm),
+        ),
     )
     .sort((a, b) => {
       const va = (a as any)[sortCol] ?? "";
       const vb = (b as any)[sortCol] ?? "";
+      if (sortCol === "status") {
+        const priorityA = STATUS_PRIORITY.get(String(va).toLowerCase()) ?? 0;
+        const priorityB = STATUS_PRIORITY.get(String(vb).toLowerCase()) ?? 0;
+        const priorityDifference = sortAsc
+          ? priorityA - priorityB
+          : priorityB - priorityA;
+        return priorityDifference || String(va).localeCompare(String(vb));
+      }
       return sortAsc
         ? String(va).localeCompare(String(vb))
         : String(vb).localeCompare(String(va));
@@ -321,7 +419,11 @@ export default function Clients({
   const openAddClient = () => {
     setEditingClientId(null);
     setStep(0);
-    setForm({ ...EMPTY_FORM, year: new Date().getFullYear() });
+    setForm({
+      ...EMPTY_FORM,
+      id: nextProjectId(clientList),
+      year: new Date().getFullYear(),
+    });
     setShowAdd(true);
   };
 
@@ -338,23 +440,28 @@ export default function Clients({
       revenue: String(client.revenue || ""),
       services: client.services || [],
       year: Number((client as any).year || new Date().getFullYear()),
-      completion: String((client as any).completion || 0),
+      completion: String(toPercentage((client as any).completion)),
       hyperscaler: (client as any).hyperscaler || "",
       projectType: (client as any).projectType || "",
       projectBrief: (client as any).projectBrief || "",
       projectManager:
         (client as any).projectManager || client.accountManager || "",
+      projectBillingCode: client.projectBillingCode || "",
+      resources:
+        client.resources?.length
+          ? client.resources
+          : [{ resourceName: "", fte: null }],
+      voumetric:
+        client.voumetric === null || client.voumetric === undefined
+          ? ""
+          : String(client.voumetric),
       isow: (client as any).isow || "",
-      estimatedStartDate: (client as any).estimatedStartDate || "",
-      estimatedEndDate: (client as any).estimatedEndDate || "",
-      actualStartDate: (client as any).actualStartDate || "",
-      actualEndDate: (client as any).actualEndDate || "",
-      plannedOnboard: client.plannedOnboard || "",
-      actualOnboard: client.actualOnboard || "",
-      plannedOffboard: client.plannedOffboard || "",
-      actualOffboard: client.actualOffboard || "",
-      contractStart: (client as any).contractStart || "",
-      contractEnd: (client as any).contractEnd || "",
+      plannedStartDate: client.plannedStartDate || "",
+      plannedEndDate: client.plannedEndDate || "",
+      actualStartDate: client.actualStartDate || "",
+      actualEndDate: client.actualEndDate || "",
+      contractStart: client.contractStart || "",
+      contractEnd: client.contractEnd || "",
       notes: (client as any).notes || "",
       status: client.status,
     });
@@ -362,6 +469,12 @@ export default function Clients({
   };
 
   const submitClient = async () => {
+    if (!form.name.trim()) {
+      setStep(0);
+      showCloudOrbixAlert("Project Name is required.", "warning");
+      return;
+    }
+
     const token = localStorage.getItem("clmp-token");
     if (!token) {
       setShowAdd(false);
@@ -369,31 +482,38 @@ export default function Clients({
     }
 
     const payload = {
-      clientId:
-        form.id || `CLT-${String(clientList.length + 1).padStart(3, "0")}`,
-      clientName: form.name || "New Project",
+      clientId: form.id || nextProjectId(clientList),
+      clientName: form.name.trim(),
       accountManager: form.manager || "Unassigned",
       region: form.region || "North America",
       industry: form.industry || "Technology",
       revenue: Number(form.revenue) || 0,
       year: Number(form.year) || new Date().getFullYear(),
-      completion: Number(form.completion) || 0,
+      completion: toPercentage(form.completion),
       hyperscaler: form.hyperscaler || null,
       projectType: form.projectType || null,
       projectBrief: form.projectBrief || null,
       projectManager: form.projectManager || form.manager || null,
+      projectBillingCode: form.projectBillingCode || null,
+      voumetric: form.voumetric === "" ? null : Number(form.voumetric),
+      resources: form.resources
+        .filter((resource) => resource.resourceName.trim())
+        .map((resource) => ({
+          resourceName: resource.resourceName.trim(),
+          fte: resource.fte,
+        })),
       isow: form.isow || null,
-      estimatedStartDate: form.estimatedStartDate || null,
-      estimatedEndDate: form.estimatedEndDate || null,
+      estimatedStartDate: form.plannedStartDate || null,
+      estimatedEndDate: form.plannedEndDate || null,
       actualStartDate: form.actualStartDate || null,
       actualEndDate: form.actualEndDate || null,
       currentStatus: form.status || "Onboarded",
       services: form.services,
       remarks: form.notes || "",
-      plannedOnboardDate: form.plannedOnboard || null,
-      actualOnboardDate: form.actualOnboard || null,
-      plannedOffboardDate: form.plannedOffboard || null,
-      actualOffboardDate: form.actualOffboard || null,
+      plannedOnboardDate: form.plannedStartDate || null,
+      actualOnboardDate: form.actualStartDate || null,
+      plannedOffboardDate: form.plannedEndDate || null,
+      actualOffboardDate: form.actualEndDate || null,
       contractStartDate: form.contractStart || null,
       contractEndDate: form.contractEnd || null,
     };
@@ -434,35 +554,32 @@ export default function Clients({
         region: serverClient?.region || payload.region,
         industry: serverClient?.industry || payload.industry,
         status: serverClient?.currentStatus || payload.currentStatus,
-        plannedOnboard:
-          serverClient?.plannedOnboardDate || payload.plannedOnboardDate || "",
-        actualOnboard:
-          serverClient?.actualOnboardDate || payload.actualOnboardDate || "",
-        plannedOffboard:
-          serverClient?.plannedOffboardDate ||
-          payload.plannedOffboardDate ||
-          "",
-        actualOffboard: serverClient?.actualOffboardDate || null,
-        contractStart:
-          serverClient?.contractStartDate || payload.contractStartDate || "",
-        contractEnd:
-          serverClient?.contractEndDate || payload.contractEndDate || "",
+        projectBillingCode:
+          serverClient?.projectBillingCode || payload.projectBillingCode || "",
+        resources: serverClient?.resources || payload.resources || [],
+        voumetric: serverClient?.voumetric ?? payload.voumetric,
+        plannedStartDate:
+          serverClient?.estimatedStartDate || payload.estimatedStartDate || "",
+        plannedEndDate:
+          serverClient?.estimatedEndDate || payload.estimatedEndDate || "",
+        actualStartDate:
+          serverClient?.actualStartDate || payload.actualStartDate || "",
+        actualEndDate:
+          serverClient?.actualEndDate || payload.actualEndDate || "",
+        contractStart: serverClient?.contractStartDate || payload.contractStartDate || "",
+        contractEnd: serverClient?.contractEndDate || payload.contractEndDate || "",
         notes: serverClient?.remarks || payload.remarks || "",
         revenue: Number(serverClient?.revenue || payload.revenue || 0),
         services: serverClient?.services || payload.services || [],
         lastUpdated:
           serverClient?.updatedDate || new Date().toISOString().split("T")[0],
         year: serverClient?.year || new Date().getFullYear(),
-        completion: Number(serverClient?.completion || 0),
+        completion: toPercentage(serverClient?.completion ?? payload.completion),
         hyperscaler: serverClient?.hyperscaler || "",
         projectType: serverClient?.projectType || "",
         projectBrief: serverClient?.projectBrief || "",
         projectManager: serverClient?.projectManager || "",
         isow: serverClient?.isow || "",
-        estimatedStartDate: serverClient?.estimatedStartDate || "",
-        estimatedEndDate: serverClient?.estimatedEndDate || "",
-        actualStartDate: serverClient?.actualStartDate || "",
-        actualEndDate: serverClient?.actualEndDate || "",
       };
 
       setClientList((current) =>
@@ -656,7 +773,7 @@ export default function Clients({
           style={{ background: bg, borderColor: border, color: text }}
         >
           <option value="All">All Statuses</option>
-          {Object.keys(STATUS_COLORS).map((s) => (
+          {PROJECT_STATUSES.map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>
@@ -712,6 +829,8 @@ export default function Clients({
                 <Th col="year" label="Year" />
                 <Th col="name" label="Project Name" />
                 <Th col="accountManager" label="Account Manager" />
+                <Th col="projectBillingCode" label="Project Billing Code" />
+                <Th col="voumetric" label="Volumetric" />
                 <Th col="region" label="Region" />
                 <Th col="industry" label="Industry" />
                 <Th col="status" label="Status" />
@@ -853,11 +972,9 @@ export default function Clients({
                         {(c as any).isow || "-"}
                       </div>
                       <div className="text-[10px]" style={{ color: muted }}>
-                        Progress: {(c as any).completion || 0}% · Est:{" "}
-                        {(c as any).estimatedStartDate || "-"} to{" "}
-                        {(c as any).estimatedEndDate || "-"} · Actual:{" "}
-                        {(c as any).actualStartDate || "-"} to{" "}
-                        {(c as any).actualEndDate || "-"}
+                        Progress: {(c as any).completion || 0}% · Planned:{" "}
+                        {c.plannedStartDate || "-"} to {c.plannedEndDate || "-"} · Actual:{" "}
+                        {c.actualStartDate || "-"} to {c.actualEndDate || "-"}
                       </div>
                       <div
                         className="text-[10px] truncate max-w-[260px]"
@@ -868,6 +985,12 @@ export default function Clients({
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
                       {c.accountManager}
+                    </td>
+                    <td className="px-4 py-3 text-xs" style={{ color: text }}>
+                      {c.projectBillingCode || "-"}
+                    </td>
+                    <td className="px-4 py-3 text-xs" style={{ color: text }}>
+                      {c.voumetric ?? "-"}
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
                       {c.region}
@@ -948,15 +1071,13 @@ export default function Clients({
                       className="px-4 py-3 text-xs whitespace-nowrap"
                       style={{ color: muted }}
                     >
-                      {(c as any).estimatedStartDate || "-"} to{" "}
-                      {(c as any).estimatedEndDate || "-"}
+                      {c.plannedStartDate || "-"} to {c.plannedEndDate || "-"}
                     </td>
                     <td
                       className="px-4 py-3 text-xs whitespace-nowrap"
                       style={{ color: muted }}
                     >
-                      {(c as any).actualStartDate || "-"} to{" "}
-                      {(c as any).actualEndDate || "-"}
+                      {c.actualStartDate || "-"} to {c.actualEndDate || "-"}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1 flex-wrap max-w-[140px]">
@@ -990,14 +1111,6 @@ export default function Clients({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => openEditClient(c)}
-                          className="p-1.5 rounded-md hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                          style={{ color: muted }}
-                          title="Edit project"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
                         <button
                           onClick={() => openEditClient(c)}
                           className="p-1.5 rounded-md hover:bg-blue-50 hover:text-blue-600 transition-colors"
@@ -1068,7 +1181,7 @@ export default function Clients({
         </div>
       </div>
 
-      {/* Add Project Wizard Modal */}
+      {/* Add Project Wizard Model */}
       {showAdd && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -1133,6 +1246,7 @@ export default function Clients({
                       label: "Project Name",
                       key: "name",
                       placeholder: "e.g. Northgate Technologies",
+                      required: true,
                     },
                     {
                       label: "Project ID",
@@ -1176,12 +1290,14 @@ export default function Clients({
                       key: "status",
                       placeholder: "Select status",
                       type: "select",
-                      options: Object.keys(STATUS_COLORS),
+                      options: PROJECT_STATUSES,
                     },
                     {
                       label: "Hyperscaler",
                       key: "hyperscaler",
-                      placeholder: "Azure, AWS, or GCP",
+                      placeholder: "Select hyperscaler",
+                      type: "select",
+                      options: HYPERSCALERS,
                     },
                     {
                       label: "Project Type",
@@ -1189,11 +1305,22 @@ export default function Clients({
                       placeholder: "e.g. Cloud Migration",
                     },
                     {
-                      label: "Project Managers",
+                      label: "Project Manager",
                       key: "projectManager",
-                      placeholder: "Select project managers",
-                      type: "multi-select",
+                      placeholder: "Select project manager",
+                      type: "select",
                       options: managers,
+                    },
+                    {
+                      label: "Project Billing Code",
+                      key: "projectBillingCode",
+                      placeholder: "e.g. BILL-1001",
+                    },
+                    {
+                      label: "Volumetric",
+                      key: "voumetric",
+                      placeholder: "Enter a whole number",
+                      type: "number",
                     },
                     {
                       label: "ISOW",
@@ -1214,50 +1341,9 @@ export default function Clients({
                         style={{ color: text }}
                       >
                         {f.label}
+                        {f.required && <span className="ml-1 text-red-500">*</span>}
                       </label>
-                      {f.type === "multi-select" ? (
-                        <div
-                          className="w-full rounded-lg border p-2 space-y-1.5"
-                          style={{ background: inputBg, borderColor: border }}
-                        >
-                          {f.options?.map((o) => {
-                            const selectedManagers = String(
-                              (form as any)[f.key] || "",
-                            )
-                              .split(", ")
-                              .filter(Boolean);
-                            const checked = selectedManagers.includes(o);
-                            return (
-                              <label
-                                key={o}
-                                className="flex items-center gap-2 px-1 py-1 text-xs cursor-pointer"
-                                style={{ color: text }}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() =>
-                                    setForm((fm) => ({
-                                      ...fm,
-                                      [f.key]: checked
-                                        ? selectedManagers
-                                            .filter((manager) => manager !== o)
-                                            .join(", ")
-                                        : [...selectedManagers, o].join(", "),
-                                    }))
-                                  }
-                                />
-                                {o}
-                              </label>
-                            );
-                          })}
-                          {!f.options?.length && (
-                            <span className="text-xs" style={{ color: muted }}>
-                              No project managers available
-                            </span>
-                          )}
-                        </div>
-                      ) : f.type === "select" ? (
+                      {f.type === "select" ? (
                         <select
                           value={(form as any)[f.key]}
                           onChange={(e) =>
@@ -1274,14 +1360,23 @@ export default function Clients({
                           }}
                         >
                           <option value="">{f.placeholder}</option>
+                          {f.key === "projectManager" &&
+                            form.projectManager &&
+                            !f.options?.includes(form.projectManager) && (
+                              <option value={form.projectManager}>
+                                {form.projectManager}
+                              </option>
+                            )}
                           {f.options?.map((o) => (
-                            <option key={o}>{o}</option>
+                            <option key={o} value={o}>{o}</option>
                           ))}
                         </select>
                       ) : (
                         <input
                           type={f.type === "number" ? "number" : "text"}
+                          min={f.key === "voumetric" ? 0 : undefined}
                           readOnly={f.readOnly}
+                          required={f.required}
                           value={(form as any)[f.key]}
                           onChange={(e) =>
                             setForm((fm) => ({
@@ -1356,23 +1451,14 @@ export default function Clients({
                   </div>
                 </div>
               )}
-
+{/* Changes in the names of fields and keeping redundant keys  */}
               {step === 2 && (
                 <div className="grid grid-cols-2 gap-4">
                   {[
-                    { label: "Planned Onboard Date", key: "plannedOnboard" },
-                    { label: "Actual Onboard Date", key: "actualOnboard" },
-                    { label: "Planned Offboard Date", key: "plannedOffboard" },
-                    { label: "Actual Offboard Date", key: "actualOffboard" },
-                    { label: "Contract Start Date", key: "contractStart" },
-                    { label: "Contract End Date", key: "contractEnd" },
-                    {
-                      label: "Estimated Project Start",
-                      key: "estimatedStartDate",
-                    },
-                    { label: "Estimated Project End", key: "estimatedEndDate" },
-                    { label: "Actual Project Start", key: "actualStartDate" },
-                    { label: "Actual Project End", key: "actualEndDate" },
+                    { label: "Planned Start Date", key: "plannedStartDate" },
+                    { label: "Planned End Date", key: "plannedEndDate" },
+                    { label: "Actual Start Date", key: "actualStartDate" },
+                    { label: "Actual End Date", key: "actualEndDate" },
                   ].map((f) => (
                     <div key={f.key}>
                       <label
@@ -1401,51 +1487,125 @@ export default function Clients({
 
               {step === 3 && (
                 <div className="space-y-4">
-                  <div>
-                    <label
-                      className="block text-xs font-semibold mb-1.5"
-                      style={{ color: text }}
-                    >
-                      Notes & Remarks
-                    </label>
-                    <textarea
-                      value={form.notes}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, notes: e.target.value }))
-                      }
-                      rows={4}
-                      placeholder="Add any relevant notes about this client engagement..."
-                      className="w-full px-3 py-2 rounded-lg border text-xs outline-none resize-none"
-                      style={{
-                        background: inputBg,
-                        borderColor: border,
-                        color: text,
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      className="block text-xs font-semibold mb-2"
-                      style={{ color: text }}
-                    >
-                      Attachments
-                    </label>
-                    <div
-                      className="border-2 border-dashed rounded-xl p-6 text-center"
-                      style={{ borderColor: dark ? "#334155" : "#CBD5E1" }}
-                    >
-                      <div className="text-2xl mb-2">📎</div>
-                      <p
-                        className="text-xs font-medium"
-                        style={{ color: text }}
-                      >
-                        Drag files here or click to browse
-                      </p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-semibold" style={{ color: text }}>
+                        Project Resources
+                      </h3>
                       <p className="text-[10px] mt-1" style={{ color: muted }}>
-                        PDF, DOCX, XLSX up to 25MB
+                        Add each resource with its corresponding FTE.
                       </p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          resources: [...current.resources, { resourceName: "", fte: null }],
+                        }))
+                      }
+                      className="px-3 py-2 rounded-lg border text-xs font-semibold"
+                      style={{ borderColor: border, color: text }}
+                    >
+                      <Plus className="w-3.5 h-3.5 inline mr-1" />
+                      Add Resource
+                    </button>
                   </div>
+                  {form.resources.map((resource, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-[1fr_180px_auto] gap-3 items-end"
+                    >
+                      <label className="block">
+                        <span
+                          className="block text-xs font-semibold mb-1.5"
+                          style={{ color: text }}
+                        >
+                          Resource Name
+                        </span>
+                        <input
+                          type="text"
+                          value={resource.resourceName}
+                          onChange={(event) =>
+                            setForm((current) => {
+                              const resources = current.resources.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, resourceName: event.target.value }
+                                  : item,
+                              );
+                              if (
+                                index === resources.length - 1 &&
+                                event.target.value.trim()
+                              ) {
+                                resources.push({ resourceName: "", fte: null });
+                              }
+                              return { ...current, resources };
+                            })
+                          }
+                          placeholder="Enter resource name"
+                          className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                          style={{
+                            background: inputBg,
+                            borderColor: border,
+                            color: text,
+                          }}
+                        />
+                      </label>
+                      <label className="block">
+                        <span
+                          className="block text-xs font-semibold mb-1.5"
+                          style={{ color: text }}
+                        >
+                          FTE
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={resource.fte ?? ""}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              resources: current.resources.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? {
+                                      ...item,
+                                      fte:
+                                        event.target.value === ""
+                                          ? null
+                                          : Number(event.target.value),
+                                    }
+                                  : item,
+                              ),
+                            }))
+                          }
+                          placeholder="e.g. 0.50"
+                          className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                          style={{
+                            background: inputBg,
+                            borderColor: border,
+                            color: text,
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((current) => ({
+                            ...current,
+                            resources: current.resources.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                          }))
+                        }
+                        aria-label={`Remove resource ${index + 1}`}
+                        className="p-2 rounded-lg border"
+                        style={{ borderColor: border, color: muted }}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -1467,6 +1627,13 @@ export default function Clients({
               <button
                 onClick={() => {
                   if (step < 3) {
+                    if (step === 0 && !form.name.trim()) {
+                      showCloudOrbixAlert(
+                        "Project Name is required.",
+                        "warning",
+                      );
+                      return;
+                    }
                     setStep((s) => s + 1);
                     return;
                   }

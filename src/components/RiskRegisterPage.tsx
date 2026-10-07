@@ -11,6 +11,8 @@ type RiskRow = {
   id: number;
   client_id?: number;
   clientId?: string;
+  projectId?: string;
+  project_id?: string;
   client_name?: string;
   customer_name?: string;
   initiative_name?: string;
@@ -35,6 +37,20 @@ const riskTone = (value?: string) => {
   if (normalized.includes("high") || normalized === "red") return "text-red-600";
   if (normalized.includes("medium") || normalized === "amber") return "text-amber-600";
   return "text-emerald-600";
+};
+
+const getProjectId = (risk: RiskRow) => {
+  const candidates = [risk.projectId, risk.project_id, risk.clientId, risk.client_id]
+    .filter((value) => value !== undefined && value !== null)
+    .flatMap((value) => String(value).split(",").map((part) => part.trim()))
+    .filter(Boolean);
+
+  return (
+    candidates.find((candidate) => /^CLT-/i.test(candidate)) ||
+    candidates.find((candidate) => !/^\d+$/.test(candidate)) ||
+    candidates[0] ||
+    ""
+  );
 };
 
 export default function RiskRegisterPage({ dark, user, onOpenProject }: RiskRegisterPageProps) {
@@ -127,7 +143,7 @@ export default function RiskRegisterPage({ dark, user, onOpenProject }: RiskRegi
                 <tr><td className="p-5 text-xs" style={{ color: muted }} colSpan={16}>Loading risks…</td></tr>
               ) : risks.length ? (
                 risks.map((risk) => {
-                  const projectId = risk.client_id ? String(risk.client_id) : risk.clientId || "";
+                  const projectId = getProjectId(risk);
                   const projectName = risk.client_name || risk.customer_name || "Unknown project";
                   const riskId = `R${risk.id}`;
                   return (
@@ -139,12 +155,14 @@ export default function RiskRegisterPage({ dark, user, onOpenProject }: RiskRegi
                             if (projectId) onOpenProject(projectId);
                           }}
                           className="inline-flex items-center gap-1 font-semibold text-blue-600"
+                          disabled={!projectId}
+                          title="Open project"
                         >
                           {riskId} <ArrowUpRight className="w-3 h-3" />
                         </button>
                       </td>
                       <td className="p-2 border" style={{ borderColor: border }}>
-                        <button type="button" onClick={() => projectId && onOpenProject(projectId)} className="font-medium text-left underline-offset-2 hover:underline" style={{ color: text }}>
+                        <button type="button" onClick={() => projectId && onOpenProject(projectId)} className="font-medium text-left underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:no-underline" style={{ color: text }} disabled={!projectId} title="Open project">
                           {projectName}
                         </button>
                       </td>

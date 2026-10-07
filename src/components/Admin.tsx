@@ -558,6 +558,10 @@ export default function Admin({ dark }: AdminProps) {
                 hyperscaler: project.hyperscaler,
                 projectType: project.project_type,
                 projectBrief: project.project_brief,
+                projectBillingCode: project.project_billing_code,
+                resources: project.resources,
+                fte: project.fte,
+                voumetric: project.voumetric,
                 isow: project.isow,
                 estimatedStartDate: project.estimated_start_date,
                 estimatedEndDate: project.estimated_end_date,
@@ -569,7 +573,7 @@ export default function Admin({ dark }: AdminProps) {
               const fields = [
                 ["Project name", "clientName"], ["Account manager", "accountManager"], ["Project managers", "projectManager"],
                 ["Project status", "currentStatus"], ["Region", "region"], ["Industry", "industry"], ["Revenue", "revenue"],
-                ["Hyperscaler", "hyperscaler"], ["Project type", "projectType"], ["Project brief", "projectBrief"], ["ISOW", "isow"],
+                ["Hyperscaler", "hyperscaler"], ["Project type", "projectType"], ["Project brief", "projectBrief"], ["Project Billing Code", "projectBillingCode"], ["Resources", "resources"], ["FTE", "fte"], ["Volumetric", "voumetric"], ["ISOW", "isow"],
                 ["Estimated start", "estimatedStartDate"], ["Estimated end", "estimatedEndDate"], ["Actual start", "actualStartDate"], ["Actual end", "actualEndDate"],
                 ["Completion", "completion"], ["Remarks", "remarks"],
               ] as const;

@@ -45,6 +45,9 @@ type Project = {
   completion: number;
   hyperscaler: string;
   project_type: string;
+  project_billing_code?: string | null;
+  resources?: { resourceName: string; fte: number | null }[];
+  voumetric?: number | null;
 };
 
 type TaskDraft = {
@@ -650,8 +653,14 @@ export default function ProjectPage({
       {confirmDialog && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
           <div
-            className="w-full max-w-md overflow-hidden rounded-2xl border bg-white shadow-2xl"
-            style={{ borderColor: "#BFDBFE" }}
+            className="w-full max-w-md overflow-hidden rounded-2xl border shadow-2xl"
+            style={{
+              background: bg,
+              borderColor: border,
+              boxShadow: dark
+                ? "0 25px 50px rgba(0,0,0,.45)"
+                : "0 25px 50px rgba(15,23,42,.2)",
+            }}
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-task-title"
@@ -667,13 +676,13 @@ export default function ProjectPage({
               <h2
                 id="delete-task-title"
                 className="text-base font-bold"
-                style={{ color: "#0F172A" }}
+                style={{ color: text }}
               >
                 Please confirm
               </h2>
               <p
                 className="mt-2 text-sm leading-6"
-                style={{ color: "#475569" }}
+                style={{ color: muted }}
               >
                 {confirmDialog.message}
               </p>
@@ -684,7 +693,7 @@ export default function ProjectPage({
                     showCloudOrbixAlert("Task deletion cancelled.", "info");
                   }}
                   className="rounded-lg border px-4 py-2 text-xs font-semibold"
-                  style={{ borderColor: "#CBD5E1", color: "#475569" }}
+                  style={{ borderColor: border, color: muted }}
                 >
                   Cancel
                 </button>
@@ -1059,6 +1068,60 @@ export default function ProjectPage({
               </div>
 
               <div>
+                <span style={{ color: muted }}>Project Billing Code:</span>{" "}
+                <strong>{project.project_billing_code || "-"}</strong>
+              </div>
+
+              <div>
+                <div style={{ color: muted }}>Resources:</div>
+                {project.resources?.length ? (
+                  <>
+                    <div
+                      className="mt-2 max-h-[180px] space-y-1.5 overflow-y-auto pr-1"
+                      aria-label="Project resources"
+                    >
+                      {project.resources.map((resource, index) => (
+                        <div
+                          key={`${resource.resourceName}-${index}`}
+                          className="flex justify-between gap-4 rounded-md px-2 py-1"
+                          style={{
+                            background: inputBg,
+                            color: text,
+                          }}
+                        >
+                          <span>{resource.resourceName}</span>
+                          <strong>
+                            {resource.fte === null
+                              ? "-"
+                              : Number(resource.fte).toFixed(2)}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex justify-between gap-4 px-2 text-xs">
+                      <span style={{ color: muted }}>Total FTE</span>
+                      <strong>
+                        {project.resources
+                          .reduce(
+                            (total, resource) =>
+                              total + (Number(resource.fte) || 0),
+                            0,
+                          )
+                          .toFixed(2)}
+                      </strong>
+                    </div>
+                  </>
+                ) : (
+                  <strong>-</strong>
+                )}
+              </div>
+
+              <div>
+                <span style={{ color: muted }}>Volumetric:</span>{" "}
+                <strong>{project.voumetric ?? "-"}</strong>
+              </div>
+
+              <div>
                 <span style={{ color: muted }}>Current Status:</span>{" "}
                 <span
                   className="px-2 py-1 rounded-full text-white text-xs font-semibold"
@@ -1139,16 +1202,14 @@ export default function ProjectPage({
           <div
             className="rounded-xl border overflow-hidden"
             style={{
-              background: "#FEF2F2",
-
-              borderColor: "#FECACA",
+              background: dark ? "#2A1518" : "#FEF2F2",
+              borderColor: dark ? "#7F1D1D" : "#FECACA",
             }}
           >
             <div
               className="px-4 py-2 text-xs font-semibold"
               style={{
-                background: "#DC2626",
-
+                background: dark ? "#7F1D1D" : "#DC2626",
                 color: "white",
               }}
             >
@@ -1159,12 +1220,27 @@ export default function ProjectPage({
               <div className="alert-list">
                 {alerts.length ? (
                   alerts.map((alert, index) => (
-                    <div key={index} className="alert-item">
+                    <div
+                      key={index}
+                      className="alert-item"
+                      style={{
+                        color: dark ? "#FECACA" : "#7F1D1D",
+                        borderColor: dark ? "#7F1D1D" : "#FECACA",
+                      }}
+                    >
                       {alert}
                     </div>
                   ))
                 ) : (
-                  <div className="alert-item">✅ No project risks detected</div>
+                  <div
+                    className="alert-item"
+                    style={{
+                      color: dark ? "#BBF7D0" : "#166534",
+                      borderColor: dark ? "#14532D" : "#BBF7D0",
+                    }}
+                  >
+                    ✅ No project risks detected
+                  </div>
                 )}
               </div>
             </div>
@@ -1199,7 +1275,7 @@ export default function ProjectPage({
           style={{ background: bg, borderColor: border }}
         >
           <div className="flex justify-between items-center mb-2">
-            <h2 className="font-semibold text-sm">Project documents</h2>
+            <h2 className="font-semibold text-sm">Mandatory documents</h2>
             <span
               className="text-xs font-semibold"
               style={{

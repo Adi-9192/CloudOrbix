@@ -151,6 +151,7 @@ router.post(
           projectBrief: String(value(record, "Brief about the Project")),
           projectManager: managerName(record),
           isow: String(value(record, "ISOW")),
+          projectBillingCode: String(value(record, "Project Billing Code") || "") || null,
           currentStatus: String(value(record, "Current Status") || "Onboarded"),
           estimatedStart,
           estimatedEnd,
@@ -224,19 +225,20 @@ router.post(
             data.estimatedEnd,
             data.actualStart,
             data.actualEnd,
+            data.projectBillingCode,
           ];
           let clientDbId;
           if (existing.rows[0]) {
             clientDbId = existing.rows[0].id;
             await pool.query(
-              `UPDATE clients SET client_name=$1,account_manager=$2,region=$3,industry=$4,revenue=$5,current_status=$6,remarks=$7,planned_onboard_date=$8,actual_onboard_date=$9,planned_offboard_date=$10,actual_offboard_date=$11,contract_start_date=$12,contract_end_date=$13,year=$14,completion=$15,hyperscaler=$16,project_type=$17,project_brief=$18,project_manager=$19,isow=$20,estimated_start_date=$21,estimated_end_date=$22,actual_start_date=$23,actual_end_date=$24,updated_at=CURRENT_TIMESTAMP WHERE client_id=$25`,
+              `UPDATE clients SET client_name=$1,account_manager=$2,region=$3,industry=$4,revenue=$5,current_status=$6,remarks=$7,planned_onboard_date=$8,actual_onboard_date=$9,planned_offboard_date=$10,actual_offboard_date=$11,contract_start_date=$12,contract_end_date=$13,year=$14,completion=$15,hyperscaler=$16,project_type=$17,project_brief=$18,project_manager=$19,isow=$20,estimated_start_date=$21,estimated_end_date=$22,actual_start_date=$23,actual_end_date=$24,project_billing_code=$25,updated_at=CURRENT_TIMESTAMP WHERE client_id=$26`,
               [...params.slice(1), clientId],
             );
             updated += 1;
             duplicates += 1;
           } else {
             const inserted = await pool.query(
-              `INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_type,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING id`,
+              `INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_type,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date,project_billing_code) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING id`,
               params,
             );
             clientDbId = inserted.rows[0].id;
