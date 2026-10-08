@@ -22,6 +22,7 @@ import projectRoutes from './routes/projects.js';
 import templateRoutes from './routes/templates.js';
 import serviceRoutes from './routes/services.js';
 import profileTasksRoutes from './routes/profile-tasks.js';
+import rfpRoutes from './routes/rfp.js';
 
 import { initializeDatabase } from './db.js';
 import { initializeStorage } from './storage.js';
@@ -316,6 +317,11 @@ app.use(
   profileTasksRoutes
 );
 
+app.use(
+  '/api/rfp',
+  rfpRoutes
+);
+
 
 /*
  * Send the frontend application for
@@ -417,7 +423,14 @@ async function startServer() {
   try {
     await initializeDatabase();
 
-    await initializeStorage();
+    try {
+      await initializeStorage();
+    } catch (error) {
+      if (isProduction) throw error;
+      console.warn(
+        `Azure Blob Storage is unavailable in development; file operations are disabled: ${error.message}`
+      );
+    }
 
     app.listen(
       PORT,

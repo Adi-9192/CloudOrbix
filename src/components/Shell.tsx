@@ -3,27 +3,28 @@ import {
   LayoutDashboard, Users, FileArchive,
   FileText, Settings, HelpCircle, Bell, Search, Moon, Sun,
   ChevronLeft, ChevronRight, LogOut, ChevronDown, Upload,
-  ClipboardList, Shield, Menu, X, BookOpen, FolderKanban, UserCircle2
+  ClipboardList, Shield, Menu, X, BookOpen, FolderKanban, UserCircle2, Calculator
 } from "lucide-react";
 import { type CloudOrbixAlert } from "../alert";
 
 export type Page =
-  | "dashboard" | "clients" | "projectframework" | "reports" | "excel" | "audit" | "admin" | "help" | "project" | "documents" | "repository" | "servicecatalogue" | "profile" | "risks";
+  | "dashboard" | "clients" | "projectframework" | "reports" | "excel" | "audit" | "admin" | "help" | "project" | "documents" | "repository" | "servicecatalogue" | "profile" | "risks" | "rfp";
 
 const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "servicecatalogue", label: "Portfolio", icon: BookOpen },
   { id: "reports", label: "Reports", icon: FileText },
-  { id: "excel", label: "Excel Import", icon: Upload },
+ 
   { id: "audit", label: "Audit Logs", icon: ClipboardList },
+  { id: "rfp", label: "RFP Estimation", icon: Calculator },
   { id: "admin", label: "Admin", icon: Shield },
   { id: "help", label: "Help", icon: HelpCircle },
 ];
-
 const projectManagementItems: { id: Page; label: string }[] = [
   { id: "projectframework", label: "Project Framework" },
   { id: "clients", label: "Projects" },
   { id: "repository", label: "Project Repository" },
+   { id: "excel", label: "Excel Import", },
 ];
 
 interface ShellProps {
@@ -260,7 +261,7 @@ export default function Shell({ page, onPageChange, onLogout, dark, user, onTogg
                 </div>
               )}
             </div>
-            {navItems.filter(({ id }) => id !== "dashboard" && (!(["admin", "excel", "audit"] as Page[]).includes(id) || user?.roles.includes("Admin"))).map(({ id, label, icon: Icon }) => {
+            {navItems.filter(({ id }) => id !== "dashboard" && (!(["admin", "excel", "audit", "rfp"] as Page[]).includes(id) || user?.roles.includes("Admin"))).map(({ id, label, icon: Icon }) => {
               const active = page === id;
               return (
                 <button
