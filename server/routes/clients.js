@@ -1,38 +1,26 @@
 import express from 'express';
 import { appState, createAuditEntry, createNotification, getPool } from '../db.js';
 import { parsePendingPayload } from '../lib/pending-payload.js';
-import { canApprove, canManageProject } from '../lib/permissions.js';
+import {
+  canApprove,
+  canEditProject,
+  canManageProject,
+  isAssignedProjectManager,
+} from '../lib/permissions.js';
 import { validateProjectMetrics } from '../lib/project-metrics.js';
 import { protectRoute, requireRole } from '../middleware/auth.js';
 
 const router = express.Router();
-const normalizeProjectStatus = (status) => {
-  const raw = String(status ?? '').trim();
-  if (!raw) return 'On-track';
-
-  const normalized = raw.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
-
-  if (/(on track|in progress|active|onboarded|pending onboarding|progressing)/.test(normalized)) return 'On-track';
-  if (/(on hold|hold|paused|blocked)/.test(normalized)) return 'ON Hold';
-  if (/(delay|delayed|late|at risk|risk|overdue)/.test(normalized)) return 'Delayed';
-  if (/(offboarded|completed|complete|finished|closed)/.test(normalized)) return 'Completed';
-  if (/(cancelled|canceled)/.test(normalized)) return 'Cancelled';
-
-  return 'On-track';
-};
-const publicClient = (client) => ({ ...client, id: client.id, name: client.clientName, status: normalizeProjectStatus(client.currentStatus), lastUpdated: client.updatedAt });
+const publicClient = (client) => ({ ...client, id: client.id, name: client.clientName, status: client.currentStatus, lastUpdated: client.updatedAt });
 const getSubmittedBy = (user) => ({
   submittedBy: user?.email?.trim().toLowerCase(),
   submittedByName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || 'Project Manager',
 });
-const normalizeApprovalValue = (value) => String(value || '').trim().toLowerCase();
 const canApproveForProject = (user, client = {}) => {
   const roles = user?.roles || [];
   if (roles.includes('Admin')) return true;
   if (!canManageProject(roles)) return false;
 
-  const userName = normalizeApprovalValue(`${user?.firstName || ''} ${user?.lastName || ''}`.trim());
-  const userEmail = normalizeApprovalValue(user?.email || '');
   const matchingValues = [
     client.accountManager,
     client.projectManager,
@@ -41,13 +29,12 @@ const canApproveForProject = (user, client = {}) => {
     client.pendingPayload?.submittedByName,
   ];
 
-  return matchingValues.some((value) => {
-    const normalized = normalizeApprovalValue(value);
-    return normalized === userName || normalized === userEmail || normalized.includes(userName) || normalized.includes(userEmail);
+  return isAssignedProjectManager(user, {
+    accountManager: matchingValues.join(','),
   });
 };
 const columns = `c.id,c.client_id,c.client_name,c.account_manager,c.region,c.industry,c.revenue,c.current_status,c.remarks,c.created_at,c.updated_at,c.planned_onboard_date,c.actual_onboard_date,c.planned_offboard_date,c.actual_offboard_date,c.contract_start_date,c.contract_end_date,c.year,c.completion,c.hyperscaler,c.project_type,c.project_brief,c.project_manager,c.isow,c.project_billing_code,c.voumetric,c.estimated_start_date,c.estimated_end_date,c.actual_start_date,c.actual_end_date,c.approval_status,c.pending_payload,c.pending_create,COALESCE((SELECT STRING_AGG(s2.name, ',') FROM client_services cs2 JOIN services s2 ON s2.id=cs2.service_id WHERE cs2.client_id=c.id),'') services`;
-const mapRow = (row) => ({ id: row.id, clientId: row.client_id, clientName: row.client_name, accountManager: row.account_manager, region: row.region, industry: row.industry, revenue: Number(row.revenue || 0), currentStatus: normalizeProjectStatus(row.current_status), remarks: row.remarks, createdAt: row.created_at?.toISOString?.().slice(0,10) || row.created_at, updatedAt: row.updated_at?.toISOString?.().slice(0,10) || row.updated_at, plannedOnboardDate: row.planned_onboard_date, actualOnboardDate: row.actual_onboard_date, plannedOffboardDate: row.planned_offboard_date, actualOffboardDate: row.actual_offboard_date, contractStartDate: row.contract_start_date, contractEndDate: row.contract_end_date, year: row.year, completion: Number(row.completion || 0), hyperscaler: row.hyperscaler, projectType: row.project_type, projectBrief: row.project_brief, projectManager: row.project_manager, isow: row.isow, projectBillingCode: row.project_billing_code, resources: [], voumetric: row.voumetric, estimatedStartDate: row.estimated_start_date, estimatedEndDate: row.estimated_end_date, actualStartDate: row.actual_start_date, actualEndDate: row.actual_end_date, approvalStatus: row.approval_status || 'approved', pendingPayload: parsePendingPayload(row.pending_payload), services: row.services || [] });
+const mapRow = (row) => ({ id: row.id, clientId: row.client_id, clientName: row.client_name, accountManager: row.account_manager, region: row.region, industry: row.industry, revenue: Number(row.revenue || 0), currentStatus: row.current_status, remarks: row.remarks, createdAt: row.created_at?.toISOString?.().slice(0,10) || row.created_at, updatedAt: row.updated_at?.toISOString?.().slice(0,10) || row.updated_at, plannedOnboardDate: row.planned_onboard_date, actualOnboardDate: row.actual_onboard_date, plannedOffboardDate: row.planned_offboard_date, actualOffboardDate: row.actual_offboard_date, contractStartDate: row.contract_start_date, contractEndDate: row.contract_end_date, year: row.year, completion: Number(row.completion || 0), hyperscaler: row.hyperscaler, projectType: row.project_type, projectBrief: row.project_brief, projectManager: row.project_manager, isow: row.isow, projectBillingCode: row.project_billing_code, resources: [], voumetric: row.voumetric, estimatedStartDate: row.estimated_start_date, estimatedEndDate: row.estimated_end_date, actualStartDate: row.actual_start_date, actualEndDate: row.actual_end_date, approvalStatus: row.approval_status || 'approved', pendingPayload: parsePendingPayload(row.pending_payload), services: row.services || [] });
 async function mapDbClients(pool, rows) {
   const clients = rows.map(mapRow);
   if (!clients.length) return clients;
@@ -126,16 +113,14 @@ router.get('/approvals', protectRoute, async (req, res, next) => {
 
 router.post('/', protectRoute, async (req, res, next) => {
   const body = req.body || {}; if (!body.clientId || !String(body.clientName || '').trim() || !body.accountManager) return res.status(400).json({ message: 'Client ID, name, and account manager are required.' });
-  const normalizedStatus = normalizeProjectStatus(body.currentStatus || 'On-track');
-  const normalizedBody = { ...body, currentStatus: normalizedStatus };
   try {
-    const metricError = validateProjectMetrics(normalizedBody);
+    const metricError = validateProjectMetrics(body);
     if (metricError) return res.status(400).json({ message: metricError });
     const isAdmin = req.user?.roles?.includes('Admin');
     const pool = getPool();
-    if (!pool) { if (appState.clients.some((client) => client.clientId === body.clientId)) return res.status(409).json({ message: 'Client ID already exists.' }); const client = { id: Date.now(), clientId: body.clientId, clientName: body.clientName, accountManager: body.accountManager, region: body.region || 'North America', industry: body.industry || 'Technology', revenue: Number(body.revenue || 0), currentStatus: normalizedStatus, services: body.services || [], createdAt: new Date().toISOString().slice(0,10), updatedAt: new Date().toISOString().slice(0,10), plannedOnboardDate: body.plannedOnboardDate || null, actualOnboardDate: body.actualOnboardDate || null, plannedOffboardDate: body.plannedOffboardDate || null, actualOffboardDate: body.actualOffboardDate || null, contractStartDate: body.contractStartDate || null, contractEndDate: body.contractEndDate || null, projectBillingCode: body.projectBillingCode || null, resources: body.resources || [], voumetric: body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric), remarks: body.remarks || '' }; appState.clients.unshift(client); createAuditEntry(req.user.email,'Client Created','—',client.clientName); return res.status(201).json({ client: publicClient(client) }); }
-    const pendingPayload = isAdmin ? null : JSON.stringify({ ...normalizedBody, ...getSubmittedBy(req.user) });
-    const result = await pool.query(`INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_type,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date,approval_status,pending_payload,pending_create,project_billing_code,resources,fte,voumetric) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NULL,NULL,$30) RETURNING id`, [body.clientId,body.clientName,body.accountManager,body.region || 'North America',body.industry || 'Technology',Number(body.revenue || 0),normalizedStatus,body.remarks || '',body.plannedOnboardDate || null,body.actualOnboardDate || null,body.plannedOffboardDate || null,body.actualOffboardDate || null,body.contractStartDate || null,body.contractEndDate || null,body.year || new Date().getFullYear(),Number(body.completion || 0),body.hyperscaler || null,body.projectType || null,body.projectBrief || null,body.projectManager || body.accountManager || null,body.isow || null,body.estimatedStartDate || body.plannedOnboardDate || null,body.estimatedEndDate || body.plannedOffboardDate || null,body.actualStartDate || body.actualOnboardDate || null,body.actualEndDate || body.actualOffboardDate || null,isAdmin ? 'approved' : 'pending',pendingPayload,!isAdmin,body.projectBillingCode || null,body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric)]);
+    if (!pool) { if (appState.clients.some((client) => client.clientId === body.clientId)) return res.status(409).json({ message: 'Client ID already exists.' }); const client = { id: Date.now(), clientId: body.clientId, clientName: body.clientName, accountManager: body.accountManager, region: body.region || 'North America', industry: body.industry || 'Technology', revenue: Number(body.revenue || 0), currentStatus: body.currentStatus || 'Pending Onboarding', services: body.services || [], createdAt: new Date().toISOString().slice(0,10), updatedAt: new Date().toISOString().slice(0,10), plannedOnboardDate: body.plannedOnboardDate || null, actualOnboardDate: body.actualOnboardDate || null, plannedOffboardDate: body.plannedOffboardDate || null, actualOffboardDate: body.actualOffboardDate || null, contractStartDate: body.contractStartDate || null, contractEndDate: body.contractEndDate || null, projectBillingCode: body.projectBillingCode || null, resources: body.resources || [], voumetric: body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric), remarks: body.remarks || '' }; appState.clients.unshift(client); createAuditEntry(req.user.email,'Client Created','—',client.clientName); return res.status(201).json({ client: publicClient(client) }); }
+    const pendingPayload = isAdmin ? null : JSON.stringify({ ...body, ...getSubmittedBy(req.user) });
+    const result = await pool.query(`INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_type,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date,approval_status,pending_payload,pending_create,project_billing_code,resources,fte,voumetric) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NULL,NULL,$30) RETURNING id`, [body.clientId,body.clientName,body.accountManager,body.region || 'North America',body.industry || 'Technology',Number(body.revenue || 0),body.currentStatus || 'Onboarded',body.remarks || '',body.plannedOnboardDate || null,body.actualOnboardDate || null,body.plannedOffboardDate || null,body.actualOffboardDate || null,body.contractStartDate || null,body.contractEndDate || null,body.year || new Date().getFullYear(),Number(body.completion || 0),body.hyperscaler || null,body.projectType || null,body.projectBrief || null,body.projectManager || body.accountManager || null,body.isow || null,body.estimatedStartDate || body.plannedOnboardDate || null,body.estimatedEndDate || body.plannedOffboardDate || null,body.actualStartDate || body.actualOnboardDate || null,body.actualEndDate || body.actualOffboardDate || null,isAdmin ? 'approved' : 'pending',pendingPayload,!isAdmin,body.projectBillingCode || null,body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric)]);
     await saveProjectResources(pool, result.rows[0].id, body.resources || []);
     await saveServices(pool, result.rows[0].id, body.services); createAuditEntry(req.user.email, isAdmin ? 'Client Created' : 'Client Submitted for Approval', '—', body.clientName); return res.status(isAdmin ? 201 : 202).json({ pending: !isAdmin, client: publicClient(await findDbClient(body.clientId)) });
   } catch (error) { return error.code === '23505' ? res.status(409).json({ message: 'Client ID already exists.' }) : next(error); }
@@ -175,18 +160,7 @@ router.put('/:clientId', protectRoute, async (req, res, next) => {
 
     const userRoles = req.user?.roles || [];
 
-    const currentUserName =
-      `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim();
-    const currentUserEmail = req.user?.email || '';
-
-    const projectManagers = String(existingClient.projectManager || '')
-      .split(/\s*,\s*/)
-      .filter(Boolean);
-    const canEdit =
-      canManageProject(userRoles) ||
-      existingClient.accountManager === currentUserName ||
-      projectManagers.includes(currentUserName) ||
-      projectManagers.includes(currentUserEmail);
+    const canEdit = canEditProject(userRoles);
 
     if (!canEdit) {
       return res.status(403).json({
@@ -195,17 +169,13 @@ router.put('/:clientId', protectRoute, async (req, res, next) => {
     }
 
     const isAdmin = userRoles.includes('Admin');
-    const normalizedBody = {
-      ...body,
-      currentStatus: normalizeProjectStatus(body.currentStatus || existingClient.currentStatus || 'On-track'),
-    };
     if (!pool) {
       const index = appState.clients.findIndex((client) => client.clientId === req.params.clientId);
       if (index < 0) return res.status(404).json({ message: 'Client not found.' });
-      const pendingPayload = { ...existingClient, ...normalizedBody, ...getSubmittedBy(req.user), approvalStatus: 'pending', pendingCreate: false };
+      const pendingPayload = { ...existingClient, ...body, ...getSubmittedBy(req.user), approvalStatus: 'pending', pendingCreate: false };
       appState.clients[index] = {
         ...appState.clients[index],
-        ...normalizedBody,
+        ...body,
         updatedAt: new Date().toISOString().slice(0, 10),
         approvalStatus: 'pending',
         pendingPayload,
@@ -216,7 +186,7 @@ router.put('/:clientId', protectRoute, async (req, res, next) => {
     }
 
     if (!isAdmin) {
-      const pendingPayload = JSON.stringify({ ...normalizedBody, ...getSubmittedBy(req.user) });
+      const pendingPayload = JSON.stringify({ ...body, ...getSubmittedBy(req.user) });
       await pool.query(
         `UPDATE clients SET pending_payload=$1, pending_create=0, approval_status='pending', updated_at=CURRENT_TIMESTAMP WHERE client_id=$2`,
         [pendingPayload, req.params.clientId],
@@ -265,7 +235,7 @@ router.put('/:clientId', protectRoute, async (req, res, next) => {
         body.revenue === undefined
           ? null
           : Number(body.revenue),
-        normalizedBody.currentStatus,
+        body.currentStatus,
         body.remarks,
         body.plannedOnboardDate || null,
         body.actualOnboardDate || null,

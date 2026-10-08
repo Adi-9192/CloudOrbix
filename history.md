@@ -24,3 +24,9 @@
 - Normalized imported Excel `Current Status` values before inserting or updating client records.
 - Mapped accepted Excel status variations to the app's canonical status set: `On-track`, `ON Hold`, `Delayed`, `Completed`, and `Cancelled`.
 - Added the same normalization in the client API so existing DB values render correctly even if legacy statuses were imported previously.
+
+### Manager project edit authorization
+- Fixed manager project edits failing with “You are not authorized to edit this client.”
+- The backend had an assignment-name check that rejected Managers when their account/project manager name did not exactly match the stored assignment, even though the project UI permits Managers to edit.
+- Updated project edit authorization to allow the Manager role to submit edits for administrator approval; Admin and Operations Team edit access remains unchanged, and Viewer access remains denied.
+- Added regression coverage for Manager, Viewer, and Operations Team edit permissions.
