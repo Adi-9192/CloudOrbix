@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowUpRight, CheckCircle2, ShieldAlert } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Download } from "lucide-react";
+import { showCloudOrbixAlert } from "../alert";
 
 interface RiskRegisterPageProps {
   dark: boolean;
@@ -30,7 +31,10 @@ type RiskRow = {
   comments_actions?: string;
   project_manager?: string;
   account_manager?: string;
+  created_at?: string;
 };
+
+const projectStatuses = ["On-track", "ON Hold", "Delayed", "Completed", "Cancelled"];
 
 const riskTone = (value?: string) => {
   const normalized = String(value || "").toLowerCase();
@@ -56,6 +60,7 @@ const getProjectId = (risk: RiskRow) => {
 export default function RiskRegisterPage({ dark, user, onOpenProject }: RiskRegisterPageProps) {
   const [risks, setRisks] = useState<RiskRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("clmp-token");
@@ -70,9 +75,47 @@ export default function RiskRegisterPage({ dark, user, onOpenProject }: RiskRegi
 
   const totals = useMemo(() => ({
     total: risks.length,
-    open: risks.filter((risk) => String(risk.status || "").toLowerCase() === "open").length,
-    closed: risks.filter((risk) => String(risk.status || "").toLowerCase() === "closed").length,
+    onTrack: risks.filter((risk) => risk.status === "On-track").length,
+    completed: risks.filter((risk) => risk.status === "Completed").length,
   }), [risks]);
+
+  const downloadRiskRegister = async () => {
+    setDownloading(true);
+    try {
+      const token = localStorage.getItem("clmp-token");
+      const response = await fetch("/api/projects/risks/export", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const responseText = await response.text();
+        let responseMessage = "";
+        if (response.headers.get("content-type")?.includes("application/json")) {
+          try {
+            responseMessage = JSON.parse(responseText).message || "";
+          } catch {
+            responseMessage = "";
+          }
+        }
+        throw new Error(responseMessage || `Unable to download risk register (HTTP ${response.status}).`);
+      }
+      if (!response.headers.get("content-type")?.includes(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      )) {
+        throw new Error("The server did not return an Excel workbook. Restart the backend and try again.");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = "risk-register.xlsx";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to download risk register.";
+      showCloudOrbixAlert(message, "error");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const bg = dark ? "#1E293B" : "#FFFFFF";
   const border = dark ? "#334155" : "#E2E8F0";
@@ -84,16 +127,27 @@ export default function RiskRegisterPage({ dark, user, onOpenProject }: RiskRegi
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Risk register</h1>
-          <p className="text-xs mt-1" style={{ color: muted }}>All open and closed risks across projects</p>
+          <p className="text-xs mt-1" style={{ color: muted }}>All project risks and their current delivery status</p>
         </div>
-        <button
-          type="button"
-          onClick={() => window.history.back()}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold"
-          style={{ borderColor: border, background: bg, color: text }}
-        >
-          <ArrowLeft className="w-3.5 h-3.5" /> Back
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void downloadRiskRegister()}
+            disabled={downloading || loading}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold disabled:opacity-50"
+            style={{ borderColor: border, background: bg, color: text }}
+          >
+            <Download className="w-3.5 h-3.5" /> {downloading ? "Downloading…" : "Download Excel"}
+          </button>
+          <button
+            type="button"
+            onClick={() => window.history.back()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold"
+            style={{ borderColor: border, background: bg, color: text }}
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Back
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -102,12 +156,12 @@ export default function RiskRegisterPage({ dark, user, onOpenProject }: RiskRegi
           <div className="mt-3 text-2xl font-bold">{totals.total}</div>
         </div>
         <div className="rounded-xl border p-4" style={{ background: bg, borderColor: border }}>
-          <div className="text-[10px] uppercase tracking-wide" style={{ color: muted }}>Open</div>
-          <div className="mt-3 text-2xl font-bold text-amber-500">{totals.open}</div>
+          <div className="text-[10px] uppercase tracking-wide" style={{ color: muted }}>On-track</div>
+          <div className="mt-3 text-2xl font-bold text-emerald-500">{totals.onTrack}</div>
         </div>
         <div className="rounded-xl border p-4" style={{ background: bg, borderColor: border }}>
-          <div className="text-[10px] uppercase tracking-wide" style={{ color: muted }}>Closed</div>
-          <div className="mt-3 text-2xl font-bold text-emerald-500">{totals.closed}</div>
+          <div className="text-[10px] uppercase tracking-wide" style={{ color: muted }}>Completed</div>
+          <div className="mt-3 text-2xl font-bold text-emerald-500">{totals.completed}</div>
         </div>
       </div>
 
@@ -169,8 +223,8 @@ export default function RiskRegisterPage({ dark, user, onOpenProject }: RiskRegi
                       <td className="p-2 border" style={{ borderColor: border }}>{risk.customer_name || projectName}</td>
                       <td className="p-2 border" style={{ borderColor: border }}>{risk.initiative_name || "-"}</td>
                       <td className="p-2 border" style={{ borderColor: border }}>
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-semibold ${risk.status === "Open" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
-                          {risk.status || "Open"}
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-semibold ${risk.status === "Delayed" || risk.status === "ON Hold" ? "bg-amber-100 text-amber-700" : risk.status === "Cancelled" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                          {projectStatuses.includes(risk.status || "") ? risk.status : "On-track"}
                         </span>
                       </td>
                       <td className="p-2 border" style={{ borderColor: border }}>{risk.risk_category || "-"}</td>

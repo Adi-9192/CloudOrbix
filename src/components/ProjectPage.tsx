@@ -128,7 +128,7 @@ const statuses = [
   "Cancelled",
 ];
 
-const riskStatuses = ["Open", "Closed", "On Hold"];
+const riskStatuses = statuses;
 
 const riskLevels = ["Low", "Medium", "High"];
 
@@ -146,7 +146,7 @@ const emptyRisk: RiskDraft = {
   level: "Medium",
   impact: "Medium",
   impactDescription: "",
-  status: "Open",
+  status: "On-track",
   mitigation: "",
   commentsActions: "",
 };
@@ -204,6 +204,7 @@ export default function ProjectPage({
   const [showAllTasks, setShowAllTasks] = useState(false);
 
   const [showAllRisks, setShowAllRisks] = useState(false);
+  const [downloadingRisks, setDownloadingRisks] = useState(false);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showRiskForm, setShowRiskForm] = useState(false);
 
@@ -575,6 +576,42 @@ export default function ProjectPage({
     );
   };
 
+  const downloadProjectRisks = async () => {
+    setDownloadingRisks(true);
+    try {
+      const response = await fetch(`/api/projects/${clientId}/risks/export`, { headers });
+      if (!response.ok) {
+        const responseText = await response.text();
+        let responseMessage = "";
+        if (response.headers.get("content-type")?.includes("application/json")) {
+          try {
+            responseMessage = JSON.parse(responseText).message || "";
+          } catch {
+            responseMessage = "";
+          }
+        }
+        throw new Error(responseMessage || `Unable to download project risks (HTTP ${response.status}).`);
+      }
+      if (!response.headers.get("content-type")?.includes(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      )) {
+        throw new Error("The server did not return an Excel workbook. Restart the backend and try again.");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = `${project?.client_id || clientId}-risks.xlsx`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to download project risks.";
+      setMessage(errorMessage);
+      showCloudOrbixAlert(errorMessage, "error");
+    } finally {
+      setDownloadingRisks(false);
+    }
+  };
+
   const importTasks = async (file: File) => {
     const form = new FormData();
 
@@ -613,7 +650,7 @@ export default function ProjectPage({
     (uploadedMandatoryDocuments / mandatoryDocumentTypes.length) * 100,
   );
 
-  const openRisks = risks.filter((item) => item.status === "Open").length;
+  const openRisks = risks.filter((item) => item.status === "On-track").length;
 
   const riskColor = (value: string) =>
     value === "High" ? "#DC2626" : value === "Medium" ? "#D97706" : "#CA8A04";
@@ -1062,7 +1099,7 @@ export default function ProjectPage({
         >
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-semibold text-sm">Open risks</h2>
+              <h2 className="font-semibold text-sm">On-track risks</h2>
               <p className="text-xs mt-1" style={{ color: muted }}>
                 Current risk tracker
               </p>
@@ -1087,7 +1124,7 @@ export default function ProjectPage({
                 >
                   {
                     risks.filter(
-                      (item) => item.status === "Open" && item.level === level,
+                      (item) => item.status === "On-track" && item.level === level,
                     ).length
                   }
                 </div>
@@ -1559,13 +1596,23 @@ export default function ProjectPage({
           style={{ borderColor: border, background: bg }}
         >
           <h2 className="font-semibold text-sm">Risk details</h2>
-          <button
-            onClick={() => setShowRiskForm((current) => !current)}
-            className="px-3 py-2 rounded-lg text-xs font-semibold text-white"
-            style={{ background: "#1E40AF" }}
-          >
-            {showRiskForm ? "Close risk form" : "Add risk"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => void downloadProjectRisks()}
+              disabled={downloadingRisks}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold disabled:opacity-50"
+              style={{ borderColor: border, color: text }}
+            >
+              <Download className="w-3.5 h-3.5" /> {downloadingRisks ? "Downloading…" : "Download Excel"}
+            </button>
+            <button
+              onClick={() => setShowRiskForm((current) => !current)}
+              className="px-3 py-2 rounded-lg text-xs font-semibold text-white"
+              style={{ background: "#1E40AF" }}
+            >
+              {showRiskForm ? "Close risk form" : "Add risk"}
+            </button>
+          </div>
         </div>
         {risks.length ? (
           <div className="overflow-x-auto">
@@ -1731,7 +1778,7 @@ export default function ProjectPage({
               className="text-xs font-semibold"
               style={{ color: openRisks ? "#DC2626" : "#16A34A" }}
             >
-              {openRisks} open
+              {openRisks} on-track
             </span>
           </div>
         </div>

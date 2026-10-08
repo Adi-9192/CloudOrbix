@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import {
   LayoutDashboard, Users, FileArchive,
-  FileText, Settings, HelpCircle, Bell, Search, Moon, Sun,
+  Settings, HelpCircle, Bell, Search, Moon, Sun,
   ChevronLeft, ChevronRight, LogOut, ChevronDown, Upload,
   ClipboardList, Shield, Menu, X, BookOpen, FolderKanban, UserCircle2, Calculator
 } from "lucide-react";
@@ -13,7 +13,7 @@ export type Page =
 const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "servicecatalogue", label: "Portfolio", icon: BookOpen },
-  { id: "reports", label: "Reports", icon: FileText },
+  // { id: "reports", label: "Reports", icon: FileText },
  
   { id: "audit", label: "Audit Logs", icon: ClipboardList },
   { id: "rfp", label: "RFP Estimation", icon: Calculator },
@@ -80,7 +80,6 @@ export default function Shell({ page, onPageChange, onLogout, dark, user, onTogg
 
   const [notifications, setNotifications] = useState<{ id: string; text: string; message: string; type: string; time: string; read: boolean }[]>([]);
   useEffect(() => {
-    if (!notifOpen) return;
     const token = localStorage.getItem("clmp-token");
     if (!token) return;
     fetch("/api/users/notifications", { headers: { Authorization: `Bearer ${token}` } })
@@ -97,7 +96,7 @@ export default function Shell({ page, onPageChange, onLogout, dark, user, onTogg
         setNotifications(alerts);
       })
       .catch(() => setNotifications([]));
-  }, [user, notifOpen]);
+  }, [user]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: pageBg, color: textBody, fontFamily: "var(--font-sans)" }}>

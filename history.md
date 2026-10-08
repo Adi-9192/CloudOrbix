@@ -37,3 +37,19 @@
 - Sent the requesting user a notification when the request is approved or rejected, including the decision-maker's name.
 - Persisted notifications in Azure SQL and added migration `server/migrations/006_approval_notifications.sql`; the notification center now displays the notification message and refreshes when opened.
 - Fixed requests failing when `dbo.notifications` had not yet been created by ensuring the table and its lookup index exist before notification reads and writes.
+
+### Project risk status and Excel export
+- Replaced risk status options (`Open`, `Closed`, `On Hold`) with the shared project statuses: `On-track`, `ON Hold`, `Delayed`, `Completed`, and `Cancelled`.
+- Normalized legacy risk statuses when loading risk records and reject unsupported status values in the risk API.
+- Added formatted `.xlsx` downloads for both the global Risk Register and each project's Risk details, with consistent headers, filtering, and a frozen header row.
+
+### Dashboard metrics and refresh
+- Corrected Delayed Projects to count approved projects whose status is Delayed (including legacy Blocked values), not every project with a past estimated end date.
+- Reconciled project totals, active/completed/delayed counts, revenue, completion, and risk KPIs to approved project records and the current status model.
+- Corrected service adoption, regional, trend, and upcoming-activity queries to exclude pending project records; chart trends now group by the selected period and include both onboarding and offboarding.
+- Refreshed dashboard data when revisited, when the browser regains focus, and every 30 seconds; replaced the hard-coded last-updated timestamp and exposed load errors.
+
+### Project repository synchronization
+- Changed the repository from completed-only to all approved projects so newly added projects appear after approval.
+- Returned project manager/account manager, region, year, hyperscaler, status, completion, update time, and document count for each repository record.
+- Allowed approved projects to open their associated documents from the repository and refreshed repository data on focus, every 30 seconds, or manually.
