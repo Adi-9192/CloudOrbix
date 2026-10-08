@@ -25,6 +25,20 @@ const value = (record, ...keys) => {
     if (record[key] !== undefined && record[key] !== "") return record[key];
   return "";
 };
+const normalizeProjectStatus = (status) => {
+  const raw = String(status ?? "").trim();
+  if (!raw) return "On-track";
+
+  const normalized = raw.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+
+  if (/(on track|in progress|active|onboarded|pending onboarding|progressing)/.test(normalized)) return "On-track";
+  if (/(on hold|hold|paused|blocked)/.test(normalized)) return "ON Hold";
+  if (/(delay|delayed|late|at risk|risk|overdue)/.test(normalized)) return "Delayed";
+  if (/(offboarded|completed|complete|finished|closed)/.test(normalized)) return "Completed";
+  if (/(cancelled|canceled)/.test(normalized)) return "Cancelled";
+
+  return "On-track";
+};
 const dateValue = (record, ...keys) => {
   const raw = value(record, ...keys);
   if (!raw) return null;
@@ -152,7 +166,7 @@ router.post(
           projectManager: managerName(record),
           isow: String(value(record, "ISOW")),
           projectBillingCode: String(value(record, "Project Billing Code") || "") || null,
-          currentStatus: String(value(record, "Current Status") || "Onboarded"),
+          currentStatus: normalizeProjectStatus(value(record, "Current Status")),
           estimatedStart,
           estimatedEnd,
           actualStart,

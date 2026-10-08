@@ -17,3 +17,10 @@
 
 ### Notes
 - This repository already had other unrelated local modifications present before this task. Only the project status update and this history log were included in the commit.
+
+## 2026-10-08
+
+### Excel import status normalization
+- Normalized imported Excel `Current Status` values before inserting or updating client records.
+- Mapped accepted Excel status variations to the app's canonical status set: `On-track`, `ON Hold`, `Delayed`, `Completed`, and `Cancelled`.
+- Added the same normalization in the client API so existing DB values render correctly even if legacy statuses were imported previously.
