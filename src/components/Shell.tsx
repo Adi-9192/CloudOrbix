@@ -78,8 +78,9 @@ export default function Shell({ page, onPageChange, onLogout, dark, user, onTogg
   const pageBg = dark ? "#0F172A" : "#F1F5F9";
   const roleLabel = user?.roles?.[0] === "Admin" ? "System Administrator" : (user?.roles?.[0] || "Account Manager");
 
-  const [notifications, setNotifications] = useState<{ id: string; text: string; type: string; time: string }[]>([]);
+  const [notifications, setNotifications] = useState<{ id: string; text: string; message: string; type: string; time: string; read: boolean }[]>([]);
   useEffect(() => {
+    if (!notifOpen) return;
     const token = localStorage.getItem("clmp-token");
     if (!token) return;
     fetch("/api/users/notifications", { headers: { Authorization: `Bearer ${token}` } })
@@ -88,13 +89,15 @@ export default function Shell({ page, onPageChange, onLogout, dark, user, onTogg
         const alerts = (payload?.notifications || []).slice(0, 6).map((item: any) => ({
           id: `${item.id || item.title}-${item.createdAt || item.created_at || Math.random()}`,
           text: item.title || item.message || "Project update",
+          message: item.message || "",
           type: item.type === "approval" ? "info" : "warning",
           time: new Date(item.createdAt || item.created_at || Date.now()).toLocaleDateString(),
+          read: Boolean(item.read),
         }));
-        setNotifications(alerts.length ? alerts : [{ id: "empty", text: "No new alerts", type: "info", time: "Now" }]);
+        setNotifications(alerts);
       })
-      .catch(() => setNotifications([{ id: "fallback", text: "No new alerts", type: "info", time: "Now" }]));
-  }, [user]);
+      .catch(() => setNotifications([]));
+  }, [user, notifOpen]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: pageBg, color: textBody, fontFamily: "var(--font-sans)" }}>
@@ -154,17 +157,18 @@ export default function Shell({ page, onPageChange, onLogout, dark, user, onTogg
                       <div className="text-[10px] mt-0.5" style={{ color: textMuted }}>Important project activity</div>
                     </div>
                   </div>
-                  <span className="text-[10px] px-2 py-1 rounded-full bg-white text-blue-700 font-bold">4 new</span>
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-white text-blue-700 font-bold">{notifications.filter((notification) => !notification.read).length} new</span>
                 </div>
-                {notifications.map(n => (
+                {notifications.length ? notifications.map(n => (
                   <div key={n.id} className="px-5 py-3 border-b flex gap-3 hover:bg-slate-50 cursor-pointer" style={{ borderColor }}>
                     <div className="w-1 rounded-full flex-shrink-0" style={{ background: n.type === "warning" ? "#D97706" : n.type === "success" ? "#16A34A" : "#3B82F6" }} />
                     <div>
                       <div className="text-xs font-semibold mb-1" style={{ color: textBody }}>{n.text}</div>
+                      {n.message && <div className="text-[11px] mb-1" style={{ color: textMuted }}>{n.message}</div>}
                       <div className="text-[10px]" style={{ color: textMuted }}>{n.time}</div>
                     </div>
                   </div>
-                ))}
+                )) : <div className="px-5 py-4 text-xs" style={{ color: textMuted }}>No new alerts</div>}
                 <div className="px-4 py-2 text-center">
                   <button className="text-xs font-semibold" style={{ color: "#1E40AF" }}>View all alerts</button>
                 </div>

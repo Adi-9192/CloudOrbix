@@ -71,6 +71,13 @@ interface ClientRow {
   industry: string;
   status: string;
   projectBillingCode: string;
+  year: number;
+  completion: number;
+  hyperscaler: string;
+  projectType: string;
+  projectBrief: string;
+  projectManager: string;
+  isow: string;
   resources: ResourceAllocation[];
   voumetric: number | null;
   plannedStartDate: string;
@@ -169,6 +176,9 @@ const toPercentage = (value: number | string | null | undefined) => {
     : percentage;
 };
 
+const dateOnly = (value: string | null | undefined) =>
+  value ? String(value).slice(0, 10) : "";
+
 // Adding fucntuon that generates the next project ID based on the existing clients. It finds the highest numeric suffix in the client IDs and increments it to create a new unique ID.
 const nextProjectId = (clients: ClientRow[]) => {
   const highestId = clients.reduce((highest, client) => {
@@ -265,16 +275,20 @@ export default function Clients({
             ? client.resources
             : [{ resourceName: "", fte: null }],
         voumetric: client.voumetric ?? null,
-        plannedStartDate:
-          client.estimatedStartDate || client.plannedOnboardDate || "",
-        plannedEndDate:
-          client.estimatedEndDate || client.plannedOffboardDate || "",
-        actualStartDate:
-          client.actualStartDate || client.actualOnboardDate || "",
-        actualEndDate:
-          client.actualEndDate || client.actualOffboardDate || "",
-        contractStart: client.contractStartDate || "",
-        contractEnd: client.contractEndDate || "",
+        plannedStartDate: dateOnly(
+          client.estimatedStartDate || client.plannedOnboardDate,
+        ),
+        plannedEndDate: dateOnly(
+          client.estimatedEndDate || client.plannedOffboardDate,
+        ),
+        actualStartDate: dateOnly(
+          client.actualStartDate || client.actualOnboardDate,
+        ),
+        actualEndDate: dateOnly(
+          client.actualEndDate || client.actualOffboardDate,
+        ),
+        contractStart: dateOnly(client.contractStartDate),
+        contractEnd: dateOnly(client.contractEndDate),
         notes: client.remarks || "",
         revenue: Number(client.revenue || 0),
         services: client.services || [],
@@ -793,7 +807,7 @@ export default function Clients({
         style={{ background: bg, borderColor: border }}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
+          <table className="w-full min-w-[1900px]">
             <thead>
               <tr
                 className="border-b"
@@ -829,7 +843,6 @@ export default function Clients({
                 <Th col="projectBillingCode" label="Project Billing Code" />
                 <Th col="voumetric" label="Volumetric" />
                 <Th col="region" label="Region" />
-                <Th col="industry" label="Industry" />
                 <Th col="status" label="Status" />
                 <Th col="revenue" label="Revenue" />
                 <th
@@ -860,33 +873,20 @@ export default function Clients({
                   className="px-4 py-3 text-left text-xs font-semibold"
                   style={{ color: muted }}
                 >
-                  PM Name
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-xs font-semibold"
-                  style={{ color: muted }}
-                >
                   ISOW
                 </th>
-                <th
-                  className="px-4 py-3 text-left text-xs font-semibold"
-                  style={{ color: muted }}
-                >
-                  Estimated Dates
+                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: muted }}>
+                  Planned Start Date
                 </th>
-                <th
-                  className="px-4 py-3 text-left text-xs font-semibold"
-                  style={{ color: muted }}
-                >
-                  Actual Dates
+                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: muted }}>
+                  Planned End Date
                 </th>
-                <th
-                  className="px-4 py-3 text-left text-xs font-semibold"
-                  style={{ color: muted }}
-                >
-                  Services
+                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: muted }}>
+                  Actual Start Date
                 </th>
-                <Th col="lastUpdated" label="Last Updated" />
+                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: muted }}>
+                  Actual End Date
+                </th>
                 <th
                   className="px-4 py-3 text-xs font-semibold"
                   style={{ color: muted }}
@@ -948,7 +948,7 @@ export default function Clients({
                       {c.id}
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
-                      {(c as any).year || "-"}
+                      {c.year || "-"}
                     </td>
                     <td className="px-4 py-3">
                       <button
@@ -958,27 +958,6 @@ export default function Clients({
                       >
                         {c.name}
                       </button>
-                      <div
-                        className="text-[10px] mt-1 leading-relaxed"
-                        style={{ color: muted }}
-                      >
-                        {(c as any).year || "-"} ·{" "}
-                        {(c as any).projectType || "Project"} ·{" "}
-                        {(c as any).hyperscaler || "-"} · PM:{" "}
-                        {(c as any).projectManager || c.accountManager} · ISOW:{" "}
-                        {(c as any).isow || "-"}
-                      </div>
-                      <div className="text-[10px]" style={{ color: muted }}>
-                        Progress: {(c as any).completion || 0}% · Planned:{" "}
-                        {c.plannedStartDate || "-"} to {c.plannedEndDate || "-"} · Actual:{" "}
-                        {c.actualStartDate || "-"} to {c.actualEndDate || "-"}
-                      </div>
-                      <div
-                        className="text-[10px] truncate max-w-[260px]"
-                        style={{ color: muted }}
-                      >
-                        {(c as any).projectBrief || "No project brief"}
-                      </div>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
                       {c.accountManager}
@@ -991,9 +970,6 @@ export default function Clients({
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
                       {c.region}
-                    </td>
-                    <td className="px-4 py-3 text-xs" style={{ color: muted }}>
-                      {c.industry}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -1036,75 +1012,44 @@ export default function Clients({
                             strokeLinecap="round"
                             strokeDasharray={100.53}
                             strokeDashoffset={
-                              100.53 * (1 - ((c as any).completion || 0) / 100)
+                              100.53 * (1 - c.completion / 100)
                             }
                           />
                         </svg>
 
                         <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold">
-                          {(c as any).completion || 0}%
+                          {c.completion || 0}%
                         </span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
-                      {(c as any).hyperscaler || "-"}
+                      {c.hyperscaler || "-"}
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
-                      {(c as any).projectType || "-"}
+                      {c.projectType || "-"}
                     </td>
                     <td
-                      className="px-4 py-3 text-xs max-w-[220px]"
+                      className="px-4 py-3 text-xs max-w-[260px] whitespace-normal"
                       style={{ color: muted }}
                     >
-                      {(c as any).projectBrief || "-"}
+                      {c.projectBrief || "-"}
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
-                      {(c as any).projectManager || c.accountManager || "-"}
-                    </td>
-                    <td className="px-4 py-3 text-xs" style={{ color: text }}>
-                      {(c as any).isow || "-"}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-xs whitespace-nowrap"
-                      style={{ color: muted }}
-                    >
-                      {c.plannedStartDate || "-"} to {c.plannedEndDate || "-"}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-xs whitespace-nowrap"
-                      style={{ color: muted }}
-                    >
-                      {c.actualStartDate || "-"} to {c.actualEndDate || "-"}
+                      {c.isow || "-"}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-1 flex-wrap max-w-[140px]">
-                        {c.services.slice(0, 3).map((s) => (
-                          <span
-                            key={s}
-                            className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                            style={{
-                              background: dark ? "#1E3A5F" : "#DBEAFE",
-                              color: "#1E40AF",
-                            }}
-                          >
-                            {s}
-                          </span>
-                        ))}
-                        {c.services.length > 3 && (
-                          <span
-                            className="text-[10px] px-1.5 py-0.5 rounded"
-                            style={{
-                              background: dark ? "#334155" : "#F1F5F9",
-                              color: muted,
-                            }}
-                          >
-                            +{c.services.length - 3}
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-xs whitespace-nowrap" style={{ color: muted }}>
+                        {c.plannedStartDate || "-"}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-xs" style={{ color: muted }}>
-                      {c.lastUpdated}
+                    <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: muted }}>
+                      {c.plannedEndDate || "-"}
+                    </td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: muted }}>
+                      {c.actualStartDate || "-"}
+                    </td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: muted }}>
+                      {c.actualEndDate || "-"}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
@@ -1359,7 +1304,7 @@ export default function Clients({
                           <option value="">{f.placeholder}</option>
                           {f.key === "projectManager" &&
                             form.projectManager &&
-                            !f.options?.includes(form.projectManager) && (
+                            !f.options?.map(String).includes(form.projectManager) && (
                               <option value={form.projectManager}>
                                 {form.projectManager}
                               </option>

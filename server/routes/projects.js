@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import { BlobServiceClient } from '@azure/storage-blob';
 import { getPool } from '../db.js';
 import { protectRoute } from '../middleware/auth.js';
+import { createProjectExport } from '../lib/project-export.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -85,6 +86,37 @@ router.get('/repository/:clientId', protectRoute, async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+router.get('/:clientId/export', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    if (!canManage(project, req.user)) return res.status(403).json({ message: 'Project access denied.' });
+
+    const pool = getPool();
+    const [tasks, updates, risks] = await Promise.all([
+      pool.query('SELECT task_title,expected_end_date FROM project_tasks WHERE client_id=$1 ORDER BY expected_start_date NULLS LAST,id', [project.id]),
+      pool.query('SELECT update_text,created_at FROM project_updates WHERE client_id=$1 ORDER BY created_at', [project.id]),
+      pool.query('SELECT risk_title,description,date_raised,created_at FROM project_risks WHERE client_id=$1 ORDER BY created_at', [project.id]),
+    ]);
+
+    const buffer = await createProjectExport({
+      project,
+      tasks: tasks.rows,
+      updates: updates.rows,
+      risks: risks.rows,
+    });
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${project.client_id}-project-updates.xlsx"`,
+    );
+    return res.send(Buffer.from(buffer));
+  } catch (error) { return next(error); }
+});
+
 router.get('/:clientId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
@@ -109,6 +141,20 @@ router.post('/:clientId/updates', protectRoute, async (req, res, next) => {
     if (!updateText) return res.status(400).json({ message: 'Update text is required.' });
     const result = await getPool().query('INSERT INTO project_updates(client_id,update_text,updated_by) VALUES($1,$2,$3) RETURNING *', [project.id, updateText, `${req.user.firstName} ${req.user.lastName}`.trim() || req.user.email]);
     return res.status(201).json({ update: result.rows[0] });
+  } catch (error) { return next(error); }
+});
+
+router.delete('/:clientId/updates/:updateId', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    if (!canManage(project, req.user)) return res.status(403).json({ message: 'Project access denied.' });
+    const result = await getPool().query(
+      'DELETE FROM project_updates WHERE id=$1 AND client_id=$2 RETURNING id',
+      [req.params.updateId, project.id],
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: 'Project update not found.' });
+    return res.json({ deleted: true });
   } catch (error) { return next(error); }
 });
 

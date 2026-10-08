@@ -34,9 +34,13 @@ router.get('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team')
   } catch (error) { return next(error); }
 });
 
-router.get('/notifications', protectRoute, async (req, res) => {
-  const notifications = listNotificationsForUser(req.user.email);
-  return res.json({ notifications });
+router.get('/notifications', protectRoute, async (req, res, next) => {
+  try {
+    const notifications = await listNotificationsForUser(req.user.email);
+    return res.json({ notifications });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 router.post('/', protectRoute, requireRole('Admin'), async (req, res, next) => {

@@ -34,6 +34,9 @@ type PendingClient = {
   approvalStatus?: string;
   pendingCreate?: boolean;
   pendingPayload?: Record<string, unknown> | null;
+  submittedByName?: string;
+  submittedBy?: string;
+  submittedByEmail?: string;
 };
 
 type ProjectReview = {
@@ -529,6 +532,11 @@ export default function Admin({ dark }: AdminProps) {
               <div>
                 <div className="text-sm font-semibold">{client.clientName}</div>
                 <div className="text-xs" style={{ color: muted }}>{client.clientId} · {client.pendingCreate ? "New project" : "Project change"} · Requested status: {formatReviewValue(client.pendingPayload?.currentStatus || client.currentStatus)} · PM: {client.pendingPayload?.projectManager ? formatReviewValue(client.pendingPayload.projectManager) : client.projectManager || "Unassigned"}</div>
+                <div className="mt-1 text-xs" style={{ color: muted }}>
+                  Requested by: {String(client.pendingPayload?.submittedByName || client.submittedByName || "Unknown manager")}
+                  {" · "}
+                  {String(client.pendingPayload?.submittedByEmail || client.pendingPayload?.submittedBy || client.submittedByEmail || client.submittedBy || "Email unavailable")}
+                </div>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => void openClientReview(client.clientId)} className="px-3 py-2 rounded-lg text-xs font-semibold border" style={{ borderColor: border, color: text }}><Eye className="w-3.5 h-3.5 inline mr-1" />View details</button>

@@ -14,8 +14,50 @@ const router = express.Router();
 const publicClient = (client) => ({ ...client, id: client.id, name: client.clientName, status: client.currentStatus, lastUpdated: client.updatedAt });
 const getSubmittedBy = (user) => ({
   submittedBy: user?.email?.trim().toLowerCase(),
+  submittedByEmail: user?.email?.trim().toLowerCase(),
   submittedByName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.email || 'Project Manager',
 });
+async function notifyAdminsOfRequest(clientId, clientName, requester) {
+  const pool = getPool();
+  const recipients = pool
+    ? (await pool.query(
+        `SELECT DISTINCT u.email
+         FROM users u
+         JOIN user_roles ur ON ur.user_id = u.id
+         JOIN roles r ON r.id = ur.role_id
+         WHERE r.name = @p1 AND u.is_active = 1`,
+        ['Admin'],
+      )).rows.map((row) => row.email)
+    : appState.users
+        .filter((user) => user.isActive !== false && user.roles?.includes('Admin'))
+        .map((user) => user.email);
+  const requesterName = requester.submittedByName || 'Project Manager';
+  const requesterEmail = requester.submittedByEmail || requester.submittedBy;
+  const message = `${requesterName} (${requesterEmail || 'email unavailable'}) requested approval for ${clientName} (${clientId}).`;
+  await Promise.all(recipients.map((email) =>
+    createNotification(
+      email,
+      'approval',
+      'Project approval requested',
+      message,
+      { projectId: clientId, clientId, action: 'request', requesterName, requesterEmail },
+    ),
+  ));
+}
+async function notifySubmitterOfDecision(payload, clientId, decision, approver) {
+  const requesterEmail = payload?.submittedByEmail || payload?.submittedBy || payload?.email;
+  if (!requesterEmail) return;
+  const requesterName = payload.submittedByName || 'Project Manager';
+  const decisionLabel = decision === 'approve' ? 'approved' : 'rejected';
+  const approverName = `${approver?.firstName || ''} ${approver?.lastName || ''}`.trim() || 'the approval team';
+  await createNotification(
+    requesterEmail,
+    'approval',
+    `Project update ${decisionLabel}`,
+    `Your project change for ${clientId} was ${decisionLabel} by ${approverName}.`,
+    { projectId: clientId, clientId, action: decision, requesterName, approverName, approverEmail: approver?.email },
+  );
+}
 const canApproveForProject = (user, client = {}) => {
   const roles = user?.roles || [];
   if (roles.includes('Admin')) return true;
@@ -34,7 +76,7 @@ const canApproveForProject = (user, client = {}) => {
   });
 };
 const columns = `c.id,c.client_id,c.client_name,c.account_manager,c.region,c.industry,c.revenue,c.current_status,c.remarks,c.created_at,c.updated_at,c.planned_onboard_date,c.actual_onboard_date,c.planned_offboard_date,c.actual_offboard_date,c.contract_start_date,c.contract_end_date,c.year,c.completion,c.hyperscaler,c.project_type,c.project_brief,c.project_manager,c.isow,c.project_billing_code,c.voumetric,c.estimated_start_date,c.estimated_end_date,c.actual_start_date,c.actual_end_date,c.approval_status,c.pending_payload,c.pending_create,COALESCE((SELECT STRING_AGG(s2.name, ',') FROM client_services cs2 JOIN services s2 ON s2.id=cs2.service_id WHERE cs2.client_id=c.id),'') services`;
-const mapRow = (row) => ({ id: row.id, clientId: row.client_id, clientName: row.client_name, accountManager: row.account_manager, region: row.region, industry: row.industry, revenue: Number(row.revenue || 0), currentStatus: row.current_status, remarks: row.remarks, createdAt: row.created_at?.toISOString?.().slice(0,10) || row.created_at, updatedAt: row.updated_at?.toISOString?.().slice(0,10) || row.updated_at, plannedOnboardDate: row.planned_onboard_date, actualOnboardDate: row.actual_onboard_date, plannedOffboardDate: row.planned_offboard_date, actualOffboardDate: row.actual_offboard_date, contractStartDate: row.contract_start_date, contractEndDate: row.contract_end_date, year: row.year, completion: Number(row.completion || 0), hyperscaler: row.hyperscaler, projectType: row.project_type, projectBrief: row.project_brief, projectManager: row.project_manager, isow: row.isow, projectBillingCode: row.project_billing_code, resources: [], voumetric: row.voumetric, estimatedStartDate: row.estimated_start_date, estimatedEndDate: row.estimated_end_date, actualStartDate: row.actual_start_date, actualEndDate: row.actual_end_date, approvalStatus: row.approval_status || 'approved', pendingPayload: parsePendingPayload(row.pending_payload), services: row.services || [] });
+const mapRow = (row) => ({ id: row.id, clientId: row.client_id, clientName: row.client_name, accountManager: row.account_manager, region: row.region, industry: row.industry, revenue: Number(row.revenue || 0), currentStatus: row.current_status, remarks: row.remarks, createdAt: row.created_at?.toISOString?.().slice(0,10) || row.created_at, updatedAt: row.updated_at?.toISOString?.().slice(0,10) || row.updated_at, plannedOnboardDate: row.planned_onboard_date, actualOnboardDate: row.actual_onboard_date, plannedOffboardDate: row.planned_offboard_date, actualOffboardDate: row.actual_offboard_date, contractStartDate: row.contract_start_date, contractEndDate: row.contract_end_date, year: row.year, completion: Number(row.completion || 0), hyperscaler: row.hyperscaler, projectType: row.project_type, projectBrief: row.project_brief, projectManager: row.project_manager, isow: row.isow, projectBillingCode: row.project_billing_code, resources: [], voumetric: row.voumetric, estimatedStartDate: row.estimated_start_date, estimatedEndDate: row.estimated_end_date, actualStartDate: row.actual_start_date, actualEndDate: row.actual_end_date, approvalStatus: row.approval_status || 'approved', pendingCreate: Boolean(row.pending_create), pendingPayload: parsePendingPayload(row.pending_payload), services: row.services || [] });
 async function mapDbClients(pool, rows) {
   const clients = rows.map(mapRow);
   if (!clients.length) return clients;
@@ -118,11 +160,22 @@ router.post('/', protectRoute, async (req, res, next) => {
     if (metricError) return res.status(400).json({ message: metricError });
     const isAdmin = req.user?.roles?.includes('Admin');
     const pool = getPool();
-    if (!pool) { if (appState.clients.some((client) => client.clientId === body.clientId)) return res.status(409).json({ message: 'Client ID already exists.' }); const client = { id: Date.now(), clientId: body.clientId, clientName: body.clientName, accountManager: body.accountManager, region: body.region || 'North America', industry: body.industry || 'Technology', revenue: Number(body.revenue || 0), currentStatus: body.currentStatus || 'Pending Onboarding', services: body.services || [], createdAt: new Date().toISOString().slice(0,10), updatedAt: new Date().toISOString().slice(0,10), plannedOnboardDate: body.plannedOnboardDate || null, actualOnboardDate: body.actualOnboardDate || null, plannedOffboardDate: body.plannedOffboardDate || null, actualOffboardDate: body.actualOffboardDate || null, contractStartDate: body.contractStartDate || null, contractEndDate: body.contractEndDate || null, projectBillingCode: body.projectBillingCode || null, resources: body.resources || [], voumetric: body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric), remarks: body.remarks || '' }; appState.clients.unshift(client); createAuditEntry(req.user.email,'Client Created','—',client.clientName); return res.status(201).json({ client: publicClient(client) }); }
+    if (!pool) {
+      if (appState.clients.some((client) => client.clientId === body.clientId)) return res.status(409).json({ message: 'Client ID already exists.' });
+      const requester = isAdmin ? null : getSubmittedBy(req.user);
+      const client = { id: Date.now(), clientId: body.clientId, clientName: body.clientName, accountManager: body.accountManager, region: body.region || 'North America', industry: body.industry || 'Technology', revenue: Number(body.revenue || 0), currentStatus: body.currentStatus || 'Pending Onboarding', services: body.services || [], createdAt: new Date().toISOString().slice(0,10), updatedAt: new Date().toISOString().slice(0,10), plannedOnboardDate: body.plannedOnboardDate || null, actualOnboardDate: body.actualOnboardDate || null, plannedOffboardDate: body.plannedOffboardDate || null, actualOffboardDate: body.actualOffboardDate || null, contractStartDate: body.contractStartDate || null, contractEndDate: body.contractEndDate || null, projectBillingCode: body.projectBillingCode || null, resources: body.resources || [], voumetric: body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric), remarks: body.remarks || '', approvalStatus: isAdmin ? 'approved' : 'pending', pendingPayload: requester ? { ...body, ...requester } : null, pendingCreate: !isAdmin };
+      appState.clients.unshift(client);
+      if (requester) await notifyAdminsOfRequest(client.clientId, client.clientName, requester);
+      createAuditEntry(req.user.email, isAdmin ? 'Client Created' : 'Client Submitted for Approval', '—', client.clientName);
+      return res.status(isAdmin ? 201 : 202).json({ pending: !isAdmin, client: publicClient(client) });
+    }
     const pendingPayload = isAdmin ? null : JSON.stringify({ ...body, ...getSubmittedBy(req.user) });
     const result = await pool.query(`INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_type,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date,approval_status,pending_payload,pending_create,project_billing_code,resources,fte,voumetric) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NULL,NULL,$30) RETURNING id`, [body.clientId,body.clientName,body.accountManager,body.region || 'North America',body.industry || 'Technology',Number(body.revenue || 0),body.currentStatus || 'Onboarded',body.remarks || '',body.plannedOnboardDate || null,body.actualOnboardDate || null,body.plannedOffboardDate || null,body.actualOffboardDate || null,body.contractStartDate || null,body.contractEndDate || null,body.year || new Date().getFullYear(),Number(body.completion || 0),body.hyperscaler || null,body.projectType || null,body.projectBrief || null,body.projectManager || body.accountManager || null,body.isow || null,body.estimatedStartDate || body.plannedOnboardDate || null,body.estimatedEndDate || body.plannedOffboardDate || null,body.actualStartDate || body.actualOnboardDate || null,body.actualEndDate || body.actualOffboardDate || null,isAdmin ? 'approved' : 'pending',pendingPayload,!isAdmin,body.projectBillingCode || null,body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric)]);
     await saveProjectResources(pool, result.rows[0].id, body.resources || []);
-    await saveServices(pool, result.rows[0].id, body.services); createAuditEntry(req.user.email, isAdmin ? 'Client Created' : 'Client Submitted for Approval', '—', body.clientName); return res.status(isAdmin ? 201 : 202).json({ pending: !isAdmin, client: publicClient(await findDbClient(body.clientId)) });
+    await saveServices(pool, result.rows[0].id, body.services);
+    if (!isAdmin) await notifyAdminsOfRequest(body.clientId, body.clientName, getSubmittedBy(req.user));
+    createAuditEntry(req.user.email, isAdmin ? 'Client Created' : 'Client Submitted for Approval', '—', body.clientName);
+    return res.status(isAdmin ? 201 : 202).json({ pending: !isAdmin, client: publicClient(await findDbClient(body.clientId)) });
   } catch (error) { return error.code === '23505' ? res.status(409).json({ message: 'Client ID already exists.' }) : next(error); }
 });
 
@@ -181,6 +234,7 @@ router.put('/:clientId', protectRoute, async (req, res, next) => {
         pendingPayload,
         pendingCreate: false,
       };
+      await notifyAdminsOfRequest(req.params.clientId, existingClient.clientName, getSubmittedBy(req.user));
       createAuditEntry(req.user.email, 'Client Change Submitted for Approval', '—', req.params.clientId);
       return res.status(202).json({ pending: true, client: publicClient(appState.clients[index]) });
     }
@@ -191,6 +245,7 @@ router.put('/:clientId', protectRoute, async (req, res, next) => {
         `UPDATE clients SET pending_payload=$1, pending_create=0, approval_status='pending', updated_at=CURRENT_TIMESTAMP WHERE client_id=$2`,
         [pendingPayload, req.params.clientId],
       );
+      await notifyAdminsOfRequest(req.params.clientId, existingClient.clientName, getSubmittedBy(req.user));
       createAuditEntry(req.user.email, 'Client Change Submitted for Approval', '—', req.params.clientId);
       return res.status(202).json({ pending: true, client: publicClient(existingClient) });
     }
@@ -324,6 +379,7 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
         pendingCreate: false,
       };
       appState.clients[index] = approvedClient;
+      await notifySubmitterOfDecision(payload, req.params.clientId, 'approve', req.user);
       createAuditEntry(req.user.email, 'Client Change Approved', 'pending', req.params.clientId);
       return res.json({ client: publicClient(approvedClient) });
     }
@@ -340,7 +396,6 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
     const payload = parsePendingPayload(record.pending_payload) || {};
     const metricError = validateProjectMetrics(payload);
     if (metricError) return res.status(400).json({ message: metricError });
-    const decisionUser = payload.submittedBy || payload.submittedByEmail || payload.email || null;
     const result = await pool.query(
       `UPDATE clients SET client_name=COALESCE($1,client_name),account_manager=COALESCE($2,account_manager),region=COALESCE($3,region),industry=COALESCE($4,industry),revenue=COALESCE($5,revenue),current_status=COALESCE($6,current_status),remarks=COALESCE($7,remarks),planned_onboard_date=$8,actual_onboard_date=$9,planned_offboard_date=$10,actual_offboard_date=$11,contract_start_date=$12,contract_end_date=$13,year=$14,completion=$15,hyperscaler=$16,project_type=$17,project_brief=$18,project_manager=$19,isow=$20,estimated_start_date=$21,estimated_end_date=$22,actual_start_date=$23,actual_end_date=$24,project_billing_code=$25,voumetric=$26,pending_payload=NULL,approval_status='approved',updated_at=CURRENT_TIMESTAMP WHERE id=$27 RETURNING id`,
       [payload.clientName,payload.accountManager,payload.region,payload.industry,payload.revenue === undefined ? null : Number(payload.revenue),payload.currentStatus,payload.remarks,payload.plannedOnboardDate || null,payload.actualOnboardDate || null,payload.plannedOffboardDate || null,payload.actualOffboardDate || null,payload.contractStartDate || null,payload.contractEndDate || null,payload.year || new Date().getFullYear(),payload.completion === undefined ? 0 : Number(payload.completion),payload.hyperscaler || null,payload.projectType || null,payload.projectBrief || null,payload.projectManager || payload.accountManager || null,payload.isow || null,payload.estimatedStartDate || null,payload.estimatedEndDate || null,payload.actualStartDate || null,payload.actualEndDate || null,payload.projectBillingCode || null,payload.voumetric === null || payload.voumetric === undefined ? null : Number(payload.voumetric),record.id],
@@ -349,7 +404,7 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
       await saveProjectResources(pool, record.id, payload.resources);
     }
     if (Array.isArray(payload.services)) await saveServices(pool, record.id, payload.services);
-    if (decisionUser) createNotification(decisionUser, 'approval', 'Project update approved', `Your project change for ${req.params.clientId} was approved by ${req.user?.firstName || 'the approval team'}.`, { projectId: req.params.clientId, action: 'approve', clientId: req.params.clientId });
+    await notifySubmitterOfDecision(payload, req.params.clientId, 'approve', req.user);
     createAuditEntry(req.user.email, 'Client Change Approved', 'pending', req.params.clientId);
     return res.json({ client: publicClient(await findDbClient(req.params.clientId)) });
   } catch (error) { return next(error); }
@@ -377,6 +432,7 @@ router.post('/:clientId/reject', protectRoute, async (req, res, next) => {
         pendingCreate: false,
         updatedAt: new Date().toISOString().slice(0, 10),
       };
+      await notifySubmitterOfDecision(client.pendingPayload, req.params.clientId, 'reject', req.user);
       createAuditEntry(req.user.email, 'Client Change Rejected', 'pending', req.params.clientId);
       return res.json({ rejected: true });
     }
@@ -390,13 +446,13 @@ router.post('/:clientId/reject', protectRoute, async (req, res, next) => {
       return res.status(403).json({ message: 'You are not authorized to reject this project change.' });
     }
 
-    const decisionUser = pendingRecord?.pending_payload ? parsePendingPayload(pendingRecord.pending_payload)?.submittedBy || parsePendingPayload(pendingRecord.pending_payload)?.submittedByEmail || null : null;
+    const pendingPayload = parsePendingPayload(pendingRecord?.pending_payload);
     const result = await getPool().query(`DELETE FROM clients WHERE client_id=$1 AND approval_status='pending' AND pending_create=1 RETURNING client_id`, [req.params.clientId]);
     if (!result.rows[0]) {
       const update = await getPool().query(`UPDATE clients SET pending_payload=NULL,approval_status='approved',updated_at=CURRENT_TIMESTAMP WHERE client_id=$1 AND approval_status='pending' RETURNING client_id`, [req.params.clientId]);
       if (!update.rows[0]) return res.status(404).json({ message: 'Pending client change not found.' });
     }
-    if (decisionUser) createNotification(decisionUser, 'approval', 'Project update rejected', `Your project change for ${req.params.clientId} was rejected by ${req.user?.firstName || 'the approval team'}.`, { projectId: req.params.clientId, action: 'reject', clientId: req.params.clientId });
+    await notifySubmitterOfDecision(pendingPayload, req.params.clientId, 'reject', req.user);
     createAuditEntry(req.user.email, 'Client Change Rejected', 'pending', req.params.clientId);
     return res.json({ rejected: true });
   } catch (error) { return next(error); }

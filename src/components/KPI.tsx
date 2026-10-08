@@ -47,9 +47,9 @@ export function KPICard({ title, value, change, trend, lastUpdated, accent, icon
             <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{value}</p>
           </div>
         </div>
-        <span title={`Info for ${title}`} aria-hidden="true" className="rounded-full p-1 text-slate-400">
+        <button type="button" className="rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700" aria-label={`Info for ${title}`}>
           <Info className="h-4 w-4" />
-        </span>
+        </button>
       </div>
 
       {subtitle && <p className="mt-2 text-[11px] text-slate-500">{subtitle}</p>}
