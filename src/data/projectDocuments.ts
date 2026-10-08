@@ -5,35 +5,32 @@ export type MandatoryDocument = {
   templateContent: string;
 };
 
-export const MANDATORY_DOCUMENTS: MandatoryDocument[] = [
-  {
-    id: "project-charter",
-    name: "Project Charter",
-    templateName: "project-charter-template.txt",
-    templateContent: "Project Charter\n\nProject name:\nClient:\nObjectives:\nScope:\nKey stakeholders:\nMilestones:\nRisks and assumptions:\nApprovals:\n",
-  },
-  {
-    id: "statement-of-work",
-    name: "Statement of Work",
-    templateName: "statement-of-work-template.txt",
-    templateContent: "Statement of Work\n\nClient:\nServices included:\nDeliverables:\nTimeline:\nResponsibilities:\nAcceptance criteria:\nCommercial notes:\n",
-  },
-  {
-    id: "solution-architecture",
-    name: "Solution Architecture",
-    templateName: "solution-architecture-template.txt",
-    templateContent: "Solution Architecture\n\nClient:\nCurrent environment:\nTarget architecture:\nIntegrations:\nSecurity considerations:\nOperational considerations:\nArchitecture owner:\n",
-  },
-  {
-    id: "security-compliance",
-    name: "Security and Compliance Review",
-    templateName: "security-compliance-template.txt",
-    templateContent: "Security and Compliance Review\n\nClient:\nData classification:\nAccess controls:\nCompliance requirements:\nOpen findings:\nReviewer:\nReview date:\n",
-  },
-  {
-    id: "handover-closure",
-    name: "Handover and Closure",
-    templateName: "handover-closure-template.txt",
-    templateContent: "Handover and Closure\n\nClient:\nHandover date:\nServices handed over:\nOutstanding actions:\nSupport contacts:\nClosure approval:\n",
-  },
-];
+const createTemplate = (name: string) =>
+  `${name}\n\nProject:\nClient:\nOwner:\nDate:\n\nDetails:\n\nReview / approval:\n`;
+
+const mandatoryDocuments = [
+  ["project-intake-form", "Project Intake Form"],
+  ["kick-off", "Kick Off"],
+  ["isow", "ISOW"],
+  ["sow", "SOW"],
+  ["inventory", "Inventory"],
+  ["gap-analysis", "Gap Analysis"],
+  ["raid-log", "RAID LOG"],
+  ["raci", "RACI"],
+  ["project-plan", "Project Plan"],
+  ["solution-review-sign-off", "Solution review / sign off"],
+  ["design-documents-hld-lld", "Design Documents - HLD/LLD"],
+  ["project-reports", "Project Reports"],
+  ["test-reports-evidences", "Test reports / Evidences"],
+  ["project-sign-off", "Project Sign off"],
+  ["atr", "ATR"],
+  ["offboarding-project-team", "Offboarding the project team"],
+] as const;
+
+export const MANDATORY_DOCUMENTS: MandatoryDocument[] =
+  mandatoryDocuments.map(([id, name]) => ({
+    id,
+    name,
+    templateName: `${id}-template.txt`,
+    templateContent: createTemplate(name),
+  }));

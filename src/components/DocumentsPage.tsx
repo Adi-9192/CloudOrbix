@@ -71,7 +71,7 @@ export default function DocumentsPage({ dark, clientId, onBack, readOnly = false
     {message && <div className="rounded-lg border px-3 py-2 text-xs" style={{ borderColor: border, color: muted }}>{message}</div>}
 
     <section className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
-      <div className="flex items-center justify-between gap-3 mb-2"><div><h2 className="font-semibold text-sm">Mandatory documents</h2><p className="text-xs mt-1" style={{ color: muted }}>{uploadedMandatory} of {MANDATORY_DOCUMENTS.length} uploaded</p></div><span className="text-sm font-bold" style={{ color: progress === 100 ? "#16A34A" : "#1E40AF" }}>{progress}%</span></div>
+      <div className="flex items-center justify-between gap-3 mb-2"><div><h2 className="font-semibold text-sm">Mandatory project documents</h2><p className="text-xs mt-1" style={{ color: muted }}>{uploadedMandatory} of {MANDATORY_DOCUMENTS.length} uploaded</p></div><span className="text-sm font-bold" style={{ color: progress === 100 ? "#16A34A" : "#1E40AF" }}>{progress}%</span></div>
       <div className="h-2 rounded-full" style={{ background: dark ? "#334155" : "#E2E8F0" }}><div className="h-2 rounded-full" style={{ width: `${progress}%`, background: progress === 100 ? "#16A34A" : "#1E40AF" }} /></div>
       <div className="mt-5 divide-y" style={{ borderColor: border }}>
         {MANDATORY_DOCUMENTS.map((item) => {

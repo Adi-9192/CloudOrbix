@@ -17,8 +17,27 @@ const canManage = (project, user) => {
 
 async function projectFor(clientId) {
   const pool = getPool();
-  const result = await pool.query(`SELECT c.*, COALESCE((SELECT AVG(t.progress) FROM project_tasks t WHERE t.client_id = c.id), c.completion, 0) project_progress FROM clients c WHERE c.client_id = $1`, [clientId]);
-  return result.rows[0] || null;
+  const result = await pool.query(`
+    SELECT c.*,
+      COALESCE((SELECT AVG(t.progress) FROM project_tasks t WHERE t.client_id = c.id), c.completion, 0) project_progress
+    FROM clients c
+    WHERE c.client_id = $1 OR c.id = TRY_CONVERT(INT, $1)
+    ORDER BY CASE WHEN c.client_id = $1 THEN 0 ELSE 1 END
+  `, [clientId]);
+  const project = result.rows[0];
+  if (!project) return null;
+
+  const resources = await pool.query(
+    'SELECT resource_name, fte FROM project_resources WHERE client_id = $1 ORDER BY id',
+    [project.id],
+  );
+  return {
+    ...project,
+    resources: resources.rows.map((resource) => ({
+      resourceName: resource.resource_name,
+      fte: resource.fte === null ? null : Number(resource.fte),
+    })),
+  };
 }
 
 async function syncCompletion(clientDbId) {
@@ -34,7 +53,7 @@ router.get('/risks', protectRoute, async (req, res, next) => {
     const pool = getPool();
     if (!pool) return res.json({ risks: [] });
     const result = await pool.query(`
-      SELECT pr.*, c.client_id, c.client_name, c.project_manager, c.account_manager
+      SELECT pr.*, c.client_id AS project_id, c.client_name, c.project_manager, c.account_manager
       FROM project_risks pr
       LEFT JOIN clients c ON c.id = pr.client_id
       ORDER BY pr.created_at DESC
@@ -42,7 +61,7 @@ router.get('/risks', protectRoute, async (req, res, next) => {
     return res.json({
       risks: result.rows.map((risk) => ({
         ...risk,
-        clientId: risk.client_id,
+        projectId: risk.project_id,
         client_name: risk.client_name || risk.customer_name || '-',
         project_manager: risk.project_manager || risk.account_manager || '-',
       })),
@@ -101,7 +120,12 @@ router.post('/:clientId/risks', protectRoute, async (req, res, next) => {
     const riskTitle = String(body.riskTitle || body.description || '').trim();
     if (!riskTitle) return res.status(400).json({ message: 'Risk description is required.' });
     const result = await getPool().query('INSERT INTO project_risks(client_id,customer_name,initiative_name,risk_title,risk_category,date_raised,raised_by,description,probability,owner,level,impact,impact_description,status,mitigation,comments_actions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *', [project.id, project.client_name, body.initiativeName || null, riskTitle, body.riskCategory || null, body.dateRaised || null, `${req.user.firstName} ${req.user.lastName}`.trim() || req.user.email, body.description || riskTitle, body.probability || 'Medium', body.owner || null, body.level || 'Medium', body.impact || 'Medium', body.impactDescription || null, body.status || 'Open', body.mitigation || null, body.commentsActions || null]);
-    return res.status(201).json({ risk: result.rows[0] });
+    return res.status(201).json({
+      risk: {
+        ...result.rows[0],
+        projectId: project.client_id,
+      },
+    });
   } catch (error) { return next(error); }
 });
 
