@@ -10,6 +10,7 @@ statusHistory: [],
 auditLogs: [],
 excelImportLogs: [],
 notifications: [],
+projectAccessRequests: [],
 };
 let pool = null;
 let notificationTableReady;

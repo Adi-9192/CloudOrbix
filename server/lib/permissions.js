@@ -18,7 +18,8 @@ export const isAssignedProjectManager = (user = {}, project = {}) => {
   ];
   return assignees.some((assignee) => identities.has(assignee));
 };
-export const canEditProject = (roles = []) =>
-  canManageProject(roles) || roles.includes('Manager');
+export const canAccessProject = (user = {}, project = {}) =>
+  canManageProject(user.roles || []) ||
+  (user.roles?.includes('Manager') && isAssignedProjectManager(user, project));
 export const canApprove = (roles = []) => roles.includes('Admin');
 export const canDelete = (roles = []) => roles.includes('Admin');

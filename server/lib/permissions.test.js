@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   canApprove,
+  canAccessProject,
   canDelete,
-  canEditProject,
   canManageProject,
   hasAnyRole,
 } from './permissions.js';
@@ -27,8 +27,26 @@ test('allows project management to administrators and operations team', () => {
   assert.equal(canManageProject(['Viewer']), false);
 });
 
-test('allows managers to submit project edits for admin approval', () => {
-  assert.equal(canEditProject(['Manager']), true);
-  assert.equal(canEditProject(['Viewer']), false);
-  assert.equal(canEditProject(['Operations Team']), true);
+test('limits manager project access to the assigned project manager', () => {
+  const project = {
+    accountManager: 'Assigned Manager',
+    projectManager: 'assigned.manager@example.com',
+  };
+  const assignedManager = {
+    firstName: 'Assigned',
+    lastName: 'Manager',
+    email: 'assigned.manager@example.com',
+    roles: ['Manager'],
+  };
+  const otherManager = {
+    firstName: 'Other',
+    lastName: 'Manager',
+    email: 'other.manager@example.com',
+    roles: ['Manager'],
+  };
+
+  assert.equal(canAccessProject(assignedManager, project), true);
+  assert.equal(canAccessProject(otherManager, project), false);
+  assert.equal(canAccessProject({ roles: ['Admin'] }, project), true);
+  assert.equal(canAccessProject({ roles: ['Operations Team'] }, project), true);
 });

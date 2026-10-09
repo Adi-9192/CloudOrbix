@@ -47,8 +47,19 @@ type ProjectReview = {
   risks?: unknown[];
 };
 
+type AccessRequest = {
+  id: number;
+  clientId: string;
+  clientName: string;
+  requesterEmail: string;
+  requesterName: string;
+  status: string;
+  createdAt: string;
+};
+
 type AdminProps = {
   dark: boolean;
+  onOpenProject?: (clientId: string) => void;
   user?: {
     id: number;
     email: string;
@@ -116,14 +127,18 @@ function TemplateLibraryList() {
   ))}</div>;
 }
 
-export default function Admin({ dark }: AdminProps) {
-  const [tab, setTab] = useState<TabKey>("users");
+export default function Admin({ dark, onOpenProject }: AdminProps) {
+  const [tab, setTab] = useState<TabKey>(() =>
+    localStorage.getItem("clmp-admin-approval-focus") ? "approvals" : "users",
+  );
   const [users, setUsers] = useState<UserRecord[]>(INITIAL_USERS);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<{ name: string; email: string; role: string; status: UserStatus; password: string }>({ name: "", email: "", role: "Account Manager", status: "active", password: "" });
   const [busy, setBusy] = useState(false);
   const [pendingClients, setPendingClients] = useState<PendingClient[]>([]);
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
+  const [focusedApproval, setFocusedApproval] = useState<{ kind: string; id: string; clientId?: string } | null>(null);
   const [reviewClientId, setReviewClientId] = useState<string | null>(null);
   const [reviewDetails, setReviewDetails] = useState<ProjectReview | null>(null);
 
@@ -180,11 +195,90 @@ export default function Admin({ dark }: AdminProps) {
       .catch(() => setPendingClients([]));
   }, [tab]);
 
+  useEffect(() => {
+    const handleApprovalFocus = (event: Event) => {
+      const focus = (event as CustomEvent<{ kind: string; id: string; clientId?: string }>).detail;
+      setFocusedApproval(focus);
+      setTab("approvals");
+    };
+    window.addEventListener("cloudorbix-focus-approval", handleApprovalFocus);
+    return () => window.removeEventListener("cloudorbix-focus-approval", handleApprovalFocus);
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "approvals") return;
+    const focusValue = localStorage.getItem("clmp-admin-approval-focus");
+    if (focusValue) {
+      try {
+        setFocusedApproval(JSON.parse(focusValue) as { kind: string; id: string; clientId?: string });
+      } catch {
+        localStorage.removeItem("clmp-admin-approval-focus");
+      }
+    }
+    const token = localStorage.getItem("clmp-token");
+    fetch("/api/clients/access-requests", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.message || "Unable to load access requests.");
+        setAccessRequests(payload.requests || []);
+      })
+      .catch((error: unknown) => {
+        showCloudOrbixAlert(
+          error instanceof Error ? error.message : "Unable to load access requests.",
+          "error",
+        );
+      });
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "approvals" || !focusedApproval) return;
+    const requestId = focusedApproval.kind === "access" && !focusedApproval.id
+      ? String(accessRequests.find((request) => request.clientId === focusedApproval.clientId)?.id || "")
+      : focusedApproval.id;
+    const elementId = focusedApproval.kind === "access"
+      ? `access-request-${requestId}`
+      : `project-approval-${focusedApproval.id}`;
+    const target = document.getElementById(elementId);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    localStorage.removeItem("clmp-admin-approval-focus");
+  }, [tab, focusedApproval, accessRequests, pendingClients]);
+
   const reviewClient = async (clientId: string, action: "approve" | "reject") => {
     const token = localStorage.getItem("clmp-token");
     const response = await fetch(`/api/clients/${clientId}/${action}`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
     if (response.ok) setPendingClients(current => current.filter(client => client.clientId !== clientId));
     else showCloudOrbixAlert(`Unable to ${action} client approval.`, "error");
+  };
+
+  const reviewAccessRequest = async (requestId: number, decision: "approve" | "reject") => {
+    const token = localStorage.getItem("clmp-token");
+    try {
+      const response = await fetch(`/api/clients/access-requests/${requestId}/decision`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ decision }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || `Unable to ${decision} access request.`);
+      setAccessRequests((current) => current.filter((request) => request.id !== requestId));
+      showCloudOrbixAlert(
+        decision === "approve"
+          ? "Project access approved and granted."
+          : "Project access request rejected.",
+        "success",
+      );
+    } catch (error) {
+      showCloudOrbixAlert(
+        error instanceof Error ? error.message : `Unable to ${decision} access request.`,
+        "error",
+      );
+    }
   };
 
   const openClientReview = async (clientId: string) => {
@@ -527,8 +621,71 @@ export default function Admin({ dark }: AdminProps) {
             <h3 className="font-semibold text-sm">Pending project approvals ({pendingClients.length})</h3>
             <p className="text-xs mt-1" style={{ color: muted }}>Review project additions, edits, and completion requests.</p>
           </div>
+          {accessRequests.length > 0 && (
+            <section aria-label="Pending project access requests">
+              <div className="px-5 py-3 border-b font-semibold text-xs" style={{ borderColor: border, background: subtle }}>
+                Project access requests ({accessRequests.length})
+              </div>
+              {accessRequests.map((request) => (
+                <div
+                  id={`access-request-${request.id}`}
+                  key={request.id}
+                  className="px-5 py-4 border-b flex items-center justify-between gap-4"
+                  style={{
+                    borderColor: border,
+                    background: focusedApproval?.kind === "access" && focusedApproval.id === String(request.id)
+                      ? dark ? "#172554" : "#EFF6FF"
+                      : undefined,
+                  }}
+                >
+                  <div>
+                    <div className="text-sm font-semibold">{request.clientName}</div>
+                    <div className="text-xs" style={{ color: muted }}>
+                      {request.clientId} · Access request · Requested by: {request.requesterName} ({request.requesterEmail})
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        localStorage.removeItem("clmp-admin-approval-focus");
+                        onOpenProject?.(request.clientId);
+                      }}
+                      className="px-3 py-2 rounded-lg text-xs font-semibold border"
+                      style={{ borderColor: border, color: text }}
+                    >
+                      View project
+                    </button>
+                    <button
+                      onClick={() => void reviewAccessRequest(request.id, "reject")}
+                      className="px-3 py-2 rounded-lg text-xs font-semibold border text-red-600"
+                      style={{ borderColor: "#FECACA" }}
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => void reviewAccessRequest(request.id, "approve")}
+                      className="px-3 py-2 rounded-lg text-xs font-semibold text-white"
+                      style={{ background: "#16A34A" }}
+                    >
+                      Grant access
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
           {pendingClients.length ? pendingClients.map(client => (
-            <div key={client.id} className="px-5 py-4 border-b flex items-center justify-between gap-4" style={{ borderColor: border }}>
+            <div
+              id={`project-approval-${client.clientId}`}
+              key={client.id}
+              className="px-5 py-4 border-b flex items-center justify-between gap-4"
+              style={{
+                borderColor: border,
+                background: focusedApproval?.kind === "project" && focusedApproval.id === client.clientId
+                  ? dark ? "#172554" : "#EFF6FF"
+                  : undefined,
+              }}
+            >
               <div>
                 <div className="text-sm font-semibold">{client.clientName}</div>
                 <div className="text-xs" style={{ color: muted }}>{client.clientId} · {client.pendingCreate ? "New project" : "Project change"} · Requested status: {formatReviewValue(client.pendingPayload?.currentStatus || client.currentStatus)} · PM: {client.pendingPayload?.projectManager ? formatReviewValue(client.pendingPayload.projectManager) : client.projectManager || "Unassigned"}</div>
@@ -544,7 +701,7 @@ export default function Admin({ dark }: AdminProps) {
                 <button onClick={() => void reviewClient(client.clientId, "approve")} className="px-3 py-2 rounded-lg text-xs font-semibold text-white" style={{ background: "#16A34A" }}><Check className="w-3.5 h-3.5 inline mr-1" />Approve</button>
               </div>
             </div>
-          )) : <p className="p-5 text-xs" style={{ color: muted }}>No pending approvals.</p>}
+          )) : accessRequests.length === 0 ? <p className="p-5 text-xs" style={{ color: muted }}>No pending approvals.</p> : null}
         </div>
       )}
 
@@ -565,6 +722,7 @@ export default function Admin({ dark }: AdminProps) {
                 revenue: project.revenue,
                 hyperscaler: project.hyperscaler,
                 projectType: project.project_type,
+                serviceCategory: project.service_category,
                 projectBrief: project.project_brief,
                 projectBillingCode: project.project_billing_code,
                 resources: project.resources,
@@ -581,7 +739,7 @@ export default function Admin({ dark }: AdminProps) {
               const fields = [
                 ["Project name", "clientName"], ["Account manager", "accountManager"], ["Project managers", "projectManager"],
                 ["Project status", "currentStatus"], ["Region", "region"], ["Industry", "industry"], ["Revenue", "revenue"],
-                ["Hyperscaler", "hyperscaler"], ["Project type", "projectType"], ["Project brief", "projectBrief"], ["Project Billing Code", "projectBillingCode"], ["Resources", "resources"], ["FTE", "fte"], ["Volumetric", "voumetric"], ["ISOW", "isow"],
+                ["Hyperscaler", "hyperscaler"], ["Project type", "projectType"], ["Service Category", "serviceCategory"], ["Project brief", "projectBrief"], ["Project Billing Code", "projectBillingCode"], ["Resources", "resources"], ["FTE", "fte"], ["Volumetric", "voumetric"], ["ISOW", "isow"],
                 ["Estimated start", "estimatedStartDate"], ["Estimated end", "estimatedEndDate"], ["Actual start", "actualStartDate"], ["Actual end", "actualEndDate"],
                 ["Completion", "completion"], ["Remarks", "remarks"],
               ] as const;

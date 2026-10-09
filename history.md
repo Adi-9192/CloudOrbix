@@ -1,5 +1,44 @@
 # Project History
 
+## 2026-10-09
+
+### Restrict Excel Import navigation
+- Hid the Excel Import navigation item from non-admin users.
+- Direct visits to `#excel` from non-admin sessions now open Projects rather than redirecting to Dashboard; Admin import access is unchanged.
+
+### Required Project Manager selection
+- Made the Project Manager dropdown mandatory in the Add/Edit Project form and added explicit validation before submit.
+- Removed visible placeholder prompts from project form dropdowns while preserving their blank, unselected values.
+- The project creation API now also rejects requests without a Project Manager.
+
+### Project Service Category
+- Added a Service Category dropdown to the Add/Edit Project form with Architecture, Design & Build; Lifecycle Management; and Operations Enablement categories and their listed service areas.
+- Persisted the selected category for direct project saves and Manager-submitted approval changes using the new `service_category` database column.
+- Added migration `server/migrations/008_project_service_category.sql` and exposed the requested value in Admin's project approval comparison.
+
+### Manager project ownership and access requests
+- Updated the project-manager selector to list active users across roles and show each user's role beside their name.
+- Manager-created projects continue through Admin approval, and the creating Manager now receives clear confirmation that the request was sent.
+- Restricted Manager project viewing and editing to projects assigned to them; Admin and Operations Team access remains unrestricted.
+- Added an explicit access-request prompt for unassigned Managers and sends accepted requests as notifications to all active Admins.
+- Applied the same assignment-based authorization to project details, tasks, updates, risks, exports, and document uploads on the API.
+- Persisted access requests as Admin approval records; Admins can grant or reject access, with approved requests adding the requester to the project's assigned managers and notifying them of the decision.
+- Linked approval notifications to the matching Admin approval record or project, and added migration `server/migrations/007_project_access_requests.sql` to recover prior access-request notifications into the approval queue.
+- The API also creates the access-request table and recovers older notification-only requests on first use, so the approval flow does not depend on deployment timing.
+
+## 2026-10-10
+
+### Dark-mode date controls and access-request decisions
+- Set native date inputs to use the active light/dark color scheme across project, profile-task, and report forms, so the calendar control is visible in dark mode.
+- Made the access-request decision UPDATE return its changed row with `OUTPUT INSERTED.id`, allowing the API to recognize a successful decision and the Admin UI to remove that request without a refresh.
+
+### Project ID format
+- Replaced newly generated `CLT-###` project IDs with `PS` + month abbreviation + two-digit year + three-digit sequence (for example, `PSDEC26001`).
+- New projects display an automatically generated, read-only ID based on the current month and year.
+- Excel imports generate IDs from each row's month/year information, preferring the estimated start date, then actual start/end dates or explicit Month/Project Month fields. Legacy IDs on matched projects are updated; already canonical PS IDs and explicit canonical workbook IDs remain stable.
+- Rows that need a generated ID but contain no usable month/date are reported as failed rather than silently assigned the current month. Sequence numbers are tracked independently per month/year.
+- Updated project selection from risk records to recognize the new ID format and added generator tests.
+
 ## 2026-10-07
 
 ### Status list update
