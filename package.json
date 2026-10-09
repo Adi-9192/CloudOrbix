@@ -15,7 +15,7 @@
     "migrate": "node server/migrate.js",
     "bootstrap-admin": "node server/bootstrap-admin.js",
     "build": "vite build",
-    "test": "node --test server/lib/*.test.js",
+    "test": "node --test server/lib/*.test.js shared/*.test.js",
     "preview": "vite preview",
     "format": "oxfmt"
   },

@@ -137,10 +137,10 @@ export default function App() {
       case "repository": return <ProjectRepository dark={dark} onOpenProject={(id) => openProject(id, "documents")} />;
       case "projectframework": return <ProjectFramework dark={dark} />;
       case "servicecatalogue": return <ServiceCatalogue dark={dark} />;
-      case "excel":       return user.roles.includes("Admin") ? <ExcelImport dark={dark} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
+      case "excel":       return user.roles.includes("Admin") ? <ExcelImport dark={dark} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
       case "reports":     return <Reports dark={dark} />;
       case "audit":       return user.roles.includes("Admin") ? <AuditLogs dark={dark} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
-      case "admin":       return user.roles.includes("Admin") ? <Admin dark={dark} user={user} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
+      case "admin":       return user.roles.includes("Admin") ? <Admin dark={dark} user={user} onOpenProject={(id) => openProject(id)} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
       case "rfp":         return user.roles.includes("Admin") ? <RfpEstimation dark={dark} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
       case "profile":     return <ProfilePage dark={dark} user={user} onOpenProject={(id) => openProject(id)} />;
       case "risks":       return <RiskRegisterPage dark={dark} user={user} onOpenProject={(id) => openProject(id, "project")} />;
@@ -158,6 +158,7 @@ export default function App() {
       user={user}
       onToggleDark={() => setDark(d => !d)}
       onSearch={handleGlobalSearch}
+      onOpenProject={(id) => openProject(id)}
     >
       <Suspense fallback={<LoadingScreen />}>{renderPage()}</Suspense>
     </Shell>

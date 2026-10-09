@@ -100,11 +100,11 @@ export default function Reports({ dark }: ReportsProps) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-[10px] font-semibold mb-1" style={{ color: muted }}>DATE FROM</label>
-                  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={{ background: bg, borderColor: border, color: text }} />
+                  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={{ background: bg, borderColor: border, color: text, colorScheme: dark ? "dark" : "light" }} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-semibold mb-1" style={{ color: muted }}>DATE TO</label>
-                  <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={{ background: bg, borderColor: border, color: text }} />
+                  <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={{ background: bg, borderColor: border, color: text, colorScheme: dark ? "dark" : "light" }} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-semibold mb-1" style={{ color: muted }}>FORMAT</label>

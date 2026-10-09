@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Users, UserCheck, Clock, UserMinus, Cloud, TrendingUp, DollarSign, BarChart2, RefreshCw, ArrowUpRight, ArrowDownRight,
+  Users, UserCheck, Clock, UserMinus, RefreshCw,
   CalendarDays, AlertCircle, FolderKanban, CheckCircle2, AlertTriangle, ShieldAlert
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
-import { KPICard, KPIRadialCard, KPISparklineCard } from "./KPI";
+import { KPICard } from "./KPI";
 
 interface DashboardProps { dark: boolean; onNavigate: (p: string) => void; user?: { roles: string[] }; }
 
@@ -39,6 +39,8 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
   const [regionSeries, setRegionSeries] = useState<any[]>([]);
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
   const [upcoming, setUpcoming] = useState<any[]>([]);
+  const [dashboardError, setDashboardError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const periods = ["Weekly", "Monthly", "Quarterly", "Yearly"];
 
   const loadDashboard = () => {
@@ -48,25 +50,44 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
     fetch(`/api/dashboard?period=${encodeURIComponent(chartPeriod)}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((response) => response.ok ? response.json() : null)
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.message || "Unable to load dashboard data.");
+        return payload;
+      })
       .then((payload) => {
-        if (!payload) return;
-        setSummary((current) => ({ ...current, ...payload.summary }));
+        setDashboardError("");
+        setLastUpdated(new Date());
+        setSummary(payload.summary);
         setChartData((payload.onboardingTrend?.length ? payload.onboardingTrend : [{ month: "No data", onboarded: 0, offboarded: 0 }]).map((item: any) => ({ ...item, offboarded: item.offboarded || 0 })));
         setRevenueSeries(payload.revenueTrend?.length ? payload.revenueTrend : [{ month: "No data", revenue: 0 }]);
         setServiceSeries(payload.serviceAdoption || []);
         setRegionSeries(payload.regionData?.length ? payload.regionData : [{ region: "No data", clients: 0, revenue: 0, color: "#CBD5E1" }]);
         setUpcoming(payload.upcomingActivities || []);
       })
-      .catch(() => {
-        setChartData([{ month: chartPeriod, onboarded: summary.totalClients, offboarded: 0 }]);
-        setRevenueSeries([{ month: chartPeriod, revenue: summary.totalRevenue / 1000000 }]);
-        setRegionSeries([{ region: "Current clients", clients: summary.totalClients, revenue: summary.totalRevenue / 1000000, color: "#1E40AF" }]);
+      .catch((error) => {
+        setDashboardError(error instanceof Error ? error.message : "Unable to load dashboard data.");
       });
     if (user?.roles.includes("Admin")) fetch('/api/audit', { headers: { Authorization: `Bearer ${token}` } }).then((response) => response.ok ? response.json() : null).then((payload) => setActivityFeed((payload?.logs || []).slice(0, 5).map((entry: any) => ({ action: entry.action, user: entry.user, time: entry.timestamp, type: entry.type?.toLowerCase() || 'update' })))).catch(() => undefined);
   };
 
-  useEffect(() => { loadDashboard(); }, [chartPeriod, user]);
+  useEffect(() => {
+    loadDashboard();
+    const refresh = () => loadDashboard();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("cloudorbix-projects-updated", refresh);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const refreshInterval = window.setInterval(refresh, 30_000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("cloudorbix-projects-updated", refresh);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.clearInterval(refreshInterval);
+    };
+  }, [chartPeriod, user]);
 
   /* Legacy KPI definitions retained temporarily for reference while the dashboard uses live KPIs.
   const legacyKpiCards = useMemo(() => [
@@ -185,9 +206,9 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
     { title: "Average Revenue Per Project", value: `$${summary.averageRevenue.toLocaleString()}`, subtitle: "Approved projects only", accent: "#0F766E", icon: Users },
     { title: "Active Projects", value: String(summary.activeProjects), subtitle: "Approved projects", accent: "#1E40AF", icon: FolderKanban },
     { title: "Completed Projects", value: String(summary.completedProjects), subtitle: "Completed status or 100%", accent: "#16A34A", icon: CheckCircle2 },
-    { title: "Delayed Projects", value: String(summary.delayedProjects), subtitle: "Delayed, blocked, or past due", accent: "#DC2626", icon: AlertTriangle },
-    { title: "Open Risks", value: String(summary.openRisks), subtitle: "Open project risks", accent: "#D97706", icon: AlertTriangle, action: () => onNavigate("risks") },
-    { title: "High Risks", value: String(summary.highRisks), subtitle: "Open high-level risks", accent: "#DC2626", icon: ShieldAlert },
+    { title: "Delayed Projects", value: String(summary.delayedProjects), subtitle: "Projects with Delayed status", accent: "#DC2626", icon: AlertTriangle },
+    { title: "Active Risks", value: String(summary.openRisks), subtitle: "Risks not completed or cancelled", accent: "#D97706", icon: AlertTriangle, action: () => onNavigate("risks") },
+    { title: "High Risks", value: String(summary.highRisks), subtitle: "Active risks with High level", accent: "#DC2626", icon: ShieldAlert },
     { title: "Average Project Completion %", value: `${summary.averageCompletion.toFixed(1)}%`, subtitle: "Average across approved projects", accent: "#2563EB", icon: CheckCircle2 },
   ], [summary, onNavigate]);
 
@@ -202,7 +223,9 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold">Executive Dashboard</h1>
-          <p className="text-xs mt-0.5" style={{ color: muted }}>Last updated: Aug 13, 2025 · 14:45 UTC</p>
+          <p className="text-xs mt-0.5" style={{ color: muted }}>
+            {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString()}` : "Loading dashboard…"}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: border }}>
@@ -222,6 +245,11 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
           </button>
         </div>
       </div>
+      {dashboardError && (
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+          {dashboardError} Dashboard values may be outdated. Use Refresh to try again.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {kpiCards.map((card) => {
@@ -248,7 +276,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold text-sm">Onboarding vs Offboarding Trend</h3>
-              <p className="text-xs mt-0.5" style={{ color: muted }}>Monthly, FY 2025</p>
+              <p className="text-xs mt-0.5" style={{ color: muted }}>{chartPeriod} project counts</p>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={220} minWidth={0}>
@@ -267,11 +295,8 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold text-sm">Revenue Trend</h3>
-              <p className="text-xs mt-0.5" style={{ color: muted }}>Monthly revenue in $M, FY 2025</p>
+              <p className="text-xs mt-0.5" style={{ color: muted }}>{chartPeriod} revenue in $M</p>
             </div>
-            <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
-              <ArrowUpRight className="w-3 h-3" /> +17.3% YoY
-            </span>
           </div>
           <ResponsiveContainer width="100%" height={220} minWidth={0}>
             <AreaChart data={revenueSeries} margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>

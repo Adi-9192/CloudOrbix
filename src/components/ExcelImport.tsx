@@ -17,6 +17,48 @@ interface ExcelImportProps {
   dark: boolean;
 }
 
+interface ImportPreviewRow {
+  clientId: string;
+  year: number;
+  clientName: string;
+  manager: string;
+  projectBillingCode: string | null;
+  voumetric: number | null;
+  region: string;
+  currentStatus: string;
+  revenue: number;
+  completion: number;
+  hyperscaler: string;
+  projectType: string;
+  projectBrief: string;
+  isow: string;
+  estimatedStart: string | null;
+  estimatedEnd: string | null;
+  actualStart: string | null;
+  actualEnd: string | null;
+}
+
+const previewColumns: { key: keyof ImportPreviewRow; label: string }[] = [
+  { key: "clientId", label: "Project ID" },
+  { key: "year", label: "Year" },
+  { key: "clientName", label: "Project Name" },
+  { key: "manager", label: "Manager" },
+  { key: "projectBillingCode", label: "Project Billing Code" },
+  { key: "voumetric", label: "Volumetric" },
+  { key: "region", label: "Region" },
+  { key: "currentStatus", label: "Status" },
+  { key: "revenue", label: "Revenue" },
+  { key: "completion", label: "Completion" },
+  { key: "hyperscaler", label: "Hyperscaler" },
+  { key: "projectType", label: "Project Type" },
+  { key: "projectBrief", label: "Project Brief" },
+  { key: "isow", label: "ISOW" },
+  { key: "estimatedStart", label: "Planned Start Date" },
+  { key: "estimatedEnd", label: "Planned End Date" },
+  { key: "actualStart", label: "Actual Start Date" },
+  { key: "actualEnd", label: "Actual End Date" },
+];
+
 const TEMPLATES = [
   {
     name: "New Project Import",
@@ -50,15 +92,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
   const [fileName, setFileName] = useState("");
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [previewRows, setPreviewRows] = useState<
-    {
-      clientId: string;
-      clientName: string;
-      manager: string;
-      completion: number;
-      currentStatus: string;
-    }[]
-  >([]);
+  const [previewRows, setPreviewRows] = useState<ImportPreviewRow[]>([]);
   const [summary, setSummary] = useState({
     totalProcessed: 0,
     imported: 0,
@@ -66,6 +100,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
     duplicates: 0,
     failed: 0,
   });
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -74,6 +109,34 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
   const text = dark ? "#E2E8F0" : "#0F172A";
   const muted = dark ? "#94A3B8" : "#64748B";
   const subtle = dark ? "#0F172A" : "#F8FAFC";
+
+  const downloadProjectTemplate = async () => {
+    try {
+      const response = await fetch("/api/excel/template", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("clmp-token")}`,
+        },
+      });
+      if (!response.ok) {
+        const payload = await response.json();
+        throw new Error(payload.message || "Unable to download the template.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "cloudorbix-project-template.xlsx";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      showCloudOrbixAlert(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Unable to download the template.",
+        "error",
+      );
+    }
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -90,6 +153,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
   const uploadFile = async (file: File) => {
     setFileName(file.name);
     setError("");
+    setImportWarnings([]);
     setUploading(true);
     setProgress(0);
     const body = new FormData();
@@ -104,9 +168,15 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
         body,
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.message || "Import failed.");
+      if (!response.ok) {
+        const details = Array.isArray(payload.errors)
+          ? `\n${payload.errors.join("\n")}`
+          : "";
+        throw new Error(`${payload.message || "Import failed."}${details}`);
+      }
       setSummary(payload.summary);
       setPreviewRows(payload.records || []);
+      setImportWarnings(payload.warnings || []);
       setProgress(100);
       setStage("preview");
     } catch (uploadError) {
@@ -328,6 +398,20 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                 ))}
               </div>
 
+              {importWarnings.length > 0 && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                  <p className="font-semibold">Import notes</p>
+                  <p className="mt-1">
+                    Unreadable dates are left blank on new projects. When updating a matched project, its stored dates are preserved.
+                  </p>
+                  <ul className="mt-1 list-inside list-disc">
+                    {importWarnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* Preview table */}
               <div
                 className="rounded-xl border overflow-hidden"
@@ -345,7 +429,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                       Import Preview
                     </h3>
                     <p className="text-xs mt-0.5" style={{ color: muted }}>
-                      📊 {fileName} · 5 records
+                      📊 {fileName} · {previewRows.length} records
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -369,20 +453,13 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full min-w-[1900px]">
                     <thead>
                       <tr
                         className="border-b"
                         style={{ borderColor: border, background: subtle }}
                       >
-                        {[
-                          "Project ID",
-                          "Name",
-                          "Manager",
-                          "Region",
-                          "Industry",
-                          "Validation",
-                        ].map((h) => (
+                        {[...previewColumns.map((column) => column.label), "Actions"].map((h) => (
                           <th
                             key={h}
                             className="px-4 py-2.5 text-left text-xs font-semibold"
@@ -400,37 +477,29 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                           className="border-b"
                           style={{ borderColor: border }}
                         >
-                          <td
-                            className="px-4 py-2.5 font-mono text-xs"
-                            style={{ color: muted }}
-                          >
-                            {r.clientId}
+                          {previewColumns.map((column) => {
+                            const value = r[column.key];
+                            const display =
+                              column.key === "revenue"
+                                ? value
+                                  ? `$${Number(value).toLocaleString()}`
+                                  : "-"
+                                : column.key === "completion"
+                                  ? `${value || 0}%`
+                                  : String(value ?? "-");
+                            return (
+                              <td
+                                key={column.key}
+                                className="px-4 py-2.5 text-xs whitespace-nowrap"
+                                style={{ color: text }}
+                              >
+                                {display}
+                              </td>
+                            );
+                          })}
+                          <td className="px-4 py-2.5 text-xs whitespace-nowrap">
+                            ✅ Saved
                           </td>
-                          <td
-                            className="px-4 py-2.5 text-xs font-medium"
-                            style={{ color: text }}
-                          >
-                            {r.clientName}
-                          </td>
-                          <td
-                            className="px-4 py-2.5 text-xs"
-                            style={{ color: text }}
-                          >
-                            {r.manager}
-                          </td>
-                          <td
-                            className="px-4 py-2.5 text-xs"
-                            style={{ color: text }}
-                          >
-                            {r.completion}%
-                          </td>
-                          <td
-                            className="px-4 py-2.5 text-xs"
-                            style={{ color: muted }}
-                          >
-                            {r.currentStatus}
-                          </td>
-                          <td className="px-4 py-2.5 text-xs">✅ Saved</td>
                         </tr>
                       ))}
                     </tbody>
@@ -521,6 +590,11 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
               {TEMPLATES.map((t) => (
                 <button
                   key={t.name}
+                  onClick={
+                    t.name === "New Project Import"
+                      ? () => void downloadProjectTemplate()
+                      : undefined
+                  }
                   className="w-full flex items-center gap-3 p-3 rounded-xl border text-left hover:border-blue-300 transition-colors group"
                   style={{ borderColor: border, background: subtle }}
                 >

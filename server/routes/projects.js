@@ -3,18 +3,17 @@ import multer from 'multer';
 import ExcelJS from 'exceljs';
 import { BlobServiceClient } from '@azure/storage-blob';
 import { getPool } from '../db.js';
+import { canAccessProject } from '../lib/permissions.js';
 import { protectRoute } from '../middleware/auth.js';
+import { createProjectExport } from '../lib/project-export.js';
+import { createRiskExport } from '../lib/risk-export.js';
+import {
+  isProjectStatus,
+  normalizeProjectStatus,
+} from '../lib/project-status.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-const canManage = (project, user) => {
-  const projectManagers = String(project.project_manager || project.account_manager)
-    .split(/\s*,\s*/)
-    .filter(Boolean);
-  const currentUserName = `${user.firstName} ${user.lastName}`.trim();
-  return user.roles.includes('Admin') || projectManagers.includes(currentUserName) || projectManagers.includes(user.email);
-};
-
 async function projectFor(clientId) {
   const pool = getPool();
   const result = await pool.query(`
@@ -48,6 +47,40 @@ async function syncCompletion(clientDbId) {
   return completion;
 }
 
+router.get('/risks/export', protectRoute, async (req, res, next) => {
+  try {
+    const pool = getPool();
+    if (!pool) {
+      const buffer = await createRiskExport([]);
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', 'attachment; filename="risk-register.xlsx"');
+      return res.send(Buffer.from(buffer));
+    }
+    const result = await pool.query(`
+      SELECT pr.*, c.client_id AS project_id, c.client_name, c.project_manager, c.account_manager
+      FROM project_risks pr
+      LEFT JOIN clients c ON c.id = pr.client_id
+      ORDER BY pr.created_at DESC
+    `);
+    const risks = result.rows.map((risk) => ({
+      ...risk,
+      status: normalizeProjectStatus(risk.status),
+      client_name: risk.client_name || risk.customer_name || '-',
+      project_manager: risk.project_manager || risk.account_manager || '-',
+    }));
+    const buffer = await createRiskExport(risks);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="risk-register.xlsx"');
+    return res.send(Buffer.from(buffer));
+  } catch (error) { return next(error); }
+});
+
 router.get('/risks', protectRoute, async (req, res, next) => {
   try {
     const pool = getPool();
@@ -61,6 +94,7 @@ router.get('/risks', protectRoute, async (req, res, next) => {
     return res.json({
       risks: result.rows.map((risk) => ({
         ...risk,
+        status: normalizeProjectStatus(risk.status),
         projectId: risk.project_id,
         client_name: risk.client_name || risk.customer_name || '-',
         project_manager: risk.project_manager || risk.account_manager || '-',
@@ -71,7 +105,14 @@ router.get('/risks', protectRoute, async (req, res, next) => {
 
 router.get('/repository', protectRoute, async (req, res, next) => {
   try {
-    const result = await getPool().query(`SELECT c.client_id,c.client_name,c.project_manager,c.completion,c.current_status,CAST((SELECT COUNT(*) FROM project_documents pd WHERE pd.client_id=c.id) AS int) document_count FROM clients c WHERE c.current_status='Completed' OR c.completion >= 100 ORDER BY c.updated_at DESC`);
+    const result = await getPool().query(`
+      SELECT c.client_id,c.client_name,c.project_manager,c.account_manager,c.region,
+        c.[year],c.hyperscaler,c.completion,c.current_status,c.updated_at,
+        CAST((SELECT COUNT(*) FROM project_documents pd WHERE pd.client_id=c.id) AS int) document_count
+      FROM clients c
+      WHERE COALESCE(c.approval_status,'approved')='approved'
+      ORDER BY c.updated_at DESC,c.id DESC
+    `);
     return res.json({ projects: result.rows });
   } catch (error) { return next(error); }
 });
@@ -79,9 +120,73 @@ router.get('/repository', protectRoute, async (req, res, next) => {
 router.get('/repository/:clientId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || (project.current_status !== 'Completed' && Number(project.completion || 0) < 100)) return res.status(404).json({ message: 'Completed project not found.' });
+    if (!project || project.approval_status === 'pending') return res.status(404).json({ message: 'Approved project not found.' });
     const documents = await getPool().query('SELECT id,file_name,blob_name,blob_url,content_type,document_type,uploaded_by,created_at FROM project_documents WHERE client_id=$1 ORDER BY created_at DESC', [project.id]);
     return res.json({ project, documents: documents.rows });
+  } catch (error) { return next(error); }
+});
+
+router.get('/:clientId/export', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    if (!canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+
+    const pool = getPool();
+    const [tasks, updates, risks] = await Promise.all([
+      pool.query('SELECT task_title,expected_end_date FROM project_tasks WHERE client_id=$1 ORDER BY expected_start_date NULLS LAST,id', [project.id]),
+      pool.query('SELECT update_text,created_at FROM project_updates WHERE client_id=$1 ORDER BY created_at', [project.id]),
+      pool.query('SELECT risk_title,description,date_raised,created_at FROM project_risks WHERE client_id=$1 ORDER BY created_at', [project.id]),
+    ]);
+
+    const buffer = await createProjectExport({
+      project,
+      tasks: tasks.rows,
+      updates: updates.rows,
+      risks: risks.rows,
+    });
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${project.client_id}-project-updates.xlsx"`,
+    );
+    return res.send(Buffer.from(buffer));
+  } catch (error) { return next(error); }
+});
+
+router.get('/:clientId/risks/export', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    if (!canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+
+    const result = await getPool().query(
+      `SELECT pr.*, c.client_id AS project_id, c.client_name, c.project_manager, c.account_manager
+       FROM project_risks pr
+       LEFT JOIN clients c ON c.id = pr.client_id
+       WHERE pr.client_id = $1
+       ORDER BY pr.created_at DESC`,
+      [project.id],
+    );
+    const risks = result.rows.map((risk) => ({
+      ...risk,
+      status: normalizeProjectStatus(risk.status),
+      client_name: risk.client_name || risk.customer_name || '-',
+      project_manager: risk.project_manager || risk.account_manager || '-',
+    }));
+    const buffer = await createRiskExport(risks);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${project.client_id}-risks.xlsx"`,
+    );
+    return res.send(Buffer.from(buffer));
   } catch (error) { return next(error); }
 });
 
@@ -89,7 +194,7 @@ router.get('/:clientId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
     if (!project) return res.status(404).json({ message: 'Project not found.' });
-    if (!canManage(project, req.user)) return res.status(403).json({ message: 'Only the project manager or an administrator can access this project.' });
+    if (!canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied. Only the assigned project manager or an administrator can access this project.' });
     const pool = getPool();
     const [tasks, documents, updates, risks] = await Promise.all([
       pool.query('SELECT * FROM project_tasks WHERE client_id = $1 ORDER BY expected_start_date NULLS LAST, id', [project.id]),
@@ -97,14 +202,23 @@ router.get('/:clientId', protectRoute, async (req, res, next) => {
       pool.query('SELECT id,update_text,updated_by,created_at FROM project_updates WHERE client_id = $1 ORDER BY created_at DESC', [project.id]),
       pool.query('SELECT * FROM project_risks WHERE client_id = $1 ORDER BY created_at DESC', [project.id]),
     ]);
-    return res.json({ project, tasks: tasks.rows, documents: documents.rows, updates: updates.rows, risks: risks.rows });
+    return res.json({
+      project,
+      tasks: tasks.rows,
+      documents: documents.rows,
+      updates: updates.rows,
+      risks: risks.rows.map((risk) => ({
+        ...risk,
+        status: normalizeProjectStatus(risk.status),
+      })),
+    });
   } catch (error) { return next(error); }
 });
 
 router.post('/:clientId/updates', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canManage(project, req.user)) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
     const updateText = String(req.body?.updateText || '').trim();
     if (!updateText) return res.status(400).json({ message: 'Update text is required.' });
     const result = await getPool().query('INSERT INTO project_updates(client_id,update_text,updated_by) VALUES($1,$2,$3) RETURNING *', [project.id, updateText, `${req.user.firstName} ${req.user.lastName}`.trim() || req.user.email]);
@@ -112,14 +226,30 @@ router.post('/:clientId/updates', protectRoute, async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+router.delete('/:clientId/updates/:updateId', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    if (!canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    const result = await getPool().query(
+      'DELETE FROM project_updates WHERE id=$1 AND client_id=$2 RETURNING id',
+      [req.params.updateId, project.id],
+    );
+    if (!result.rows[0]) return res.status(404).json({ message: 'Project update not found.' });
+    return res.json({ deleted: true });
+  } catch (error) { return next(error); }
+});
+
 router.post('/:clientId/risks', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canManage(project, req.user)) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
     const body = req.body || {};
     const riskTitle = String(body.riskTitle || body.description || '').trim();
     if (!riskTitle) return res.status(400).json({ message: 'Risk description is required.' });
-    const result = await getPool().query('INSERT INTO project_risks(client_id,customer_name,initiative_name,risk_title,risk_category,date_raised,raised_by,description,probability,owner,level,impact,impact_description,status,mitigation,comments_actions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *', [project.id, project.client_name, body.initiativeName || null, riskTitle, body.riskCategory || null, body.dateRaised || null, `${req.user.firstName} ${req.user.lastName}`.trim() || req.user.email, body.description || riskTitle, body.probability || 'Medium', body.owner || null, body.level || 'Medium', body.impact || 'Medium', body.impactDescription || null, body.status || 'Open', body.mitigation || null, body.commentsActions || null]);
+    const status = body.status || 'On-track';
+    if (!isProjectStatus(status)) return res.status(400).json({ message: 'Invalid risk status.' });
+    const result = await getPool().query('INSERT INTO project_risks(client_id,customer_name,initiative_name,risk_title,risk_category,date_raised,raised_by,description,probability,owner,level,impact,impact_description,status,mitigation,comments_actions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *', [project.id, project.client_name, body.initiativeName || null, riskTitle, body.riskCategory || null, body.dateRaised || null, `${req.user.firstName} ${req.user.lastName}`.trim() || req.user.email, body.description || riskTitle, body.probability || 'Medium', body.owner || null, body.level || 'Medium', body.impact || 'Medium', body.impactDescription || null, status, body.mitigation || null, body.commentsActions || null]);
     return res.status(201).json({
       risk: {
         ...result.rows[0],
@@ -132,10 +262,18 @@ router.post('/:clientId/risks', protectRoute, async (req, res, next) => {
 router.put('/:clientId/risks/:riskId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canManage(project, req.user)) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (req.body?.status !== undefined && !isProjectStatus(req.body.status)) {
+      return res.status(400).json({ message: 'Invalid risk status.' });
+    }
     const result = await getPool().query('UPDATE project_risks SET status=COALESCE($1,status),level=COALESCE($2,level),impact=COALESCE($3,impact),updated_at=CURRENT_TIMESTAMP WHERE id=$4 AND client_id=$5 RETURNING *', [req.body?.status, req.body?.level, req.body?.impact, req.params.riskId, project.id]);
     if (!result.rows[0]) return res.status(404).json({ message: 'Risk not found.' });
-    return res.json({ risk: result.rows[0] });
+    return res.json({
+      risk: {
+        ...result.rows[0],
+        status: normalizeProjectStatus(result.rows[0].status),
+      },
+    });
   } catch (error) { return next(error); }
 });
 
@@ -143,7 +281,7 @@ router.post('/:clientId/tasks', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
     if (!project) return res.status(404).json({ message: 'Project not found.' });
-    if (!canManage(project, req.user)) return res.status(403).json({ message: 'Project access denied.' });
+    if (!canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
     const body = req.body || {};
     if (!body.taskTitle) return res.status(400).json({ message: 'Task title is required.' });
     const result = await getPool().query(`INSERT INTO project_tasks(client_id,task_title,assigned_to,expected_start_date,expected_end_date,actual_start_date,actual_end_date,progress,status,remark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`, [project.id, body.taskTitle, body.assignedTo || project.project_manager || project.account_manager || null, body.expectedStartDate || null, body.expectedEndDate || null, body.actualStartDate || null, body.actualEndDate || null, Number(body.progress || 0), body.status || 'Not Started', body.remark || null]);
@@ -155,7 +293,7 @@ router.post('/:clientId/tasks', protectRoute, async (req, res, next) => {
 router.post('/:clientId/tasks/import', protectRoute, upload.single('file'), async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canManage(project, req.user)) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
     if (!req.file) return res.status(400).json({ message: 'No Excel file uploaded.' });
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(req.file.buffer);
@@ -184,7 +322,7 @@ router.post('/:clientId/tasks/import', protectRoute, upload.single('file'), asyn
 router.put('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canManage(project, req.user)) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
     const body = req.body || {};
     const result = await getPool().query(`UPDATE project_tasks SET task_title=COALESCE($1,task_title),assigned_to=COALESCE($2,assigned_to),expected_start_date=$3,expected_end_date=$4,actual_start_date=$5,actual_end_date=$6,progress=COALESCE($7,progress),status=COALESCE($8,status),remark=$9,updated_at=CURRENT_TIMESTAMP WHERE id=$10 AND client_id=$11 RETURNING *`, [body.taskTitle, body.assignedTo || project.project_manager || project.account_manager, body.expectedStartDate || null, body.expectedEndDate || null, body.actualStartDate || null, body.actualEndDate || null, body.progress === undefined ? null : Number(body.progress), body.status, body.remark || null, req.params.taskId, project.id]);
     if (!result.rows[0]) return res.status(404).json({ message: 'Task not found.' });
@@ -196,7 +334,7 @@ router.put('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) => {
 router.delete('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canManage(project, req.user)) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
     const result = await getPool().query('DELETE FROM project_tasks WHERE id = $1 AND client_id = $2 RETURNING id', [req.params.taskId, project.id]);
     if (!result.rows[0]) return res.status(404).json({ message: 'Task not found.' });
     const completion = await syncCompletion(project.id);
@@ -207,7 +345,7 @@ router.delete('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) =
 router.post('/:clientId/documents', protectRoute, upload.single('file'), async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canManage(project, req.user)) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
     if (!req.file) return res.status(400).json({ message: 'No document uploaded.' });
     const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
     if (!connectionString) return res.status(503).json({ message: 'Azure document storage is not configured. Set AZURE_STORAGE_CONNECTION_STRING on the API server.' });

@@ -10,11 +10,53 @@ statusHistory: [],
 auditLogs: [],
 excelImportLogs: [],
 notifications: [],
+projectAccessRequests: [],
 };
 let pool = null;
+let notificationTableReady;
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (databaseUrl) {
 pool = new sql.ConnectionPool(databaseUrl);
+}
+async function ensureNotificationTable() {
+  if (!pool) return;
+  if (!notificationTableReady) {
+    notificationTableReady = pool
+      .request()
+      .query(`
+        IF OBJECT_ID(N'dbo.notifications', N'U') IS NULL
+        BEGIN
+          CREATE TABLE dbo.notifications (
+            id BIGINT IDENTITY(1,1) PRIMARY KEY,
+            user_email VARCHAR(255) NOT NULL,
+            type VARCHAR(50) NOT NULL,
+            title NVARCHAR(255) NOT NULL,
+            message NVARCHAR(MAX) NOT NULL,
+            metadata NVARCHAR(MAX) NOT NULL
+              CONSTRAINT DF_notifications_metadata DEFAULT N'{}',
+            is_read BIT NOT NULL
+              CONSTRAINT DF_notifications_is_read DEFAULT 0,
+            created_at DATETIME2 NOT NULL
+              CONSTRAINT DF_notifications_created_at DEFAULT SYSUTCDATETIME()
+          );
+        END;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM sys.indexes
+          WHERE object_id = OBJECT_ID(N'dbo.notifications')
+            AND name = N'IX_notifications_user_email_created_at'
+        )
+        BEGIN
+          CREATE INDEX IX_notifications_user_email_created_at
+            ON dbo.notifications (user_email, created_at DESC, id DESC);
+        END;
+      `)
+      .catch((error) => {
+        notificationTableReady = undefined;
+        throw error;
+      });
+  }
+  await notificationTableReady;
 }
 function normalizeRow(row) {
   if (!row || typeof row !== "object") return row;
@@ -360,7 +402,7 @@ export function createImportLog(payload) {
     createdAt: new Date().toISOString(),
   });
 }
-export function createNotification(
+export async function createNotification(
   userEmail,
   type,
   title,
@@ -370,6 +412,31 @@ export function createNotification(
   const normalizedEmail = String(userEmail || "")
     .trim()
     .toLowerCase();
+  const pool = getPool();
+  if (pool) {
+    await ensureNotificationTable();
+    const result = await pool.query(
+      `INSERT INTO dbo.notifications (user_email, type, title, message, metadata)
+       OUTPUT INSERTED.id AS id, INSERTED.user_email AS user_email,
+         INSERTED.type AS type, INSERTED.title AS title,
+         INSERTED.message AS message, INSERTED.metadata AS metadata,
+         INSERTED.is_read AS is_read, INSERTED.created_at AS created_at
+       VALUES (@p1, @p2, @p3, @p4, @p5)`,
+      [normalizedEmail, type, title, message, JSON.stringify(metadata)],
+    );
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      userEmail: row.user_email,
+      type: row.type,
+      title: row.title,
+      message: row.message,
+      metadata: typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata,
+      read: Boolean(row.is_read),
+      createdAt: row.created_at,
+    };
+  }
+
   const entry = {
     id: Date.now(),
     userEmail: normalizedEmail,
@@ -383,10 +450,32 @@ export function createNotification(
   appState.notifications.unshift(entry);
   return entry;
 }
-export function listNotificationsForUser(userEmail) {
+export async function listNotificationsForUser(userEmail) {
   const normalizedEmail = String(userEmail || "")
     .trim()
     .toLowerCase();
+  const pool = getPool();
+  if (pool) {
+    await ensureNotificationTable();
+    const result = await pool.query(
+      `SELECT id, user_email, type, title, message, metadata, is_read, created_at
+       FROM dbo.notifications
+       WHERE user_email = @p1
+       ORDER BY created_at DESC, id DESC`,
+      [normalizedEmail],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      userEmail: row.user_email,
+      type: row.type,
+      title: row.title,
+      message: row.message,
+      metadata: typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata,
+      read: Boolean(row.is_read),
+      createdAt: row.created_at,
+    }));
+  }
+
   return appState.notifications
     .filter((notification) => notification.userEmail === normalizedEmail)
     .sort(
