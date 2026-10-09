@@ -18,6 +18,7 @@ test('restricts approval and deletion to administrators', () => {
 test('matches any permitted role', () => {
   assert.equal(hasAnyRole(['Viewer', 'Manager'], ['Admin', 'Manager']), true);
   assert.equal(hasAnyRole(['Viewer'], ['Admin', 'Manager']), false);
+  assert.equal(hasAnyRole('Viewer, Manager', ['Admin', 'Manager']), true);
 });
 
 test('allows project management to administrators and operations team', () => {
@@ -25,6 +26,7 @@ test('allows project management to administrators and operations team', () => {
   assert.equal(canManageProject(['Operations Team']), true);
   assert.equal(canManageProject(['Manager']), false);
   assert.equal(canManageProject(['Viewer']), false);
+  assert.equal(canManageProject('Admin, Viewer'), true);
 });
 
 test('limits manager project access to the assigned project manager', () => {
