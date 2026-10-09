@@ -2,7 +2,11 @@ import assert from "node:assert/strict"
 
 import test from "node:test"
 
-import { createProjectIdAllocator, projectIdPrefix } from "./project-id.js"
+import {
+  createProjectIdAllocator,
+  projectIdPrefix,
+  resolveNewProjectId,
+} from "./project-id.js"
 
 test("formats project IDs using PS, month, two-digit year and a three-digit sequence", () => {
   const allocator = createProjectIdAllocator()
@@ -60,5 +64,25 @@ test("rejects IDs when project month or year is missing or invalid", () => {
   assert.throws(
     () => allocator.next({ month: "NotAMonth", year: 2026 }),
     /month and year/,
+  )
+})
+
+test("reallocates a preferred project ID when it already exists", () => {
+  assert.equal(
+    resolveNewProjectId("PSOCT26001", ["PSOCT26001"], {
+      month: 10,
+      year: 2026,
+    }),
+    "PSOCT26002",
+  )
+})
+
+test("keeps an unused preferred project ID", () => {
+  assert.equal(
+    resolveNewProjectId("PSOCT26003", ["PSOCT26001"], {
+      month: 10,
+      year: 2026,
+    }),
+    "PSOCT26003",
   )
 })

@@ -9,6 +9,7 @@ import {
 } from '../lib/permissions.js';
 import { validateProjectMetrics } from '../lib/project-metrics.js';
 import { protectRoute, requireRole } from '../middleware/auth.js';
+import { resolveNewProjectId } from '../../shared/project-id.js';
 
 const router = express.Router();
 let accessRequestTableReady;
@@ -355,23 +356,53 @@ router.post('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team'
     const canManage = canManageProject(req.user?.roles || []);
     const pool = getPool();
     await ensureServiceCategoryColumn(pool);
+    const now = new Date();
+    const period = { month: now.getMonth() + 1, year: now.getFullYear() };
     if (!pool) {
-      if (appState.clients.some((client) => client.clientId === body.clientId)) return res.status(409).json({ message: 'Client ID already exists.' });
+      const clientId = resolveNewProjectId(
+        body.clientId,
+        appState.clients.map((client) => client.clientId),
+        period,
+      );
       const requester = canManage ? null : getSubmittedBy(req.user);
-      const client = { id: Date.now(), clientId: body.clientId, clientName: body.clientName, accountManager: body.accountManager, projectManager: body.projectManager || body.accountManager, serviceCategory: body.serviceCategory || null, region: body.region || 'North America', industry: body.industry || 'Technology', revenue: Number(body.revenue || 0), currentStatus: body.currentStatus || 'Pending Onboarding', services: body.services || [], createdAt: new Date().toISOString().slice(0,10), updatedAt: new Date().toISOString().slice(0,10), plannedOnboardDate: body.plannedOnboardDate || null, actualOnboardDate: body.actualOnboardDate || null, plannedOffboardDate: body.plannedOffboardDate || null, actualOffboardDate: body.actualOffboardDate || null, contractStartDate: body.contractStartDate || null, contractEndDate: body.contractEndDate || null, projectBillingCode: body.projectBillingCode || null, resources: body.resources || [], voumetric: body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric), remarks: body.remarks || '', approvalStatus: canManage ? 'approved' : 'pending', pendingPayload: requester ? { ...body, ...requester } : null, pendingCreate: !canManage };
+      const client = { id: Date.now(), clientId, clientName: body.clientName, accountManager: body.accountManager, projectManager: body.projectManager || body.accountManager, serviceCategory: body.serviceCategory || null, region: body.region || 'North America', industry: body.industry || 'Technology', revenue: Number(body.revenue || 0), currentStatus: body.currentStatus || 'Pending Onboarding', services: body.services || [], createdAt: new Date().toISOString().slice(0,10), updatedAt: new Date().toISOString().slice(0,10), plannedOnboardDate: body.plannedOnboardDate || null, actualOnboardDate: body.actualOnboardDate || null, plannedOffboardDate: body.plannedOffboardDate || null, actualOffboardDate: body.actualOffboardDate || null, contractStartDate: body.contractStartDate || null, contractEndDate: body.contractEndDate || null, projectBillingCode: body.projectBillingCode || null, resources: body.resources || [], voumetric: body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric), remarks: body.remarks || '', approvalStatus: canManage ? 'approved' : 'pending', pendingPayload: requester ? { ...body, ...requester } : null, pendingCreate: !canManage };
       appState.clients.unshift(client);
       if (requester) await notifyAdminsOfRequest(client.clientId, client.clientName, requester);
       createAuditEntry(req.user.email, canManage ? 'Client Created' : 'Client Submitted for Approval', '—', client.clientName);
       return res.status(canManage ? 201 : 202).json({ pending: !canManage, client: publicClient(client) });
     }
     const pendingPayload = canManage ? null : JSON.stringify({ ...body, ...getSubmittedBy(req.user) });
-    const result = await pool.query(`INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_type,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date,approval_status,pending_payload,pending_create,project_billing_code,resources,fte,voumetric,service_category) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NULL,NULL,$30,$31) RETURNING id`,     [body.clientId,body.clientName,body.accountManager,body.region || 'North America',body.industry || 'Technology',Number(body.revenue || 0),body.currentStatus || 'Onboarded',body.remarks || '',body.plannedOnboardDate || null,body.actualOnboardDate || null,body.plannedOffboardDate || null,body.actualOffboardDate || null,body.contractStartDate || null,body.contractEndDate || null,body.year || new Date().getFullYear(),Number(body.completion || 0),body.hyperscaler || null,body.projectType || null,body.projectBrief || null,body.projectManager || body.accountManager || null,body.isow || null,body.estimatedStartDate || body.plannedOnboardDate || null,body.estimatedEndDate || body.plannedOffboardDate || null,body.actualStartDate || body.actualOnboardDate || null,body.actualEndDate || body.actualOffboardDate || null,canManage ? 'approved' : 'pending',pendingPayload,!canManage,body.projectBillingCode || null,body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric),body.serviceCategory || null]);
+    const insertSql = `INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_type,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date,approval_status,pending_payload,pending_create,project_billing_code,resources,fte,voumetric,service_category) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NULL,NULL,$30,$31) RETURNING id`;
+    const insertValues = (clientId) => [clientId,body.clientName,body.accountManager,body.region || 'North America',body.industry || 'Technology',Number(body.revenue || 0),body.currentStatus || 'Onboarded',body.remarks || '',body.plannedOnboardDate || null,body.actualOnboardDate || null,body.plannedOffboardDate || null,body.actualOffboardDate || null,body.contractStartDate || null,body.contractEndDate || null,body.year || period.year,Number(body.completion || 0),body.hyperscaler || null,body.projectType || null,body.projectBrief || null,body.projectManager || body.accountManager || null,body.isow || null,body.estimatedStartDate || body.plannedOnboardDate || null,body.estimatedEndDate || body.plannedOffboardDate || null,body.actualStartDate || body.actualOnboardDate || null,body.actualEndDate || body.actualOffboardDate || null,canManage ? 'approved' : 'pending',pendingPayload,!canManage,body.projectBillingCode || null,body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric),body.serviceCategory || null];
+    let clientId = body.clientId;
+    let result;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const existing = await pool.query('SELECT client_id FROM clients');
+      clientId = resolveNewProjectId(
+        attempt === 0 ? body.clientId : null,
+        existing.rows.map((row) => row.client_id),
+        period,
+      );
+      try {
+        result = await pool.query(insertSql, insertValues(clientId));
+        break;
+      } catch (error) {
+        const duplicateKey = error.number === 2627 || error.number === 2601 || error.code === '23505';
+        if (!duplicateKey || attempt === 4) throw error;
+        clientId = null;
+      }
+    }
     await saveProjectResources(pool, result.rows[0].id, body.resources || []);
     await saveServices(pool, result.rows[0].id, body.services);
-    if (!canManage) await notifyAdminsOfRequest(body.clientId, body.clientName, getSubmittedBy(req.user));
+    if (!canManage) await notifyAdminsOfRequest(clientId, body.clientName, getSubmittedBy(req.user));
     createAuditEntry(req.user.email, canManage ? 'Client Created' : 'Client Submitted for Approval', '—', body.clientName);
-    return res.status(canManage ? 201 : 202).json({ pending: !canManage, client: publicClient(await findDbClient(body.clientId)) });
-  } catch (error) { return error.code === '23505' ? res.status(409).json({ message: 'Client ID already exists.' }) : next(error); }
+    return res.status(canManage ? 201 : 202).json({ pending: !canManage, client: publicClient(await findDbClient(clientId)) });
+  } catch (error) {
+    if (error.code === '23505' || error.number === 2627 || error.number === 2601) {
+      return res.status(409).json({ message: 'Unable to allocate a unique Project ID. Please try again.' });
+    }
+    return next(error);
+  }
 });
 
 router.post('/:clientId/access-request', protectRoute, requireRole('Manager'), async (req, res, next) => {

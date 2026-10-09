@@ -2,6 +2,11 @@
 
 ## 2026-10-09
 
+### Prevent duplicate project IDs
+- Made the API check project IDs against all database records, including pending projects, and allocate the next available monthly ID when the form submits a stale ID.
+- Added bounded retries for simultaneous creates that race on the unique project-ID constraint, and return the server-assigned ID to the client.
+- Added regression tests for reallocation on collision and preserving an unused preferred ID.
+
 ### Restrict Excel Import navigation
 - Hid the Excel Import navigation item from non-admin users.
 - Direct visits to `#excel` from non-admin sessions now open Projects rather than redirecting to Dashboard; Admin import access is unchanged.

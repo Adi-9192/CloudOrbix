@@ -15,3 +15,9 @@ export function createProjectIdAllocator(
 
   next(period?: ProjectIdPeriod): string
 }
+
+export function resolveNewProjectId(
+  preferredId: string | null | undefined,
+  existingProjectIds: Array<string | null | undefined>,
+  period: ProjectIdPeriod,
+): string

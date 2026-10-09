@@ -105,3 +105,16 @@ export function createProjectIdAllocator(existingProjectIds = []) {
     },
   }
 }
+
+export function resolveNewProjectId(preferredId, existingProjectIds, period) {
+  const normalizedPreferredId = String(preferredId ?? "").trim()
+  const existingIds = new Set(
+    existingProjectIds.map((projectId) => String(projectId ?? "").trim().toUpperCase()),
+  )
+
+  if (normalizedPreferredId && !existingIds.has(normalizedPreferredId.toUpperCase())) {
+    return normalizedPreferredId
+  }
+
+  return createProjectIdAllocator(existingProjectIds).next(period)
+}
