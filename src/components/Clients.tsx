@@ -1200,12 +1200,12 @@ export default function Clients({
               Delete ({selected.length})
             </button>
           )}
-          <button
+          {/* <button
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors"
             style={{ borderColor: border, color: muted, background: bg }}
           >
             <Download className="w-3.5 h-3.5" /> Export
-          </button>
+          </button> */}
           {user?.roles.some((role) =>
             ["Admin", "Manager", "Operations Team"].includes(role),
           ) && (
