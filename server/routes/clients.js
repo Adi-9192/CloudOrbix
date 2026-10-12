@@ -569,7 +569,7 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
           pendingPayload: null,
           pendingCreate: false,
         };
-        createAuditEntry(req.user.email, 'Client Updated', '—', req.params.clientId);
+        await createAuditEntry(req.user.email, 'Client Updated', '—', req.params.clientId);
         return res.json({ client: publicClient(appState.clients[index]) });
       }
       const pendingPayload = { ...existingClient, ...body, ...getSubmittedBy(req.user), approvalStatus: 'pending', pendingCreate: false };
@@ -582,7 +582,7 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
         pendingCreate: false,
       };
       await notifyAdminsOfRequest(req.params.clientId, existingClient.clientName, getSubmittedBy(req.user));
-      createAuditEntry(req.user.email, 'Client Change Submitted for Approval', '—', req.params.clientId);
+      await createAuditEntry(req.user.email, 'Client Change Submitted for Approval', '—', req.params.clientId);
       return res.status(202).json({ pending: true, client: publicClient(appState.clients[index]) });
     }
 
@@ -593,7 +593,7 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
         [pendingPayload, req.params.clientId],
       );
       await notifyAdminsOfRequest(req.params.clientId, existingClient.clientName, getSubmittedBy(req.user));
-      createAuditEntry(req.user.email, 'Client Change Submitted for Approval', '—', req.params.clientId);
+      await createAuditEntry(req.user.email, 'Client Change Submitted for Approval', '—', req.params.clientId);
       return res.status(202).json({ pending: true, client: publicClient(existingClient) });
     }
 
@@ -686,7 +686,7 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
       );
     }
 
-    createAuditEntry(
+    await createAuditEntry(
       req.user.email,
       'Client Updated',
       '—',
@@ -729,7 +729,7 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
       };
       appState.clients[index] = approvedClient;
       await notifySubmitterOfDecision(payload, req.params.clientId, 'approve', req.user);
-      createAuditEntry(req.user.email, 'Client Change Approved', 'pending', req.params.clientId);
+      await createAuditEntry(req.user.email, 'Client Change Approved', 'pending', req.params.clientId);
       return res.json({ client: publicClient(approvedClient) });
     }
 
@@ -754,7 +754,7 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
     }
     if (Array.isArray(payload.services)) await saveServices(pool, record.id, payload.services);
     await notifySubmitterOfDecision(payload, req.params.clientId, 'approve', req.user);
-    createAuditEntry(req.user.email, 'Client Change Approved', 'pending', req.params.clientId);
+    await createAuditEntry(req.user.email, 'Client Change Approved', 'pending', req.params.clientId);
     return res.json({ client: publicClient(await findDbClient(req.params.clientId)) });
   } catch (error) { return next(error); }
 });
@@ -782,7 +782,7 @@ router.post('/:clientId/reject', protectRoute, async (req, res, next) => {
         updatedAt: new Date().toISOString().slice(0, 10),
       };
       await notifySubmitterOfDecision(client.pendingPayload, req.params.clientId, 'reject', req.user);
-      createAuditEntry(req.user.email, 'Client Change Rejected', 'pending', req.params.clientId);
+      await createAuditEntry(req.user.email, 'Client Change Rejected', 'pending', req.params.clientId);
       return res.json({ rejected: true });
     }
 
@@ -802,11 +802,44 @@ router.post('/:clientId/reject', protectRoute, async (req, res, next) => {
       if (!update.rows[0]) return res.status(404).json({ message: 'Pending client change not found.' });
     }
     await notifySubmitterOfDecision(pendingPayload, req.params.clientId, 'reject', req.user);
-    createAuditEntry(req.user.email, 'Client Change Rejected', 'pending', req.params.clientId);
+    await createAuditEntry(req.user.email, 'Client Change Rejected', 'pending', req.params.clientId);
     return res.json({ rejected: true });
   } catch (error) { return next(error); }
 });
 
-router.delete('/:clientId', protectRoute, requireRole('Admin'), async (req, res, next) => { try { const pool = getPool(); if (!pool) { const index = appState.clients.findIndex((client) => client.clientId === req.params.clientId); if (index < 0) return res.status(404).json({ message: 'Client not found.' }); appState.clients.splice(index,1); return res.json({ deleted:true, client:req.params.clientId }); } const result = await pool.query('DELETE FROM clients WHERE client_id=$1 RETURNING client_id',[req.params.clientId]); if (!result.rows[0]) return res.status(404).json({ message:'Client not found.' }); return res.json({ deleted:true, client:result.rows[0].client_id }); } catch (error) { return next(error); } });
+router.delete('/:clientId', protectRoute, requireRole('Admin'), async (req, res, next) => {
+  try {
+    const pool = getPool();
+    if (!pool) {
+      const index = appState.clients.findIndex((client) => client.clientId === req.params.clientId);
+      if (index < 0) return res.status(404).json({ message: 'Project not found.' });
+      const [deletedClient] = appState.clients.splice(index, 1);
+      await createAuditEntry(
+        req.user.email,
+        'Client Deleted',
+        deletedClient.clientName,
+        deletedClient.clientId,
+      );
+      return res.json({ deleted: true, client: deletedClient.clientId });
+    }
+
+    const result = await pool.query(
+      'DELETE FROM clients WHERE client_id=$1 RETURNING client_id,client_name',
+      [req.params.clientId],
+    );
+    const deletedClient = result.rows[0];
+    if (!deletedClient) return res.status(404).json({ message: 'Project not found.' });
+
+    await createAuditEntry(
+      req.user.email,
+      'Client Deleted',
+      deletedClient.client_name,
+      deletedClient.client_id,
+    );
+    return res.json({ deleted: true, client: deletedClient.client_id });
+  } catch (error) {
+    return next(error);
+  }
+});
 
 export default router;

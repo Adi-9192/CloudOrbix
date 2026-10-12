@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Search, Filter, Download, ChevronDown, ChevronRight } from "lucide-react";
+import { showCloudOrbixAlert } from "../alert";
 
 interface AuditLogsProps { dark: boolean; }
 
@@ -11,12 +12,14 @@ const TYPE_STYLES: Record<string, { bg: string; text: string }> = {
   Delete: { bg: "#FEE2E2", text: "#DC2626" },
   Report: { bg: "#F1F5F9", text: "#64748B" },
 };
+const VISIBLE_TYPES = ["Update", "Import", "Create", "Delete", "Export"] as const;
 
 export default function AuditLogs({ dark }: AuditLogsProps) {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const bg = dark ? "#1E293B" : "#FFFFFF";
   const border = dark ? "#334155" : "#E2E8F0";
@@ -37,6 +40,38 @@ export default function AuditLogs({ dark }: AuditLogsProps) {
     (!search || l.user.toLowerCase().includes(search.toLowerCase()) || l.action.toLowerCase().includes(search.toLowerCase()) || l.entity.toLowerCase().includes(search.toLowerCase()))
   );
 
+  const exportLogs = async () => {
+    const token = localStorage.getItem("clmp-token");
+    if (!token) {
+      showCloudOrbixAlert("Sign in again to export audit logs.", "error");
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const response = await fetch("/api/audit/export.xlsx", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to export audit logs. Please try again.");
+      }
+      const workbook = await response.blob();
+      const downloadUrl = URL.createObjectURL(workbook);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = "cloudorbix-audit-logs.xlsx";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    } catch (error) {
+      showCloudOrbixAlert(
+        error instanceof Error ? error.message : "Unable to export audit logs.",
+        "error",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-5" style={{ color: text }}>
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -44,14 +79,21 @@ export default function AuditLogs({ dark }: AuditLogsProps) {
           <h1 className="text-xl font-bold">Audit Logs & Compliance</h1>
           <p className="text-xs mt-0.5" style={{ color: muted }}>Complete audit trail of all system actions</p>
         </div>
-        <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium" style={{ borderColor: border, color: muted, background: bg }}>
+        <button
+          type="button"
+          onClick={() => void exportLogs()}
+          disabled={exporting}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium disabled:opacity-50"
+          style={{ borderColor: border, color: muted, background: bg }}
+        >
           <Download className="w-3.5 h-3.5" /> Export Logs
         </button>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-        {Object.entries(TYPE_STYLES).map(([type, style]) => {
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        {VISIBLE_TYPES.map((type) => {
+          const style = TYPE_STYLES[type];
           const count = auditLogs.filter(l => l.type === type).length;
           return (
             <button key={type} onClick={() => setTypeFilter(typeFilter === type ? "All" : type)}
@@ -74,7 +116,7 @@ export default function AuditLogs({ dark }: AuditLogsProps) {
         </div>
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-xs outline-none" style={{ background: bg, borderColor: border, color: text }}>
           <option value="All">All Types</option>
-          {Object.keys(TYPE_STYLES).map(t => <option key={t}>{t}</option>)}
+          {VISIBLE_TYPES.map(t => <option key={t}>{t}</option>)}
         </select>
       </div>
 
@@ -94,7 +136,7 @@ export default function AuditLogs({ dark }: AuditLogsProps) {
 
         <div className="divide-y" style={{ borderColor: border }}>
           {filtered.map(log => {
-            const ts = TYPE_STYLES[log.type] || TYPE_STYLES.Report;
+            const ts = TYPE_STYLES[log.type] || TYPE_STYLES.Update;
             const isExpanded = expanded === log.id;
             return (
               <div key={log.id}>

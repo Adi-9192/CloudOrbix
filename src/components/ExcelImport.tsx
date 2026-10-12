@@ -10,6 +10,8 @@ import {
   Eye,
   Trash2,
   ChevronRight,
+  Check,
+  X,
 } from "lucide-react";
 import { showCloudOrbixAlert } from "../alert";
 
@@ -18,6 +20,7 @@ interface ExcelImportProps {
 }
 
 interface ImportPreviewRow {
+  rowNumber: number;
   clientId: string;
   year: number;
   clientName: string;
@@ -36,6 +39,8 @@ interface ImportPreviewRow {
   estimatedEnd: string | null;
   actualStart: string | null;
   actualEnd: string | null;
+  importKind: string;
+  duplicateInFile: boolean;
 }
 
 const previewColumns: { key: keyof ImportPreviewRow; label: string }[] = [
@@ -93,6 +98,9 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [previewRows, setPreviewRows] = useState<ImportPreviewRow[]>([]);
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [summary, setSummary] = useState({
     totalProcessed: 0,
     imported: 0,
@@ -158,6 +166,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
     setProgress(0);
     const body = new FormData();
     body.append("file", file);
+    body.append("preview", "true");
     try {
       setProgress(30);
       const response = await fetch("/api/excel/upload", {
@@ -176,6 +185,8 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
       }
       setSummary(payload.summary);
       setPreviewRows(payload.records || []);
+      setSelectedFile(file);
+      setSelectedRows(new Set());
       setImportWarnings(payload.warnings || []);
       setProgress(100);
       setStage("preview");
@@ -190,6 +201,47 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
     } finally {
       setUploading(false);
     }
+  };
+
+  const confirmImport = async (rowsToImport: number[]) => {
+    if (!selectedFile || !rowsToImport.length) return;
+    setConfirming(true);
+    setError("");
+    const body = new FormData();
+    body.append("file", selectedFile);
+    body.append("selectedRows", JSON.stringify(rowsToImport));
+
+    try {
+      const response = await fetch("/api/excel/upload", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("clmp-token")}`,
+        },
+        body,
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.message || "Unable to confirm the selected imports.");
+      }
+      setSummary(payload.summary);
+      setStage("done");
+    } catch (confirmError) {
+      const message = confirmError instanceof Error
+        ? confirmError.message
+        : "Unable to confirm the selected imports.";
+      setError(message);
+      showCloudOrbixAlert(message, "error");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const rejectAll = () => {
+    setSelectedRows(new Set());
+    setPreviewRows([]);
+    setSelectedFile(null);
+    setStage("idle");
+    showCloudOrbixAlert("All staged project rows were rejected.", "info");
   };
 
   const STATS = [
@@ -252,6 +304,10 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
               setStage("idle");
               setFileName("");
               setProgress(0);
+              setPreviewRows([]);
+              setSelectedRows(new Set());
+              setSelectedFile(null);
+              setError("");
             }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-colors"
             style={{ borderColor: border, color: muted, background: bg }}
@@ -418,6 +474,57 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                 style={{ background: bg, borderColor: border }}
               >
                 <div
+                  className="px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2"
+                  style={{ borderColor: border, background: subtle }}
+                >
+                  <label className="flex items-center gap-2 text-xs font-medium" style={{ color: text }}>
+                    <input
+                      type="checkbox"
+                      checked={
+                        previewRows.some((row) => !row.duplicateInFile) &&
+                        previewRows.filter((row) => !row.duplicateInFile).every((row) => selectedRows.has(row.rowNumber))
+                      }
+                      onChange={(event) => {
+                        setSelectedRows(
+                          event.target.checked
+                            ? new Set(previewRows.filter((row) => !row.duplicateInFile).map((row) => row.rowNumber))
+                            : new Set(),
+                        );
+                      }}
+                    />
+                    Select all new or matched projects
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void confirmImport(previewRows.filter((row) => !row.duplicateInFile).map((row) => row.rowNumber))}
+                      disabled={confirming || !previewRows.some((row) => !row.duplicateInFile)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                      style={{ background: "#1E40AF" }}
+                    >
+                      Confirm all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void confirmImport([...selectedRows])}
+                      disabled={confirming || selectedRows.size === 0}
+                      className="px-3 py-1.5 rounded-lg border text-xs font-semibold disabled:opacity-50"
+                      style={{ borderColor: "#16A34A", color: "#15803D" }}
+                    >
+                      Confirm selected ({selectedRows.size})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={rejectAll}
+                      disabled={confirming}
+                      className="px-3 py-1.5 rounded-lg border text-xs font-semibold text-red-600 disabled:opacity-50"
+                      style={{ borderColor: "#FECACA" }}
+                    >
+                      Reject all
+                    </button>
+                  </div>
+                </div>
+                <div
                   className="px-5 py-3.5 border-b flex items-center justify-between"
                   style={{ borderColor: border }}
                 >
@@ -443,13 +550,6 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                     >
                       <Eye className="w-3.5 h-3.5" /> Preview All
                     </button>
-                    <button
-                      onClick={() => setStage("done")}
-                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold text-white"
-                      style={{ background: "#1E40AF" }}
-                    >
-                      <Upload className="w-3.5 h-3.5" /> Confirm Import
-                    </button>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -459,7 +559,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                         className="border-b"
                         style={{ borderColor: border, background: subtle }}
                       >
-                        {[...previewColumns.map((column) => column.label), "Actions"].map((h) => (
+                        {["Select", ...previewColumns.map((column) => column.label), "Import action"].map((h) => (
                           <th
                             key={h}
                             className="px-4 py-2.5 text-left text-xs font-semibold"
@@ -473,10 +573,29 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                     <tbody>
                       {previewRows.map((r) => (
                         <tr
-                          key={r.clientId}
+                          key={r.rowNumber}
                           className="border-b"
-                          style={{ borderColor: border }}
+                          style={{
+                            borderColor: border,
+                            opacity: r.duplicateInFile ? 0.6 : 1,
+                          }}
                         >
+                          <td className="px-4 py-2.5">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select row ${r.rowNumber}`}
+                              checked={selectedRows.has(r.rowNumber)}
+                              disabled={r.duplicateInFile || confirming}
+                              onChange={(event) => {
+                                setSelectedRows((current) => {
+                                  const next = new Set(current);
+                                  if (event.target.checked) next.add(r.rowNumber);
+                                  else next.delete(r.rowNumber);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </td>
                           {previewColumns.map((column) => {
                             const value = r[column.key];
                             const display =
@@ -498,7 +617,39 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                             );
                           })}
                           <td className="px-4 py-2.5 text-xs whitespace-nowrap">
-                            ✅ Saved
+                            <div className="flex items-center gap-2">
+                              <span style={{ color: r.duplicateInFile ? "#D97706" : r.importKind.startsWith("Update") ? "#7C3AED" : "#64748B" }}>
+                                {r.importKind}
+                              </span>
+                              {!r.duplicateInFile && (
+                                <>
+                                  <button
+                                    type="button"
+                                    aria-label={`Include row ${r.rowNumber}`}
+                                    title="Include"
+                                    disabled={confirming}
+                                    onClick={() => setSelectedRows((current) => new Set(current).add(r.rowNumber))}
+                                    className="p-1 rounded hover:bg-green-50 text-green-700 disabled:opacity-50"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label={`Reject row ${r.rowNumber}`}
+                                    title="Reject"
+                                    disabled={confirming}
+                                    onClick={() => setSelectedRows((current) => {
+                                      const next = new Set(current);
+                                      next.delete(r.rowNumber);
+                                      return next;
+                                    })}
+                                    className="p-1 rounded hover:bg-red-50 text-red-600 disabled:opacity-50"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -509,12 +660,16 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                   className="px-4 py-3 flex gap-2 border-t"
                   style={{ borderColor: border }}
                 >
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 border border-red-200 bg-red-50">
-                    <Trash2 className="w-3.5 h-3.5" /> Rollback
+                  <button
+                    type="button"
+                    onClick={rejectAll}
+                    disabled={confirming}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 border border-red-200 bg-red-50 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Reject all
                   </button>
                   <p className="text-xs my-auto ml-2" style={{ color: muted }}>
-                    Review errors before confirming. Rollback removes all staged
-                    records.
+                    Nothing is added or updated until you confirm. Repeated rows in this workbook cannot be selected.
                   </p>
                 </div>
               </div>
@@ -530,10 +685,13 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                 <CheckCircle2 className="w-8 h-8 text-green-600" />
               </div>
               <h3 className="font-bold text-base mb-1" style={{ color: text }}>
-                Import Successful!
+                Import Complete
               </h3>
               <p className="text-sm mb-6" style={{ color: muted }}>
-                3 records imported · 1 duplicate skipped · 1 error flagged
+                {summary.imported} project{summary.imported === 1 ? "" : "s"} added ·{" "}
+                {summary.updated} existing project{summary.updated === 1 ? "" : "s"} updated ·{" "}
+                {summary.duplicates} duplicate{summary.duplicates === 1 ? "" : "s"} skipped ·{" "}
+                {summary.failed} failed
               </p>
               <div className="grid grid-cols-3 gap-3 mb-6">
                 {STATS.slice(0, 3).map((s) => (

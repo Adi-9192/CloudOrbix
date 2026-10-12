@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appState, createNotification, listNotificationsForUser } from '../db.js';
+import {
+  appState,
+  createNotification,
+  deleteNotificationsForUser,
+  listNotificationsForUser,
+} from '../db.js';
 
 test('stores approval notifications for the submitting project manager', async () => {
   appState.notifications = [];
@@ -28,4 +33,18 @@ test('stores approval notifications for the submitting project manager', async (
   const notifications = await listNotificationsForUser('peter@cloudorbix.com');
   assert.equal(notifications.length, 1);
   assert.equal(notifications[0].message.includes('approved'), true);
+});
+
+test('deletes notifications only for the requested user', async () => {
+  appState.notifications = [
+    { id: 1, userEmail: 'peter@cloudorbix.com', createdAt: new Date().toISOString() },
+    { id: 2, userEmail: 'other@cloudorbix.com', createdAt: new Date().toISOString() },
+  ];
+
+  await deleteNotificationsForUser('PETER@CLOUDORBIX.COM');
+
+  assert.deepEqual(
+    appState.notifications.map((notification) => notification.userEmail),
+    ['other@cloudorbix.com'],
+  );
 });
