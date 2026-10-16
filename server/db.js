@@ -332,11 +332,14 @@ export async function updateUserPassword(userId, password) {
   }
   throw new Error("Password updates require a configured database.");
 }
+export function normalizeAuditAction(action) {
+  return String(action || "").replace(/\bclient\b/gi, "Project");
+}
 export async function createAuditEntry(userEmail, action, oldValue, newValue) {
   const entry = {
     id: Date.now(),
     userEmail,
-    action,
+    action: normalizeAuditAction(action),
     oldValue: oldValue ?? "—",
     newValue: newValue ?? "—",
     createdAt: new Date().toISOString(),
@@ -361,7 +364,7 @@ VALUES
 @p4
 )
 `,
-        [userEmail, action, oldValue ?? "—", newValue ?? "—"],
+        [userEmail, normalizeAuditAction(action), oldValue ?? "—", newValue ?? "—"],
       );
     } catch (error) {
       console.error("Audit persistence error:", {
@@ -483,4 +486,22 @@ export async function listNotificationsForUser(userEmail) {
         new Date(right.createdAt).valueOf() -
         new Date(left.createdAt).valueOf(),
     );
+}
+export async function deleteNotificationsForUser(userEmail) {
+  const normalizedEmail = String(userEmail || "")
+    .trim()
+    .toLowerCase();
+  const pool = getPool();
+  if (pool) {
+    await ensureNotificationTable();
+    await pool.query(
+      "DELETE FROM dbo.notifications WHERE user_email = @p1",
+      [normalizedEmail],
+    );
+    return;
+  }
+
+  appState.notifications = appState.notifications.filter(
+    (notification) => notification.userEmail !== normalizedEmail,
+  );
 }

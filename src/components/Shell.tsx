@@ -23,7 +23,7 @@ import {
   UserCircle2,
   Calculator,
 } from "lucide-react";
-import { type CloudOrbixAlert } from "../alert";
+import { showCloudOrbixAlert, type CloudOrbixAlert } from "../alert";
 
 export type Page =
   | "dashboard"
@@ -105,6 +105,8 @@ export default function Shell({
   const [screenAlert, setScreenAlert] = useState<CloudOrbixAlert | null>(null);
   const [alertTimer, setAlertTimer] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
+  const [clearingNotifications, setClearingNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -150,26 +152,47 @@ export default function Shell({
     })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
-        const alerts = (payload?.notifications || [])
-          .slice(0, 6)
-          .map((item: any) => ({
-            id: `${item.id || item.title}-${item.createdAt || item.created_at || Math.random()}`,
-            text: item.title || item.message || "Project update",
-            message: item.message || "",
-            type: item.type === "approval" ? "info" : "warning",
-            time: new Date(
-              item.createdAt || item.created_at || Date.now(),
-            ).toLocaleDateString(),
-            read: Boolean(item.read),
-            metadata:
-              item.metadata && typeof item.metadata === "object"
-                ? item.metadata
-                : {},
-          }));
+        const alerts = (payload?.notifications || []).map((item: any) => ({
+          id: String(item.id ?? `${item.title || item.message || "notification"}-${item.createdAt || item.created_at || ""}`),
+          text: item.title || item.message || "Project update",
+          message: item.message || "",
+          type: item.type === "approval" ? "info" : "warning",
+          time: new Date(item.createdAt || item.created_at || Date.now()).toLocaleDateString(),
+          read: Boolean(item.read),
+          metadata: item.metadata && typeof item.metadata === "object" ? item.metadata : {},
+        }));
         setNotifications(alerts);
       })
       .catch(() => setNotifications([]));
   }, [user, notifOpen]);
+
+  const clearNotifications = async () => {
+    const token = localStorage.getItem("clmp-token");
+    if (!token) {
+      showCloudOrbixAlert("Sign in again to clear notifications.", "error");
+      return;
+    }
+
+    setClearingNotifications(true);
+    try {
+      const response = await fetch("/api/users/notifications", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to clear notifications. Please try again.");
+      }
+      setNotifications([]);
+      setShowAllNotifications(false);
+    } catch (error) {
+      showCloudOrbixAlert(
+        error instanceof Error ? error.message : "Unable to clear notifications. Please try again.",
+        "error",
+      );
+    } finally {
+      setClearingNotifications(false);
+    }
+  };
 
   const openNotification = (notification: NotificationItem) => {
     const metadata = notification.metadata || {};
@@ -400,16 +423,25 @@ export default function Shell({
                       </div>
                     </div>
                   </div>
-                  <span className="text-[10px] px-2 py-1 rounded-full bg-white text-blue-700 font-bold">
-                    {
-                      notifications.filter((notification) => !notification.read)
-                        .length
-                    }{" "}
-                    new
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] px-2 py-1 rounded-full bg-white text-blue-700 font-bold">{notifications.filter((notification) => !notification.read).length} new</span>
+                    {notifications.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => void clearNotifications()}
+                        disabled={clearingNotifications}
+                        className="p-1 rounded-md hover:bg-blue-100 transition-colors disabled:opacity-50"
+                        style={{ color: textMuted }}
+                        title="Clear all notifications"
+                        aria-label="Clear all notifications"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {notifications.length ? (
-                  notifications.map((n) => (
+                <div className="max-h-72 overflow-y-auto">
+                  {notifications.length ? (showAllNotifications ? notifications : notifications.slice(0, 6)).map(n => (
                     <button
                       key={n.id}
                       type="button"
@@ -417,57 +449,27 @@ export default function Shell({
                       className="w-full px-5 py-3 border-b flex gap-3 text-left hover:bg-slate-50 cursor-pointer"
                       style={{ borderColor }}
                     >
-                      <div
-                        className="w-1 rounded-full flex-shrink-0"
-                        style={{
-                          background:
-                            n.type === "warning"
-                              ? "#D97706"
-                              : n.type === "success"
-                                ? "#16A34A"
-                                : "#3B82F6",
-                        }}
-                      />
+                      <div className="w-1 rounded-full flex-shrink-0" style={{ background: n.type === "warning" ? "#D97706" : n.type === "success" ? "#16A34A" : "#3B82F6" }} />
                       <div>
-                        <div
-                          className="text-xs font-semibold mb-1"
-                          style={{ color: textBody }}
-                        >
-                          {n.text}
-                        </div>
-                        {n.message && (
-                          <div
-                            className="text-[11px] mb-1"
-                            style={{ color: textMuted }}
-                          >
-                            {n.message}
-                          </div>
-                        )}
-                        <div
-                          className="text-[10px]"
-                          style={{ color: textMuted }}
-                        >
-                          {n.time}
-                        </div>
+                        <div className="text-xs font-semibold mb-1" style={{ color: textBody }}>{n.text}</div>
+                        {n.message && <div className="text-[11px] mb-1" style={{ color: textMuted }}>{n.message}</div>}
+                        <div className="text-[10px]" style={{ color: textMuted }}>{n.time}</div>
                       </div>
                     </button>
-                  ))
-                ) : (
-                  <div
-                    className="px-5 py-4 text-xs"
-                    style={{ color: textMuted }}
-                  >
-                    No new alerts
+                  )) : <div className="px-5 py-4 text-xs" style={{ color: textMuted }}>No new alerts</div>}
+                </div>
+                {notifications.length > 6 && (
+                  <div className="px-4 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowAllNotifications((showAll) => !showAll)}
+                      className="text-xs font-semibold"
+                      style={{ color: "#1E40AF" }}
+                    >
+                      {showAllNotifications ? "Show fewer alerts" : "View all alerts"}
+                    </button>
                   </div>
                 )}
-                <div className="px-4 py-2 text-center">
-                  <button
-                    className="text-xs font-semibold"
-                    style={{ color: "#1E40AF" }}
-                  >
-                    View all alerts
-                  </button>
-                </div>
               </div>
             )}
           </div>

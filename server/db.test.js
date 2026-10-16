@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeQueryForAzureSql } from './db.js';
+import { normalizeAuditAction, normalizeQueryForAzureSql } from './db.js';
+
+test('normalizes legacy client terminology in audit action labels', () => {
+  assert.equal(normalizeAuditAction('Client Created'), 'Project Created');
+  assert.equal(normalizeAuditAction('client change submitted for approval'), 'Project change submitted for approval');
+  assert.equal(normalizeAuditAction('Project Access Requested'), 'Project Access Requested');
+});
 
 test('normalizes PostgreSQL parameter placeholders for Azure SQL', () => {
   const { text, values } = normalizeQueryForAzureSql(

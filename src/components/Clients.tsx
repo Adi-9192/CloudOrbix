@@ -403,6 +403,8 @@ export default function Clients({
 
   const [page, setPage] = useState(1)
 
+  const [pageSize, setPageSize] = useState(10)
+
   const [showAdd, setShowAdd] = useState(false)
 
   const [editingClientId, setEditingClientId] = useState<string | null>(null)
@@ -606,8 +608,6 @@ export default function Clients({
       })
   }, [])
 
-  const PAGE_SIZE = 8
-
   const searchTerm = search.trim().toLowerCase()
 
   const filtered = clientList
@@ -684,9 +684,9 @@ export default function Clients({
         : String(vb).localeCompare(String(va))
     })
 
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const paged = filtered.slice((page - 1) * pageSize, page * pageSize)
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+  const totalPages = Math.ceil(filtered.length / pageSize)
 
   const toggleSort = (col: string) => {
     if (sortCol === col) setSortAsc(!sortAsc)
@@ -1234,12 +1234,12 @@ export default function Clients({
               Delete ({selected.length})
             </button>
           )}
-          <button
+          {/* <button
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors"
             style={{ borderColor: border, color: muted, background: bg }}
           >
             <Download className="w-3.5 h-3.5" /> Export
-          </button>
+          </button> */}
           {user?.roles.some((role) =>
             ["Admin", "Manager", "Operations Team"].includes(role),
           ) && (
@@ -1605,10 +1605,29 @@ export default function Clients({
           className="flex items-center justify-between px-4 py-3 border-t"
           style={{ borderColor: border }}
         >
-          <span className="text-xs" style={{ color: muted }}>
-            Showing {(page - 1) * PAGE_SIZE + 1}–
-            {Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs" style={{ color: muted }}>
+              Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–
+              {Math.min(page * pageSize, filtered.length)} of {filtered.length}
+            </span>
+            <label className="flex items-center gap-1.5 text-xs" style={{ color: muted }}>
+              <span>Rows</span>
+              <select
+                value={pageSize}
+                onChange={(event) => {
+                  setPageSize(Number(event.target.value))
+                  setPage(1)
+                }}
+                className="rounded-md border px-1.5 py-1 text-xs outline-none"
+                style={{ background: bg, borderColor: border, color: text }}
+                aria-label="Projects per page"
+              >
+                {[10, 20, 50, 100].map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="flex items-center gap-1">
             <button
               disabled={page === 1}

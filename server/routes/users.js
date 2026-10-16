@@ -1,5 +1,5 @@
 import express from 'express';
-import { appState, getPool, hashPassword, listNotificationsForUser } from '../db.js';
+import { appState, deleteNotificationsForUser, getPool, hashPassword, listNotificationsForUser } from '../db.js';
 import { protectRoute, requireRole } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -38,6 +38,15 @@ router.get('/notifications', protectRoute, async (req, res, next) => {
   try {
     const notifications = await listNotificationsForUser(req.user.email);
     return res.json({ notifications });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete('/notifications', protectRoute, async (req, res, next) => {
+  try {
+    await deleteNotificationsForUser(req.user.email);
+    return res.json({ deleted: true });
   } catch (error) {
     return next(error);
   }
