@@ -391,22 +391,9 @@ const normalizeExactProjectValue = (field, value) => {
   }
 
   const normalized = String(value)
-
-    .normalize("NFKD")
-
-    .replace(/[\u0300-\u036f]/g, "")
-
-const normalizeMatchValue = (value) =>
-  String(value ?? "")
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
-
-    .replace(/\s+/g, " ")
-
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "")
 
   return field === "currentStatus"
     ? normalizeProjectStatus(normalized).toLowerCase()
@@ -453,10 +440,8 @@ export const exactProjectMatch = (left, right) =>
 
 export const findExistingProject = (
   { clientId, clientName, year, isow },
-
   existingClients,
-
-  matchedClientIds,
+  matchedClientIds = new Set(),
 ) => {
   if (clientId) {
     const exactIdMatch = existingClients.find(
@@ -464,12 +449,7 @@ export const findExistingProject = (
         !matchedClientIds.has(client.clientId) &&
         normalizeMatchValue(client.clientId) === normalizeMatchValue(clientId),
     )
-
     if (exactIdMatch) return exactIdMatch
-        normalizeMatchValue(client.clientId) ===
-          normalizeMatchValue(clientId),
-    );
-    if (exactIdMatch) return exactIdMatch;
   }
 
   const normalizedName = normalizeMatchValue(clientName)
@@ -488,53 +468,20 @@ export const findExistingProject = (
     if (exactIsowMatches.length === 1) return exactIsowMatches[0]
   }
 
-  const compatibleYear = (client) => {
-    const existingYear = Number(client.year) || null
-
-    return !year || !existingYear || existingYear === Number(year)
-  }
-
-  const eligibleClients = existingClients.filter(
-    (client) =>
-      !matchedClientIds.has(client.clientId) && compatibleYear(client),
-  )
-
-  if (normalizedIsow) {
-    const exactIsowMatches = eligibleClients.filter(
-      (client) => normalizeMatchValue(client.isow) === normalizedIsow,
-    )
-
-    if (exactIsowMatches.length === 1) return exactIsowMatches[0]
-  }
-
-  const candidates = existingClients.filter((client) => {
-    if (matchedClientIds.has(client.clientId)) return false
-
+  const candidates = eligibleClients.filter((client) => {
     const existingName = normalizeMatchValue(client.clientName)
-
     if (!normalizedName || existingName !== normalizedName) return false
-
     if (!compatibleYear(client)) return false
-
-    const existingIsow = normalizeMatchValue(client.isow)
-
-    if (!normalizedName || existingName !== normalizedName) return false
-
-    if (!compatibleYear(client)) return false
-
     const existingIsow = normalizeMatchValue(client.isow)
     if (normalizedIsow && existingIsow && existingIsow !== normalizedIsow) {
       return false
     }
-
     return true
   })
-
   if (normalizedIsow) {
     const exactIsowCandidates = candidates.filter(
       (client) => normalizeMatchValue(client.isow) === normalizedIsow,
     )
-
     if (exactIsowCandidates.length === 1) return exactIsowCandidates[0]
   }
 

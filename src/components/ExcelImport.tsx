@@ -212,14 +212,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
     rowsToImport: number[],
     rejectedDuplicateRows: number[],
   ) => {
-    if (
-      !selectedFile ||
-      (!rowsToImport.length && !rejectedDuplicateRows.length)
-    ) {
-      return;
-    }
-  const confirmImport = async (rowsToImport: number[]) => {
-    if (!selectedFile || !rowsToImport.length) return;
+    if (!selectedFile || (!rowsToImport.length && !rejectedDuplicateRows.length)) return;
     setConfirming(true);
     setError("");
     const body = new FormData();
@@ -278,8 +271,6 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
   const rejectAll = () => {
     setSelectedRows(new Set());
     setDuplicateDecisions(new Map());
-  const rejectAll = () => {
-    setSelectedRows(new Set());
     setPreviewRows([]);
     setSelectedFile(null);
     setStage("idle");
@@ -544,14 +535,6 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                       }}
                     />
                     Select all non-duplicate rows
-                        setSelectedRows(
-                          event.target.checked
-                            ? new Set(previewRows.filter((row) => !row.duplicateInFile).map((row) => row.rowNumber))
-                            : new Set(),
-                        );
-                      }}
-                    />
-                    Select all new or matched projects
                   </label>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -571,9 +554,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => void confirmImport([...selectedRows], rejectedDuplicateRows)}
-                      disabled={confirming || unresolvedDuplicates.length > 0 || (!selectedRows.size && !rejectedDuplicateRows.length)}
-                      onClick={() => void confirmImport(previewRows.filter((row) => !row.duplicateInFile).map((row) => row.rowNumber))}
+                      onClick={() => void confirmImport(previewRows.filter((row) => !row.duplicateInFile).map((row) => row.rowNumber), rejectedDuplicateRows)}
                       disabled={confirming || !previewRows.some((row) => !row.duplicateInFile)}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
                       style={{ background: "#1E40AF" }}
@@ -582,7 +563,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => void confirmImport([...selectedRows])}
+                      onClick={() => void confirmImport([...selectedRows], rejectedDuplicateRows)}
                       disabled={confirming || selectedRows.size === 0}
                       className="px-3 py-1.5 rounded-lg border text-xs font-semibold disabled:opacity-50"
                       style={{ borderColor: "#16A34A", color: "#15803D" }}
@@ -667,8 +648,6 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                                   decideDuplicate(r.rowNumber, event.target.checked ? "accept" : "reject");
                                   return;
                                 }
-                              disabled={r.duplicateInFile || confirming}
-                              onChange={(event) => {
                                 setSelectedRows((current) => {
                                   const next = new Set(current);
                                   if (event.target.checked) next.add(r.rowNumber);
@@ -736,8 +715,6 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                                   </button>
                                 </>
                               ) : (
-                              </span>
-                              {!r.duplicateInFile && (
                                 <>
                                   <button
                                     type="button"

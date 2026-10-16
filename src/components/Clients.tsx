@@ -20,15 +20,12 @@ import {
 import { showCloudOrbixAlert } from "../alert"
 
 import { createProjectIdAllocator } from "../../shared/project-id.js"
-<<<<<<< HEAD
 import {
   normalizeProjectStatus,
   PROJECT_STATUSES,
   PROJECT_STATUS_COLORS,
 } from "../../shared/project-status.js"
-=======
 import type { RfpProjectPrefill } from "./RfpEstimation"
->>>>>>> origin/main
 
 interface ClientsProps {
   dark: boolean
@@ -43,15 +40,12 @@ interface ClientsProps {
   onOpenProject?: (clientId: string) => void
 
   initialSearch?: string
-<<<<<<< HEAD
   requestedEditId?: string | null
   onEditRequestHandled?: () => void
-=======
 
   newProjectSeed?: RfpProjectPrefill | null
 
   onProjectSeedConsumed?: () => void
->>>>>>> origin/main
 }
 
 interface ApiClient {
@@ -370,13 +364,10 @@ export default function Clients({
   onOpenProject,
 
   initialSearch = "",
-<<<<<<< HEAD
   requestedEditId = null,
   onEditRequestHandled,
-=======
   newProjectSeed,
   onProjectSeedConsumed,
->>>>>>> origin/main
 }: ClientsProps) {
   const [clientList, setClientList] = useState<ClientRow[]>([])
   const [clientsLoaded, setClientsLoaded] = useState(false)
