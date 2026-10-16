@@ -499,3 +499,61 @@ test("matches projects by normalized identity when workbook IDs use another sche
     null,
   )
 })
+
+test("matches projects by normalized identity when workbook IDs use another scheme", () => {
+  const existing = [
+    {
+      id: 10,
+      clientId: "PSOCT26001",
+      clientName: "North & Star – Cloud Migration",
+      year: 2026,
+      isow: "ISOW-100",
+    },
+    {
+      id: 11,
+      clientId: "PSOCT26002",
+      clientName: "North Star Cloud Migration",
+      year: 2026,
+      isow: "ISOW-101",
+    },
+  ]
+
+  const matched = findExistingProject(
+    {
+      clientId: "LEGACY-0042",
+      clientName: "North and Star Cloud Migration",
+      year: 2026,
+      isow: "ISOW-100",
+    },
+    existing,
+    new Set(),
+  )
+
+  assert.equal(matched.clientId, "PSOCT26001")
+  assert.equal(
+    findExistingProject(
+      {
+        clientId: "LEGACY-0099",
+        clientName: "Renamed project in the workbook",
+        year: 2026,
+        isow: "ISOW-101",
+      },
+      existing,
+      new Set(),
+    )?.clientId,
+    "PSOCT26002",
+  )
+  assert.equal(
+    findExistingProject(
+      {
+        clientId: "PSOCT26001",
+        clientName: "North and Star Cloud Migration",
+        year: 2026,
+        isow: "ISOW-100",
+      },
+      existing,
+      new Set(["PSOCT26001"]),
+    ),
+    null,
+  )
+})

@@ -103,6 +103,14 @@ const normalizeSourceIdentity = (value) =>
 
     .replace(/[^a-z0-9]/g, "")
 
+const normalizeSourceIdentity = (value) =>
+  String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+
 const hasSourceColumn = (headers, ...aliases) =>
   aliases.some((alias) =>
     headers.some(
@@ -174,6 +182,22 @@ router.post(
       await workbook.xlsx.load(req.file.buffer)
 
       const records = worksheetRecords(workbook.worksheets[0])
+      const previewOnly = req.body.preview === "true"
+      let selectedRows = null
+      if (!previewOnly) {
+        try {
+          const parsedSelectedRows = JSON.parse(req.body.selectedRows || "[]")
+          if (
+            !Array.isArray(parsedSelectedRows) ||
+            parsedSelectedRows.some((rowNumber) => !Number.isInteger(rowNumber))
+          ) {
+            return res.status(400).json({ message: "Selected import rows are invalid." })
+          }
+          selectedRows = new Set(parsedSelectedRows)
+        } catch {
+          return res.status(400).json({ message: "Selected import rows are invalid." })
+        }
+      }
 
       const previewOnly = req.body.preview === "true"
 
@@ -326,6 +350,19 @@ router.post(
       }
 
       const matchedExistingIds = new Set()
+      const seenSourceIds = new Set()
+      const seenSourceIsows = new Set()
+      const duplicateInputRows = new Set()
+      for (const record of records) {
+        const sourceId = normalizeSourceIdentity(clientIdFor(record))
+        const sourceIsow = normalizeSourceIdentity(value(record, "ISOW"))
+        const duplicate =
+          (sourceId && seenSourceIds.has(sourceId)) ||
+          (sourceIsow && seenSourceIsows.has(sourceIsow))
+        if (duplicate) duplicateInputRows.add(record.rowNumber)
+        if (sourceId) seenSourceIds.add(sourceId)
+        if (sourceIsow) seenSourceIsows.add(sourceIsow)
+      }
 
       const inputNameCounts = new Map()
 
@@ -496,6 +533,7 @@ router.post(
 
       for (let index = 0; index < records.length; index += 1) {
         const record = records[index]
+        if (!previewOnly && !selectedRows.has(record.rowNumber)) continue
 
         const sourceClientId = clientIdFor(record)
 
@@ -506,6 +544,23 @@ router.post(
         if (!originalClientName || managerName(record) === "Unassigned") {
           failed += 1
 
+          continue
+        }
+
+        if (duplicateInputRows.has(record.rowNumber)) {
+          duplicates += 1
+          if (previewOnly) {
+            importedRecords.push({
+              rowNumber: record.rowNumber,
+              clientId: sourceClientId,
+              clientName,
+              manager: managerName(record),
+              year: Number(value(record, "Year")) || new Date().getFullYear(),
+              isow: String(value(record, "ISOW")),
+              importKind: "Repeated in this workbook",
+              duplicateInFile: true,
+            })
+          }
           continue
         }
 
@@ -823,6 +878,9 @@ router.post(
 
             if (isDuplicate) duplicates += 1
           } else if (isDuplicate) {
+        if (previewOnly) {
+          if (existingTarget) {
+            updated += 1
             duplicates += 1
           } else {
             imported += 1
@@ -857,6 +915,15 @@ router.post(
               : undefined,
           })
 
+          importedRecords.push({
+            ...data,
+            rowNumber: record.rowNumber,
+            manager: data.accountManager,
+            importKind: existingTarget
+              ? `Update existing project ${existingTarget.clientId}`
+              : "Add as a new project",
+            duplicateInFile: false,
+          })
           continue
         }
 

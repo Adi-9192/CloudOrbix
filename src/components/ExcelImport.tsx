@@ -218,6 +218,8 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
     ) {
       return;
     }
+  const confirmImport = async (rowsToImport: number[]) => {
+    if (!selectedFile || !rowsToImport.length) return;
     setConfirming(true);
     setError("");
     const body = new FormData();
@@ -276,6 +278,8 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
   const rejectAll = () => {
     setSelectedRows(new Set());
     setDuplicateDecisions(new Map());
+  const rejectAll = () => {
+    setSelectedRows(new Set());
     setPreviewRows([]);
     setSelectedFile(null);
     setStage("idle");
@@ -540,6 +544,14 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                       }}
                     />
                     Select all non-duplicate rows
+                        setSelectedRows(
+                          event.target.checked
+                            ? new Set(previewRows.filter((row) => !row.duplicateInFile).map((row) => row.rowNumber))
+                            : new Set(),
+                        );
+                      }}
+                    />
+                    Select all new or matched projects
                   </label>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -561,6 +573,17 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                       type="button"
                       onClick={() => void confirmImport([...selectedRows], rejectedDuplicateRows)}
                       disabled={confirming || unresolvedDuplicates.length > 0 || (!selectedRows.size && !rejectedDuplicateRows.length)}
+                      onClick={() => void confirmImport(previewRows.filter((row) => !row.duplicateInFile).map((row) => row.rowNumber))}
+                      disabled={confirming || !previewRows.some((row) => !row.duplicateInFile)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                      style={{ background: "#1E40AF" }}
+                    >
+                      Confirm all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void confirmImport([...selectedRows])}
+                      disabled={confirming || selectedRows.size === 0}
                       className="px-3 py-1.5 rounded-lg border text-xs font-semibold disabled:opacity-50"
                       style={{ borderColor: "#16A34A", color: "#15803D" }}
                     >
@@ -630,6 +653,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                           className="border-b"
                           style={{
                             borderColor: border,
+                            opacity: r.duplicateInFile ? 0.6 : 1,
                           }}
                         >
                           <td className="px-4 py-2.5">
@@ -643,6 +667,8 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                                   decideDuplicate(r.rowNumber, event.target.checked ? "accept" : "reject");
                                   return;
                                 }
+                              disabled={r.duplicateInFile || confirming}
+                              onChange={(event) => {
                                 setSelectedRows((current) => {
                                   const next = new Set(current);
                                   if (event.target.checked) next.add(r.rowNumber);
@@ -710,6 +736,8 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                                   </button>
                                 </>
                               ) : (
+                              </span>
+                              {!r.duplicateInFile && (
                                 <>
                                   <button
                                     type="button"
@@ -758,6 +786,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                   </button>
                   <p className="text-xs my-auto ml-2" style={{ color: muted }}>
                     Review every exact duplicate before confirming. Accepted repeated names are imported as separate projects with numbered names.
+                    Nothing is added or updated until you confirm. Repeated rows in this workbook cannot be selected.
                   </p>
                 </div>
               </div>
@@ -779,6 +808,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                 {summary.imported} project{summary.imported === 1 ? "" : "s"} added ·{" "}
                 {summary.updated} existing project{summary.updated === 1 ? "" : "s"} updated ·{" "}
                 {summary.duplicates} exact duplicate{summary.duplicates === 1 ? "" : "s"} reviewed ·{" "}
+                {summary.duplicates} duplicate{summary.duplicates === 1 ? "" : "s"} skipped ·{" "}
                 {summary.failed} failed
               </p>
               <div className="grid grid-cols-3 gap-3 mb-6">
