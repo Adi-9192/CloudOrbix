@@ -20,11 +20,15 @@ import {
 import { showCloudOrbixAlert } from "../alert"
 
 import { createProjectIdAllocator } from "../../shared/project-id.js"
+<<<<<<< HEAD
 import {
   normalizeProjectStatus,
   PROJECT_STATUSES,
   PROJECT_STATUS_COLORS,
 } from "../../shared/project-status.js"
+=======
+import type { RfpProjectPrefill } from "./RfpEstimation"
+>>>>>>> origin/main
 
 interface ClientsProps {
   dark: boolean
@@ -39,8 +43,15 @@ interface ClientsProps {
   onOpenProject?: (clientId: string) => void
 
   initialSearch?: string
+<<<<<<< HEAD
   requestedEditId?: string | null
   onEditRequestHandled?: () => void
+=======
+
+  newProjectSeed?: RfpProjectPrefill | null
+
+  onProjectSeedConsumed?: () => void
+>>>>>>> origin/main
 }
 
 interface ApiClient {
@@ -359,8 +370,13 @@ export default function Clients({
   onOpenProject,
 
   initialSearch = "",
+<<<<<<< HEAD
   requestedEditId = null,
   onEditRequestHandled,
+=======
+  newProjectSeed,
+  onProjectSeedConsumed,
+>>>>>>> origin/main
 }: ClientsProps) {
   const [clientList, setClientList] = useState<ClientRow[]>([])
   const [clientsLoaded, setClientsLoaded] = useState(false)
@@ -524,6 +540,33 @@ export default function Clients({
   useEffect(() => {
     void loadClients()
   }, [])
+
+  useEffect(() => {
+    if (!newProjectSeed) return
+    setEditingClientId(null)
+    setStep(0)
+    setForm({
+      ...EMPTY_FORM,
+      id: nextProjectId(clientList),
+      name: newProjectSeed.accountName,
+      manager: newProjectSeed.requestFromBy,
+      region: newProjectSeed.region,
+      revenue: String(newProjectSeed.revenue),
+      hyperscaler: newProjectSeed.cloud.toUpperCase(),
+      projectType: newProjectSeed.projectType === "Non Std" ? "Non-STD" : "STD",
+      projectBrief: [
+        ["Project Overview", newProjectSeed.projectOverview],
+        ["Assumption", newProjectSeed.assumption],
+        ["In Scope", newProjectSeed.inScope],
+        ["Out of Scope", newProjectSeed.outOfScope],
+      ].filter(([, value]) => value).map(([label, value]) => `${label}:\n${value}`).join("\n\n"),
+      plannedStartDate: newProjectSeed.initiatedAt,
+      actualStartDate: newProjectSeed.initiatedAt,
+      status: "On-track",
+    })
+    setShowAdd(true)
+    onProjectSeedConsumed?.()
+  }, [newProjectSeed])
 
   useEffect(() => {
     const token = localStorage.getItem("clmp-token")
@@ -1905,7 +1948,9 @@ export default function Clients({
                                   {projectUser.roles.join(", ")}
                                 </option>
                               ))
-                            : f.options?.map((o) => (
+                            : (f.key === "region" && form.region && !f.options?.includes(form.region)
+                                ? [...(f.options || []), form.region]
+                                : f.options || []).map((o) => (
                                 <option key={o} value={o}>
                                   {o}
                                 </option>
