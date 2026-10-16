@@ -57,6 +57,26 @@ type AccessRequest = {
   createdAt: string;
 };
 
+type RfpApprovalRequest = {
+  id: number;
+  request_type: "create" | "update" | "delete";
+  project_id: number | null;
+  project_name: string | null;
+  requester_email: string;
+  requester_name: string;
+  created_at: string;
+  payload: {
+    projectName?: string;
+    clientName?: string;
+    year?: number;
+    currency?: string;
+    startMonth?: string;
+    endMonth?: string;
+    endMonthHalf?: boolean;
+    resources?: Array<{ name: string; grade: string; resourceType: string; allowancePercent?: number; allocations?: Record<string, number | string> }>;
+  } | null;
+};
+
 type AdminProps = {
   dark: boolean;
   onOpenProject?: (clientId: string) => void;
@@ -138,6 +158,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
   const [busy, setBusy] = useState(false);
   const [pendingClients, setPendingClients] = useState<PendingClient[]>([]);
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
+  const [rfpApprovals, setRfpApprovals] = useState<RfpApprovalRequest[]>([]);
   const [focusedApproval, setFocusedApproval] = useState<{ kind: string; id: string; clientId?: string } | null>(null);
   const [reviewClientId, setReviewClientId] = useState<string | null>(null);
   const [reviewDetails, setReviewDetails] = useState<ProjectReview | null>(null);
@@ -196,6 +217,18 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
   }, [tab]);
 
   useEffect(() => {
+    if (tab !== "approvals") return;
+    const token = localStorage.getItem("clmp-token");
+    fetch("/api/rfp/approvals", { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.message || "Unable to load RFP approvals.");
+        setRfpApprovals(payload.requests || []);
+      })
+      .catch(() => setRfpApprovals([]));
+  }, [tab]);
+
+  useEffect(() => {
     const handleApprovalFocus = (event: Event) => {
       const focus = (event as CustomEvent<{ kind: string; id: string; clientId?: string }>).detail;
       setFocusedApproval(focus);
@@ -239,12 +272,14 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
       : focusedApproval.id;
     const elementId = focusedApproval.kind === "access"
       ? `access-request-${requestId}`
+      : focusedApproval.kind === "rfp"
+        ? `rfp-approval-${focusedApproval.id}`
       : `project-approval-${focusedApproval.id}`;
     const target = document.getElementById(elementId);
     if (!target) return;
     target.scrollIntoView({ behavior: "smooth", block: "center" });
     localStorage.removeItem("clmp-admin-approval-focus");
-  }, [tab, focusedApproval, accessRequests, pendingClients]);
+  }, [tab, focusedApproval, accessRequests, pendingClients, rfpApprovals]);
 
   const reviewClient = async (clientId: string, action: "approve" | "reject") => {
     const token = localStorage.getItem("clmp-token");
@@ -278,6 +313,23 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
         error instanceof Error ? error.message : `Unable to ${decision} access request.`,
         "error",
       );
+    }
+  };
+
+  const reviewRfpApproval = async (requestId: number, decision: "approve" | "reject") => {
+    const token = localStorage.getItem("clmp-token");
+    try {
+      const response = await fetch(`/api/rfp/approvals/${requestId}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ decision }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || `Unable to ${decision} RFP request.`);
+      setRfpApprovals((current) => current.filter((request) => request.id !== requestId));
+      showCloudOrbixAlert(`RFP request ${decision === "approve" ? "approved" : "rejected"}.`, "success");
+    } catch (error) {
+      showCloudOrbixAlert(error instanceof Error ? error.message : `Unable to ${decision} RFP request.`, "error");
     }
   };
 
@@ -621,6 +673,47 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
             <h3 className="font-semibold text-sm">Pending project approvals ({pendingClients.length})</h3>
             <p className="text-xs mt-1" style={{ color: muted }}>Review project additions, edits, and completion requests.</p>
           </div>
+          {rfpApprovals.length > 0 && (
+            <section aria-label="Pending RFP estimate approvals">
+              <div className="px-5 py-3 border-b font-semibold text-xs" style={{ borderColor: border, background: subtle }}>
+                RFP estimate requests ({rfpApprovals.length})
+              </div>
+              {rfpApprovals.map((request) => (
+                <div id={`rfp-approval-${request.id}`} key={request.id} className="px-5 py-4 border-b space-y-3" style={{ borderColor: border }}>
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold">{request.payload?.projectName || request.project_name || "Estimate"}</div>
+                      <div className="text-xs mt-1" style={{ color: muted }}>
+                        {request.request_type} request · {request.payload?.clientName || "Project deletion"} · Requested by {request.requester_name} ({request.requester_email}) · {new Date(request.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => void reviewRfpApproval(request.id, "reject")} className="px-3 py-2 rounded-lg text-xs font-semibold border text-red-600" style={{ borderColor: "#FECACA" }}>Reject</button>
+                      <button onClick={() => void reviewRfpApproval(request.id, "approve")} className="px-3 py-2 rounded-lg text-xs font-semibold text-white" style={{ background: "#16A34A" }}>Approve</button>
+                    </div>
+                  </div>
+                  {request.payload && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer font-semibold" style={{ color: "#1E40AF" }}>Review requested estimate</summary>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-3" style={{ color: muted }}>
+                        <span>Year: {request.payload.year}</span>
+                        <span>Currency: {request.payload.currency}</span>
+                        <span>Period: {request.payload.startMonth} to {request.payload.endMonth}{request.payload.endMonthHalf ? " (15 days)" : ""}</span>
+                      </div>
+                      <div className="mt-2 divide-y" style={{ borderColor: border }}>
+                        {(request.payload.resources || []).map((resource, index) => (
+                          <div key={`${resource.name}-${index}`} className="py-2" style={{ color: text }}>
+                            <span className="font-semibold">{resource.name}</span> · {resource.grade} · {resource.resourceType} · Allowance {Number(resource.allowancePercent || 0)}%
+                            <div className="mt-1" style={{ color: muted }}>Monthly FTE: {Object.entries(resource.allocations || {}).map(([month, fte]) => `${month}: ${fte}`).join(" · ") || "None"}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </section>
+          )}
           {accessRequests.length > 0 && (
             <section aria-label="Pending project access requests">
               <div className="px-5 py-3 border-b font-semibold text-xs" style={{ borderColor: border, background: subtle }}>
@@ -701,7 +794,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
                 <button onClick={() => void reviewClient(client.clientId, "approve")} className="px-3 py-2 rounded-lg text-xs font-semibold text-white" style={{ background: "#16A34A" }}><Check className="w-3.5 h-3.5 inline mr-1" />Approve</button>
               </div>
             </div>
-          )) : accessRequests.length === 0 ? <p className="p-5 text-xs" style={{ color: muted }}>No pending approvals.</p> : null}
+          )) : accessRequests.length === 0 && rfpApprovals.length === 0 ? <p className="p-5 text-xs" style={{ color: muted }}>No pending approvals.</p> : null}
         </div>
       )}
 

@@ -114,6 +114,9 @@ export default function App() {
     localStorage.removeItem("clmp-user");
     localStorage.removeItem("clmp-project-id");
     localStorage.removeItem("clmp-repository-documents");
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith("clmp-rfp-draft-")) sessionStorage.removeItem(key);
+    }
     setPage("dashboard");
     window.history.replaceState({ page: "dashboard" }, "", "/");
     setLoggedIn(false);
@@ -141,7 +144,7 @@ export default function App() {
       case "reports":     return <Reports dark={dark} />;
       case "audit":       return user.roles.includes("Admin") ? <AuditLogs dark={dark} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
       case "admin":       return user.roles.includes("Admin") ? <Admin dark={dark} user={user} onOpenProject={(id) => openProject(id)} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
-      case "rfp":         return user.roles.includes("Admin") ? <RfpEstimation dark={dark} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
+      case "rfp":         return <RfpEstimation dark={dark} isAdmin={user.roles.includes("Admin")} userId={user.id} />;
       case "profile":     return <ProfilePage dark={dark} user={user} onOpenProject={(id) => openProject(id)} />;
       case "risks":       return <RiskRegisterPage dark={dark} user={user} onOpenProject={(id) => openProject(id, "project")} />;
       case "help":        return <SimplePage page={page} dark={dark} />;

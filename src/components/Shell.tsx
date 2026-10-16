@@ -167,6 +167,13 @@ export default function Shell({ page, onPageChange, onLogout, dark, user, onTogg
       onPageChange("admin");
       return;
     }
+    if (action === "rfp_approval" && user?.roles.includes("Admin")) {
+      const focus = { kind: "rfp", id: requestId };
+      localStorage.setItem("clmp-admin-approval-focus", JSON.stringify(focus));
+      window.dispatchEvent(new CustomEvent("cloudorbix-focus-approval", { detail: focus }));
+      onPageChange("admin");
+      return;
+    }
     if (clientId) {
       onOpenProject?.(clientId);
       return;
