@@ -92,19 +92,6 @@ const clientIdFor = (record) =>
 
 const normalizeSourceIdentity = (value) =>
   String(value ?? "")
-
-    .normalize("NFKD")
-
-    .replace(/[\u0300-\u036f]/g, "")
-
-    .trim()
-
-    .toLowerCase()
-
-    .replace(/[^a-z0-9]/g, "")
-
-const normalizeSourceIdentity = (value) =>
-  String(value ?? "")
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
@@ -182,23 +169,6 @@ router.post(
       await workbook.xlsx.load(req.file.buffer)
 
       const records = worksheetRecords(workbook.worksheets[0])
-      const previewOnly = req.body.preview === "true"
-      let selectedRows = null
-      if (!previewOnly) {
-        try {
-          const parsedSelectedRows = JSON.parse(req.body.selectedRows || "[]")
-          if (
-            !Array.isArray(parsedSelectedRows) ||
-            parsedSelectedRows.some((rowNumber) => !Number.isInteger(rowNumber))
-          ) {
-            return res.status(400).json({ message: "Selected import rows are invalid." })
-          }
-          selectedRows = new Set(parsedSelectedRows)
-        } catch {
-          return res.status(400).json({ message: "Selected import rows are invalid." })
-        }
-      }
-
       const previewOnly = req.body.preview === "true"
 
       let selectedRows = null
@@ -553,7 +523,7 @@ router.post(
             importedRecords.push({
               rowNumber: record.rowNumber,
               clientId: sourceClientId,
-              clientName,
+              clientName: String(value(record, "Customer Name", "Client Name")).trim(),
               manager: managerName(record),
               year: Number(value(record, "Year")) || new Date().getFullYear(),
               isow: String(value(record, "ISOW")),
@@ -875,13 +845,7 @@ router.post(
         if (previewOnly) {
           if (existingTarget) {
             updated += 1
-
             if (isDuplicate) duplicates += 1
-          } else if (isDuplicate) {
-        if (previewOnly) {
-          if (existingTarget) {
-            updated += 1
-            duplicates += 1
           } else {
             imported += 1
           }
@@ -913,16 +877,6 @@ router.post(
                 ? "update"
                 : "new"
               : undefined,
-          })
-
-          importedRecords.push({
-            ...data,
-            rowNumber: record.rowNumber,
-            manager: data.accountManager,
-            importKind: existingTarget
-              ? `Update existing project ${existingTarget.clientId}`
-              : "Add as a new project",
-            duplicateInFile: false,
           })
           continue
         }
