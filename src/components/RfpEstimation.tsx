@@ -268,25 +268,35 @@ export default function RfpEstimation({
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [cards, projects] = await Promise.all([
+      const [cardsResult, projectsResult] = await Promise.allSettled([
         api(isAdmin ? "/rates" : `/rates/options/${estimate.year}`),
         api("/projects"),
       ]);
-      setRatePayload(
-        isAdmin
-          ? cards
-          : {
-              resourceVersions: [],
-              resourceRates: [],
-              currencyVersions: [],
-              exchangeRates: [],
-              resourceTypes: cards.resourceTypes,
-              currencies: cards.currencies,
-              grades: cards.grades,
-            },
-      );
-      setEstimates(projects.projects || []);
-      setError("");
+      const errors: string[] = [];
+      if (cardsResult.status === "fulfilled") {
+        const cards = cardsResult.value;
+        setRatePayload(
+          isAdmin
+            ? cards
+            : {
+                resourceVersions: [],
+                resourceRates: [],
+                currencyVersions: [],
+                exchangeRates: [],
+                resourceTypes: cards.resourceTypes,
+                currencies: cards.currencies,
+                grades: cards.grades,
+              },
+        );
+      } else {
+        errors.push(cardsResult.reason instanceof Error ? cardsResult.reason.message : "Unable to load RFP rate data.");
+      }
+      if (projectsResult.status === "fulfilled") {
+        setEstimates(projectsResult.value.projects || []);
+      } else {
+        errors.push(projectsResult.reason instanceof Error ? projectsResult.reason.message : "Unable to load saved estimates.");
+      }
+      setError(errors.join(" "));
     } catch (reason) {
       setError(
         reason instanceof Error
