@@ -152,6 +152,7 @@ export default function Shell({
     })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
+<<<<<<< HEAD
         const alerts = (payload?.notifications || []).map((item: any) => ({
           id: String(item.id ?? `${item.title || item.message || "notification"}-${item.createdAt || item.created_at || ""}`),
           text: item.title || item.message || "Project update",
@@ -161,6 +162,7 @@ export default function Shell({
           read: Boolean(item.read),
           metadata: item.metadata && typeof item.metadata === "object" ? item.metadata : {},
         }));
+=======
         const alerts = (payload?.notifications || [])
           .slice(0, 6)
           .map((item: any) => ({
@@ -177,6 +179,7 @@ export default function Shell({
                 ? item.metadata
                 : {},
           }));
+>>>>>>> origin/main
         setNotifications(alerts);
       })
       .catch(() => setNotifications([]));
@@ -439,6 +442,7 @@ export default function Shell({
                       </div>
                     </div>
                   </div>
+<<<<<<<<< Temporary merge branch 1
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] px-2 py-1 rounded-full bg-white text-blue-700 font-bold">{notifications.filter((notification) => !notification.read).length} new</span>
                     {notifications.length > 0 && (
@@ -458,6 +462,7 @@ export default function Shell({
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   {notifications.length ? (showAllNotifications ? notifications : notifications.slice(0, 6)).map(n => (
+=========
                   <span className="text-[10px] px-2 py-1 rounded-full bg-white text-blue-700 font-bold">
                     {
                       notifications.filter((notification) => !notification.read)
@@ -468,6 +473,7 @@ export default function Shell({
                 </div>
                 {notifications.length ? (
                   notifications.map((n) => (
+>>>>>>>>> Temporary merge branch 2
                     <button
                       key={n.id}
                       type="button"
@@ -475,6 +481,7 @@ export default function Shell({
                       className="w-full px-5 py-3 border-b flex gap-3 text-left hover:bg-slate-50 cursor-pointer"
                       style={{ borderColor }}
                     >
+<<<<<<<<< Temporary merge branch 1
                       <div className="w-1 rounded-full flex-shrink-0" style={{ background: n.type === "warning" ? "#D97706" : n.type === "success" ? "#16A34A" : "#3B82F6" }} />
                       <div>
                         <div className="text-xs font-semibold mb-1" style={{ color: textBody }}>{n.text}</div>
@@ -483,6 +490,7 @@ export default function Shell({
                       </div>
                     </button>
                   )) : <div className="px-5 py-4 text-xs" style={{ color: textMuted }}>No new alerts</div>}
+=========
                       <div
                         className="w-1 rounded-full flex-shrink-0"
                         style={{
@@ -533,6 +541,7 @@ export default function Shell({
                   >
                     View all alerts
                   </button>
+>>>>>>>>> Temporary merge branch 2
                 </div>
                 {notifications.length > 6 && (
                   <div className="px-4 py-2 text-center">
