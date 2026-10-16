@@ -170,6 +170,88 @@ const emptyEstimate = (): Estimate => {
   };
 };
 
+const restoreEstimateDraft = (value: unknown): Estimate => {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return emptyEstimate();
+
+  const stored = value as Record<string, unknown>;
+  const startMonth = typeof stored.startMonth === "string" ? stored.startMonth : "";
+  const endMonth = typeof stored.endMonth === "string" ? stored.endMonth : "";
+  const oldStart = new Date(`${startMonth}-01T00:00:00Z`);
+  const oldEnd = new Date(`${endMonth}-01T00:00:00Z`);
+  const oldMonthCount = startMonth && endMonth && !Number.isNaN(oldStart.getTime()) && !Number.isNaN(oldEnd.getTime())
+    ? Math.max(0, (oldEnd.getUTCFullYear() - oldStart.getUTCFullYear()) * 12 + oldEnd.getUTCMonth() - oldStart.getUTCMonth() + 1)
+    : 0;
+  const hasDurationMonths = Number.isInteger(Number(stored.durationMonths));
+  const hasDurationDays = Number.isInteger(Number(stored.durationDays));
+  const durationMonths = hasDurationMonths
+    ? Number(stored.durationMonths)
+    : stored.endMonthHalf && oldMonthCount > 0
+      ? oldMonthCount - 1
+      : oldMonthCount || 3;
+  const durationDays = hasDurationDays
+    ? Number(stored.durationDays)
+    : stored.endMonthHalf
+      ? 15
+      : 0;
+  const requestedDate = typeof stored.requestedDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(stored.requestedDate)
+    ? stored.requestedDate
+    : startMonth
+      ? `${startMonth}-01`
+      : today();
+  const anchor = new Date(`${requestedDate.slice(0, 7)}-01T00:00:00Z`);
+  const resources = Array.isArray(stored.resources) ? stored.resources.map((item) => {
+    const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const sourceAllocations = row.allocations && typeof row.allocations === "object"
+      ? row.allocations as Record<string, number | string>
+      : {};
+    const allocations: Record<string, number | string> = {};
+    for (const [key, fte] of Object.entries(sourceAllocations)) {
+      if (/^(month-\d+|days)$/.test(key)) {
+        allocations[key] = fte;
+        continue;
+      }
+      if (!/^\d{4}-\d{2}$/.test(key)) continue;
+      const month = new Date(`${key}-01T00:00:00Z`);
+      const offset = (month.getUTCFullYear() - anchor.getUTCFullYear()) * 12 + month.getUTCMonth() - anchor.getUTCMonth();
+      if (stored.endMonthHalf && key === endMonth && durationDays > 0) allocations.days = fte;
+      else if (offset >= 0 && offset < durationMonths) allocations[`month-${offset + 1}`] = fte;
+    }
+    return {
+      id: typeof row.id === "string" ? row.id : makeId(),
+      name: typeof row.name === "string" ? row.name : "",
+      grade: typeof row.grade === "string" ? row.grade : "",
+      resourceType: RESOURCE_TYPES.includes(row.resourceType as ResourceType) ? row.resourceType as ResourceType : "Standard",
+      allocations,
+    };
+  }) : emptyEstimate().resources;
+
+  return {
+    ...emptyEstimate(),
+    ...stored,
+    accountName: String(stored.accountName || stored.projectName || ""),
+    year: Number(stored.year) || new Date().getFullYear(),
+    currency: String(stored.currency || "INR"),
+    projectType: String(stored.projectType || "Std"),
+    projectStatus: String(stored.projectStatus || "Tentative"),
+    requestFromBy: String(stored.requestFromBy || ""),
+    requestorEmail: String(stored.requestorEmail || ""),
+    requestedDate,
+    region: String(stored.region || ""),
+    cloud: String(stored.cloud || ""),
+    projectOverview: String(stored.projectOverview || ""),
+    assumption: String(stored.assumption || ""),
+    outOfScope: String(stored.outOfScope || ""),
+    inScope: String(stored.inScope || ""),
+    durationMonths,
+    durationDays,
+    allowancePercent: Number(stored.allowancePercent || 0),
+    workingDaysPerMonth: Number(stored.workingDaysPerMonth) || 22,
+    status: String(stored.status || "Draft"),
+    resources,
+  } as Estimate;
+};
+
 export default function RfpEstimation({
   dark,
   isAdmin,
@@ -186,11 +268,7 @@ export default function RfpEstimation({
   );
   const [estimate, setEstimate] = useState<Estimate>(() => {
     try {
-      return (
-        JSON.parse(
-          sessionStorage.getItem(`clmp-rfp-draft-${userId}`) || "null",
-        ) || emptyEstimate()
-      );
+      return restoreEstimateDraft(JSON.parse(sessionStorage.getItem(`clmp-rfp-draft-${userId}`) || "null"));
     } catch {
       return emptyEstimate();
     }
@@ -684,6 +762,20 @@ export default function RfpEstimation({
       setError("");
       return;
     }
+    const durationMonths = Number(estimate.durationMonths);
+    const durationDays = Number(estimate.durationDays);
+    if (
+      !Number.isInteger(durationMonths) ||
+      durationMonths < 0 ||
+      durationMonths > 120 ||
+      !Number.isInteger(durationDays) ||
+      durationDays < 0 ||
+      durationDays > 30 ||
+      (durationMonths === 0 && durationDays === 0)
+    ) {
+      setError("Enter at least one month, or a duration of 1 to 30 days.");
+      return;
+    }
     setBusy(true);
     setError("");
     setMessage("");
@@ -691,6 +783,8 @@ export default function RfpEstimation({
       const body = {
         ...estimate,
         accountName: estimate.accountName,
+        durationMonths,
+        durationDays,
         status,
         resources: estimate.resources.map(({ name, grade, resourceType, allocations }) => ({ name, grade, resourceType, allocations })),
       };
