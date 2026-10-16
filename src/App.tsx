@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import Login from "./components/Login";
 import Shell, { type Page } from "./components/Shell";
 import LoadingScreen from "./components/LoadingScreen";
+import type { RfpProjectPrefill } from "./components/RfpEstimation";
 
 const Dashboard = lazy(() => import("./components/Dashboard"));
 const Clients = lazy(() => import("./components/Clients"));
@@ -52,6 +53,7 @@ export default function App() {
   const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem("clmp-project-id"));
   const [repositoryDocuments, setRepositoryDocuments] = useState(() => localStorage.getItem("clmp-repository-documents") === "true");
   const [globalSearch, setGlobalSearch] = useState("");
+  const [rfpProjectSeed, setRfpProjectSeed] = useState<RfpProjectPrefill | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setBooting(false), 700);
@@ -84,6 +86,11 @@ export default function App() {
     setRepositoryDocuments(readOnly);
     localStorage.setItem("clmp-repository-documents", String(readOnly));
     navigateTo(destination);
+  };
+
+  const openRfpProject = (seed: RfpProjectPrefill) => {
+    setRfpProjectSeed(seed);
+    navigateTo("clients");
   };
 
   const handleGlobalSearch = (query: string) => {
@@ -134,7 +141,7 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case "dashboard":   return <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
-      case "clients":     return <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
+      case "clients":     return <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} />;
       case "project":     return projectId ? <ProjectPage dark={dark} clientId={projectId} user={user} onBack={() => navigateTo("clients")} onOpenDocuments={() => navigateTo("documents")} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
       case "documents":  return projectId ? <DocumentsPage dark={dark} clientId={projectId} readOnly={repositoryDocuments} onBack={() => navigateTo(repositoryDocuments ? "repository" : "project")} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
       case "repository": return <ProjectRepository dark={dark} onOpenProject={(id) => openProject(id, "documents")} />;
@@ -144,7 +151,7 @@ export default function App() {
       case "reports":     return <Reports dark={dark} />;
       case "audit":       return user.roles.includes("Admin") ? <AuditLogs dark={dark} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
       case "admin":       return user.roles.includes("Admin") ? <Admin dark={dark} user={user} onOpenProject={(id) => openProject(id)} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
-      case "rfp":         return <RfpEstimation dark={dark} isAdmin={user.roles.includes("Admin")} userId={user.id} />;
+      case "rfp":         return <RfpEstimation dark={dark} isAdmin={user.roles.includes("Admin")} userId={user.id} onMoveToProject={openRfpProject} />;
       case "profile":     return <ProfilePage dark={dark} user={user} onOpenProject={(id) => openProject(id)} />;
       case "risks":       return <RiskRegisterPage dark={dark} user={user} onOpenProject={(id) => openProject(id, "project")} />;
       case "help":        return <SimplePage page={page} dark={dark} />;

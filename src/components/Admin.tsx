@@ -66,14 +66,24 @@ type RfpApprovalRequest = {
   requester_name: string;
   created_at: string;
   payload: {
-    projectName?: string;
-    clientName?: string;
+    accountName?: string;
     year?: number;
     currency?: string;
-    startMonth?: string;
-    endMonth?: string;
-    endMonthHalf?: boolean;
-    resources?: Array<{ name: string; grade: string; resourceType: string; allowancePercent?: number; allocations?: Record<string, number | string> }>;
+    projectType?: string;
+    projectStatus?: string;
+    requestFromBy?: string;
+    requestorEmail?: string;
+    requestedDate?: string;
+    region?: string;
+    cloud?: string;
+    durationMonths?: number;
+    durationDays?: number;
+    allowancePercent?: number;
+    projectOverview?: string;
+    assumption?: string;
+    outOfScope?: string;
+    inScope?: string;
+    resources?: Array<{ name: string; grade: string; resourceType: string; allocations?: Record<string, number | string> }>;
   } | null;
 };
 
@@ -682,9 +692,9 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
                 <div id={`rfp-approval-${request.id}`} key={request.id} className="px-5 py-4 border-b space-y-3" style={{ borderColor: border }}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <div className="text-sm font-semibold">{request.payload?.projectName || request.project_name || "Estimate"}</div>
+                      <div className="text-sm font-semibold">{request.payload?.accountName || request.project_name || "Estimate"}</div>
                       <div className="text-xs mt-1" style={{ color: muted }}>
-                        {request.request_type} request · {request.payload?.clientName || "Project deletion"} · Requested by {request.requester_name} ({request.requester_email}) · {new Date(request.created_at).toLocaleString()}
+                        {request.request_type} request · {request.payload?.projectStatus || "Project deletion"} · Requested by {request.requester_name} ({request.requester_email}) · {new Date(request.created_at).toLocaleString()}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -696,15 +706,24 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
                     <details className="text-xs">
                       <summary className="cursor-pointer font-semibold" style={{ color: "#1E40AF" }}>Review requested estimate</summary>
                       <div className="mt-2 grid gap-2 sm:grid-cols-3" style={{ color: muted }}>
-                        <span>Year: {request.payload.year}</span>
-                        <span>Currency: {request.payload.currency}</span>
-                        <span>Period: {request.payload.startMonth} to {request.payload.endMonth}{request.payload.endMonthHalf ? " (15 days)" : ""}</span>
+                        <span>Project type: {request.payload.projectType}</span>
+                        <span>Year / currency: {request.payload.year} · {request.payload.currency}</span>
+                        <span>Duration: {request.payload.durationMonths} months{request.payload.durationDays ? ` ${request.payload.durationDays} days` : ""}</span>
+                        <span>Requested: {request.payload.requestedDate}</span>
+                        <span>Region / cloud: {request.payload.region || "-"} · {request.payload.cloud || "-"}</span>
+                        <span>Request from/by: {request.payload.requestFromBy || "-"} · {request.payload.requestorEmail || "Email not provided"}</span>
+                      </div>
+                      <div className="mt-2 space-y-1" style={{ color: text }}>
+                        <div><strong>Project overview:</strong> {request.payload.projectOverview || "-"}</div>
+                        <div><strong>Assumption:</strong> {request.payload.assumption || "-"}</div>
+                        <div><strong>In scope:</strong> {request.payload.inScope || "-"}</div>
+                        <div><strong>Out of scope:</strong> {request.payload.outOfScope || "-"}</div>
                       </div>
                       <div className="mt-2 divide-y" style={{ borderColor: border }}>
                         {(request.payload.resources || []).map((resource, index) => (
                           <div key={`${resource.name}-${index}`} className="py-2" style={{ color: text }}>
-                            <span className="font-semibold">{resource.name}</span> · {resource.grade} · {resource.resourceType} · Allowance {Number(resource.allowancePercent || 0)}%
-                            <div className="mt-1" style={{ color: muted }}>Monthly FTE: {Object.entries(resource.allocations || {}).map(([month, fte]) => `${month}: ${fte}`).join(" · ") || "None"}</div>
+                            <span className="font-semibold">{resource.name}</span> · {resource.grade} · {resource.resourceType}
+                            <div className="mt-1" style={{ color: muted }}>Allocations: {Object.entries(resource.allocations || {}).map(([period, fte]) => `${period}: ${fte}`).join(" · ") || "None"}</div>
                           </div>
                         ))}
                       </div>
