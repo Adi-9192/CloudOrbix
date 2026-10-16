@@ -396,11 +396,17 @@ const normalizeExactProjectValue = (field, value) => {
 
     .replace(/[\u0300-\u036f]/g, "")
 
+const normalizeMatchValue = (value) =>
+  String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
     .trim()
 
     .replace(/\s+/g, " ")
 
     .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "")
 
   return field === "currentStatus"
     ? normalizeProjectStatus(normalized).toLowerCase()
@@ -460,11 +466,27 @@ export const findExistingProject = (
     )
 
     if (exactIdMatch) return exactIdMatch
+        normalizeMatchValue(client.clientId) ===
+          normalizeMatchValue(clientId),
+    );
+    if (exactIdMatch) return exactIdMatch;
   }
 
   const normalizedName = normalizeMatchValue(clientName)
-
   const normalizedIsow = normalizeMatchValue(isow)
+  const compatibleYear = (client) => {
+    const existingYear = Number(client.year) || null
+    return !year || !existingYear || existingYear === Number(year)
+  }
+  const eligibleClients = existingClients.filter(
+    (client) => !matchedClientIds.has(client.clientId) && compatibleYear(client),
+  )
+  if (normalizedIsow) {
+    const exactIsowMatches = eligibleClients.filter(
+      (client) => normalizeMatchValue(client.isow) === normalizedIsow,
+    )
+    if (exactIsowMatches.length === 1) return exactIsowMatches[0]
+  }
 
   const compatibleYear = (client) => {
     const existingYear = Number(client.year) || null
@@ -496,6 +518,11 @@ export const findExistingProject = (
 
     const existingIsow = normalizeMatchValue(client.isow)
 
+    if (!normalizedName || existingName !== normalizedName) return false
+
+    if (!compatibleYear(client)) return false
+
+    const existingIsow = normalizeMatchValue(client.isow)
     if (normalizedIsow && existingIsow && existingIsow !== normalizedIsow) {
       return false
     }
