@@ -6,13 +6,79 @@ import ExcelJS from "exceljs"
 
 import {
   createProjectIdAllocator,
+  exactProjectMatch,
+  findExactDuplicateProject,
   findExistingProject,
   normalizeProjectStatus,
   parseSpreadsheetPercentage,
   parseSpreadsheetDate,
   resolveImportedProjectId,
+  spreadsheetValue,
   worksheetRecords,
 } from "./excel-import.js"
+
+test("matches exact imported project rows across every imported data field", () => {
+  const imported = {
+    clientId: "PSJAN26001",
+
+    clientName: "Example Project",
+
+    year: 2026,
+
+    region: "North",
+
+    currentStatus: "On Track",
+
+    completion: 50,
+
+    projectBillingCode: "BILL-1",
+
+    voumetric: 2,
+
+    revenue: 15000,
+
+    hyperscaler: "Azure",
+
+    projectType: "Migration",
+
+    projectBrief: "Move workloads",
+
+    projectManager: "Example Manager",
+
+    isow: "ISOW-1",
+
+    estimatedStart: "2026-01-01",
+
+    estimatedEnd: "2026-06-30",
+
+    actualStart: null,
+
+    actualEnd: null,
+  }
+
+  const existing = { ...imported, completion: "50.00" }
+
+  assert.equal(findExactDuplicateProject(imported, [existing]), existing)
+
+  assert.equal(exactProjectMatch(imported, existing), true)
+
+  assert.equal(
+    findExactDuplicateProject({ ...imported, revenue: 15001 }, [existing]),
+
+    null,
+  )
+
+  assert.equal(
+    exactProjectMatch(imported, { ...existing, voumetric: 3 }),
+    false,
+  )
+
+  assert.equal(
+    exactProjectMatch(imported, { ...existing, clientId: "PSJAN26002" }),
+
+    false,
+  )
+})
 
 test("reads grouped Estimated and Actual date headers", () => {
   const workbook = new ExcelJS.Workbook()
@@ -124,6 +190,36 @@ test("keeps support for a single-row header workbook", () => {
   ])
 })
 
+test("reads estimated start and end dates from the workbook's short headers", () => {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet("Projects")
+  worksheet.addRow(["Year", "Estimated start date", "end date", "Actual start date"])
+  worksheet.addRow([
+    2026,
+    new Date("2026-01-15T00:00:00.000Z"),
+    new Date("2026-10-30T00:00:00.000Z"),
+    new Date("2026-03-19T00:00:00.000Z"),
+  ])
+
+  const [record] = worksheetRecords(worksheet)
+  const estimatedStart = parseSpreadsheetDate(
+    spreadsheetValue(
+      record,
+      "Estimated/Planned Start Date",
+      "Estimated Start Date",
+      "Planned Start Date",
+    ),
+    Number(record.Year),
+  )
+  const estimatedEnd = parseSpreadsheetDate(
+    spreadsheetValue(record, "End Date", "Estimated Project End Date"),
+    Number(record.Year),
+  )
+
+  assert.deepEqual(estimatedStart, { value: "2026-01-15", error: null })
+  assert.deepEqual(estimatedEnd, { value: "2026-10-30", error: null })
+})
+
 test("parses supported date values and rejects invalid spreadsheet dates", () => {
   assert.deepEqual(parseSpreadsheetDate("2026-10-07"), {
     value: "2026-10-07",
@@ -191,11 +287,13 @@ test("converts Excel percentage fractions and source status values", () => {
 
   assert.equal(parseSpreadsheetPercentage(75), 75)
 
-  assert.equal(normalizeProjectStatus("On Track "), "On-track")
+  assert.equal(normalizeProjectStatus("On Track "), "On Track")
 
-  assert.equal(normalizeProjectStatus("Delayed(External)"), "Delayed")
+  assert.equal(normalizeProjectStatus("Delayed(External)"), "Delayed(External)")
 
-  assert.equal(normalizeProjectStatus("On Hold"), "ON Hold")
+  assert.equal(normalizeProjectStatus("On Hold"), "On Hold")
+
+  assert.equal(normalizeProjectStatus("Delayed(Internal)"), "Delayed(Internal)")
 })
 
 test("matches imported projects without risking row-index ID overwrites", () => {
@@ -277,7 +375,9 @@ test("matches imported projects without risking row-index ID overwrites", () => 
 
       allocator: allocate,
 
-      period: { date: "2026-12-01", year: 2026 },
+      plannedStartDate: "2026-12-01",
+
+      year: 2026,
     }),
 
     "PSDEC26007",
@@ -291,10 +391,26 @@ test("matches imported projects without risking row-index ID overwrites", () => 
 
       allocator: allocate,
 
-      period: { date: "2026-12-01", year: 2026 },
+      plannedStartDate: "2026-12-01",
+
+      year: 2026,
     }),
 
     "PSDEC26008",
+  )
+
+  assert.equal(
+    resolveImportedProjectId({
+      sourceClientId: "LEGACY-102",
+
+      allocator: allocate,
+
+      plannedStartDate: "2027-03-15",
+
+      year: 2027,
+    }),
+
+    "PSMAR27001",
   )
 })
 
@@ -302,16 +418,25 @@ test("matches projects by normalized identity when workbook IDs use another sche
   const existing = [
     {
       id: 10,
+
       clientId: "PSOCT26001",
+
       clientName: "North & Star – Cloud Migration",
+
       year: 2026,
+
       isow: "ISOW-100",
     },
+
     {
       id: 11,
+
       clientId: "PSOCT26002",
+
       clientName: "North Star Cloud Migration",
+
       year: 2026,
+
       isow: "ISOW-101",
     },
   ]
@@ -319,39 +444,58 @@ test("matches projects by normalized identity when workbook IDs use another sche
   const matched = findExistingProject(
     {
       clientId: "LEGACY-0042",
+
       clientName: "North and Star Cloud Migration",
+
       year: 2026,
+
       isow: "ISOW-100",
     },
+
     existing,
+
     new Set(),
   )
 
   assert.equal(matched.clientId, "PSOCT26001")
+
   assert.equal(
     findExistingProject(
       {
         clientId: "LEGACY-0099",
+
         clientName: "Renamed project in the workbook",
+
         year: 2026,
+
         isow: "ISOW-101",
       },
+
       existing,
+
       new Set(),
     )?.clientId,
+
     "PSOCT26002",
   )
+
   assert.equal(
     findExistingProject(
       {
         clientId: "PSOCT26001",
+
         clientName: "North and Star Cloud Migration",
+
         year: 2026,
+
         isow: "ISOW-100",
       },
+
       existing,
+
       new Set(["PSOCT26001"]),
     ),
+
     null,
   )
 })

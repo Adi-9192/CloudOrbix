@@ -4,9 +4,31 @@ const normalizedStatus = (value) =>
     .toLowerCase()
     .replace(/[_\s]+/g, '-');
 
-const isDelayedStatus = (value) =>
-  normalizedStatus(value) === 'blocked' ||
-  normalizedStatus(value).startsWith('delayed');
+const delayedCategory = (value) =>
+  normalizedStatus(value).replace(/[^a-z]/g, '').match(/^delayed(external|internal)$/)?.[1];
+
+const projectBreakdownFields = {
+  status: (client) => client.current_status ?? client.currentStatus,
+  region: (client) => client.region,
+  hyperscaler: (client) => client.hyperscaler,
+  projectType: (client) => client.project_type ?? client.projectType,
+};
+
+export function calculateDashboardProjectBreakdown(clients = [], groupBy = 'status') {
+  const getValue = projectBreakdownFields[groupBy];
+  if (!getValue) throw new RangeError(`Unsupported project breakdown: ${groupBy}`);
+
+  const counts = new Map();
+  for (const client of clients) {
+    if (String(client.approval_status ?? client.approvalStatus ?? 'approved').toLowerCase() !== 'approved') {
+      continue;
+    }
+    const label = String(getValue(client) ?? '').trim() || 'Unspecified';
+    counts.set(label, (counts.get(label) || 0) + 1);
+  }
+
+  return [...counts].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
+}
 
 export function calculateDashboardSummary(clients = [], risks = []) {
   const approved = clients.filter(
@@ -30,6 +52,15 @@ export function calculateDashboardSummary(clients = [], risks = []) {
     const status = normalizedStatus(risk.status);
     return !['completed', 'cancelled', 'canceled'].includes(status);
   });
+  const delayedProjects = approved.reduce(
+    (counts, client) => {
+      const category = delayedCategory(client.current_status ?? client.currentStatus);
+      if (category === 'external') counts.external += 1;
+      if (category === 'internal') counts.internal += 1;
+      return counts;
+    },
+    { external: 0, internal: 0 },
+  );
 
   return {
     totalClients: approved.length,
@@ -42,9 +73,9 @@ export function calculateDashboardSummary(clients = [], risks = []) {
     averageRevenue: approved.length ? totalRevenue / approved.length : 0,
     activeProjects,
     completedProjects,
-    delayedProjects: approved.filter((client) =>
-      isDelayedStatus(client.current_status ?? client.currentStatus),
-    ).length,
+    delayedProjectsExternal: delayedProjects.external,
+    delayedProjectsInternal: delayedProjects.internal,
+    totalRisks: risks.length,
     openRisks: activeRisks.length,
     highRisks: activeRisks.filter((risk) => normalizedStatus(risk.level) === 'high').length,
     averageCompletion: approved.length

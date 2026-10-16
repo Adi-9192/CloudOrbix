@@ -60,14 +60,6 @@ type RiskRow = {
   created_at?: string
 }
 
-const projectStatuses = [
-  "On-track",
-  "ON Hold",
-  "Delayed",
-  "Completed",
-  "Cancelled",
-]
-
 const riskTone = (value?: string) => {
   const normalized = String(value || "").toLowerCase()
 
@@ -144,7 +136,7 @@ export default function RiskRegisterPage({
     () => ({
       total: risks.length,
 
-      onTrack: risks.filter((risk) => risk.status === "On-track").length,
+      onTrack: risks.filter((risk) => risk.status === "On Track").length,
 
       completed: risks.filter((risk) => risk.status === "Completed").length,
     }),
@@ -276,7 +268,7 @@ export default function RiskRegisterPage({
             className="text-[10px] uppercase tracking-wide"
             style={{ color: muted }}
           >
-            On-track
+            On Track
           </div>
           <div className="mt-3 text-2xl font-bold text-emerald-500">
             {totals.onTrack}
@@ -426,18 +418,13 @@ export default function RiskRegisterPage({
                         style={{ borderColor: border }}
                       >
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-semibold ${
-                            risk.status === "Delayed" ||
-                            risk.status === "ON Hold"
-                              ? "bg-amber-100 text-amber-700"
-                              : risk.status === "Cancelled"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-emerald-100 text-emerald-700"
-                          }`}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-semibold"
+                          style={{
+                            backgroundColor: dark ? "#334155" : "#F1F5F9",
+                            color: dark ? "#E2E8F0" : "#475569",
+                          }}
                         >
-                          {projectStatuses.includes(risk.status || "")
-                            ? risk.status
-                            : "On-track"}
+                          {risk.status}
                         </span>
                       </td>
                       <td

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Users, UserCheck, Clock, UserMinus, RefreshCw,
+  Users, UserCheck, Clock, UserMinus,
   CalendarDays, AlertCircle, FolderKanban, CheckCircle2, AlertTriangle, ShieldAlert
 } from "lucide-react";
 import {
@@ -10,6 +10,19 @@ import {
 import { KPICard } from "./KPI";
 
 interface DashboardProps { dark: boolean; onNavigate: (p: string) => void; user?: { roles: string[] }; }
+
+const projectBreakdownOptions = [
+  { value: "status", label: "Status" },
+  { value: "region", label: "Region" },
+  { value: "hyperscaler", label: "Hyperscaler" },
+  { value: "projectType", label: "Project Type" },
+] as const;
+const pieColorsByGroup = {
+  status: ["#15803D", "#D97706", "#DC2626", "#7C3AED", "#2563EB", "#64748B", "#DB2777", "#0F766E"],
+  region: ["#1D4ED8", "#0891B2", "#0F766E", "#65A30D", "#CA8A04", "#EA580C", "#C026D3", "#475569"],
+  hyperscaler: ["#2563EB", "#F97316", "#7C3AED", "#059669", "#DB2777", "#64748B", "#CA8A04", "#0F766E"],
+  projectType: ["#9333EA", "#0891B2", "#4D7C0F", "#C2410C", "#2563EB", "#BE185D", "#475569", "#0D9488"],
+};
 
 const typeColor: Record<string, string> = {
   update: "#D97706", import: "#1E40AF", create: "#16A34A", export: "#7C3AED",
@@ -31,8 +44,12 @@ const CustomTooltip = ({ active, payload, label, dark }: any) => {
 };
 
 export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
-  const [chartPeriod, setChartPeriod] = useState("Monthly");
-  const [summary, setSummary] = useState({ totalClients: 0, activeClients: 0, totalRevenue: 0, averageRevenue: 0, activeProjects: 0, completedProjects: 0, delayedProjects: 0, openRisks: 0, highRisks: 0, averageCompletion: 0 });
+  const chartPeriod = "Monthly";
+  const [selectedYear, setSelectedYear] = useState("all");
+  const [projectGroupBy, setProjectGroupBy] = useState<(typeof projectBreakdownOptions)[number]["value"]>("status");
+  const pieColors = pieColorsByGroup[projectGroupBy];
+  const [summary, setSummary] = useState({ totalClients: 0, activeProjects: 0, delayedProjectsExternal: 0, delayedProjectsInternal: 0, totalRisks: 0, openRisks: 0 });
+  const [projectBreakdown, setProjectBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [revenueSeries, setRevenueSeries] = useState<any[]>([]);
   const [serviceSeries, setServiceSeries] = useState<any[]>([]);
@@ -41,13 +58,11 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
   const [upcoming, setUpcoming] = useState<any[]>([]);
   const [dashboardError, setDashboardError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const periods = ["Weekly", "Monthly", "Quarterly", "Yearly"];
-
   const loadDashboard = () => {
     const token = localStorage.getItem("clmp-token");
     if (!token) return;
 
-    fetch(`/api/dashboard?period=${encodeURIComponent(chartPeriod)}`, {
+    fetch(`/api/dashboard?period=${encodeURIComponent(chartPeriod)}&year=${encodeURIComponent(selectedYear)}&groupBy=${encodeURIComponent(projectGroupBy)}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (response) => {
@@ -59,6 +74,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
         setDashboardError("");
         setLastUpdated(new Date());
         setSummary(payload.summary);
+        setProjectBreakdown(payload.projectBreakdown || []);
         setChartData((payload.onboardingTrend?.length ? payload.onboardingTrend : [{ month: "No data", onboarded: 0, offboarded: 0 }]).map((item: any) => ({ ...item, offboarded: item.offboarded || 0 })));
         setRevenueSeries(payload.revenueTrend?.length ? payload.revenueTrend : [{ month: "No data", revenue: 0 }]);
         setServiceSeries(payload.serviceAdoption || []);
@@ -87,7 +103,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.clearInterval(refreshInterval);
     };
-  }, [chartPeriod, user]);
+  }, [chartPeriod, selectedYear, projectGroupBy, user]);
 
   /* Legacy KPI definitions retained temporarily for reference while the dashboard uses live KPIs.
   const legacyKpiCards = useMemo(() => [
@@ -201,15 +217,11 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
 
   const kpiCards = useMemo(() => [
     { title: "Total Projects", value: String(summary.totalClients), subtitle: "Approved project records", accent: "#1E40AF", icon: Users, action: () => onNavigate("clients") },
-    { title: "Active Projects (On Track)", value: String(summary.activeClients), subtitle: "On-track, in-progress, or onboarded", accent: "#16A34A", icon: UserCheck },
-    { title: "Total Revenue", value: `$${(summary.totalRevenue / 1000000).toFixed(2)}M`, subtitle: "Approved projects only", accent: "#0F766E", icon: Users },
-    { title: "Average Revenue Per Project", value: `$${summary.averageRevenue.toLocaleString()}`, subtitle: "Approved projects only", accent: "#0F766E", icon: Users },
     { title: "Active Projects", value: String(summary.activeProjects), subtitle: "Approved projects", accent: "#1E40AF", icon: FolderKanban },
-    { title: "Completed Projects", value: String(summary.completedProjects), subtitle: "Completed status or 100%", accent: "#16A34A", icon: CheckCircle2 },
-    { title: "Delayed Projects", value: String(summary.delayedProjects), subtitle: "Projects with Delayed status", accent: "#DC2626", icon: AlertTriangle },
-    { title: "Active Risks", value: String(summary.openRisks), subtitle: "Risks not completed or cancelled", accent: "#D97706", icon: AlertTriangle, action: () => onNavigate("risks") },
-    { title: "High Risks", value: String(summary.highRisks), subtitle: "Active risks with High level", accent: "#DC2626", icon: ShieldAlert },
-    { title: "Average Project Completion %", value: `${summary.averageCompletion.toFixed(1)}%`, subtitle: "Average across approved projects", accent: "#2563EB", icon: CheckCircle2 },
+    { title: "Delayed (External)", value: String(summary.delayedProjectsExternal), subtitle: "Externally delayed projects", accent: "#C2410C", icon: AlertTriangle },
+    { title: "Delayed (Internal)", value: String(summary.delayedProjectsInternal), subtitle: "Internally delayed projects", accent: "#BE185D", icon: Clock },
+    { title: "Total Risks", value: String(summary.totalRisks), subtitle: "All project risks", accent: "#7C3AED", icon: ShieldAlert, action: () => onNavigate("risks") },
+    { title: "Open Risks", value: String(summary.openRisks), subtitle: "Risks not completed or cancelled", accent: "#D97706", icon: AlertCircle, action: () => onNavigate("risks") },
   ], [summary, onNavigate]);
 
   const bg = dark ? "#1E293B" : "#FFFFFF";
@@ -227,49 +239,146 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
             {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString()}` : "Loading dashboard…"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: border }}>
-            {periods.map((period) => (
-              <button
-                key={period}
-                onClick={() => setChartPeriod(period)}
-                className="px-3 py-1.5 text-xs font-medium transition-colors"
-                style={{ background: chartPeriod === period ? "#1E40AF" : bg, color: chartPeriod === period ? "#fff" : muted }}
-              >
-                {period}
-              </button>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <span>Project year</span>
+          <select
+            aria-label="Filter dashboard by project year"
+            value={selectedYear}
+            onChange={(event) => setSelectedYear(event.target.value)}
+            className="rounded-lg border px-3 py-2 text-sm"
+            style={{
+              background: bg,
+              borderColor: border,
+              color: text,
+            }}
+          >
+            <option value="all">All years</option>
+            {[2024, 2025, 2026, 2027].map((year) => (
+              <option key={year} value={year}>{year}</option>
             ))}
-          </div>
-          <button onClick={loadDashboard} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium" style={{ borderColor: border, color: muted, background: bg }}>
-            <RefreshCw className="w-3 h-3" /> Refresh
-          </button>
-        </div>
+          </select>
+        </label>
       </div>
       {dashboardError && (
         <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
-          {dashboardError} Dashboard values may be outdated. Use Refresh to try again.
+          {dashboardError} Dashboard values may be outdated.
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {kpiCards.map((card) => {
-          const commonProps = {
-            title: card.title,
-            value: card.value,
-            change: "Live",
-            trend: "neutral" as const,
-            lastUpdated: "now",
-            accent: card.accent,
-            icon: card.icon,
-            subtitle: card.subtitle,
-          };
-          return (
-            <button key={card.title} type="button" onClick={card.action} className="text-left w-full" aria-label={`Open ${card.title}`}>
-              <KPICard {...commonProps} />
-            </button>
-          );
-        })}
-      </div>
+      <section
+        aria-labelledby="dashboard-project-breakdown-heading"
+        className="w-full max-w-2xl rounded-xl border p-5"
+        style={{ background: bg, borderColor: border }}
+      >
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 id="dashboard-project-breakdown-heading" className="font-semibold text-sm">
+              Projects by {projectBreakdownOptions.find((option) => option.value === projectGroupBy)?.label}
+            </h2>
+            <p className="mt-0.5 text-xs" style={{ color: muted }}>
+              {selectedYear === "all" ? "All project years" : `Project year ${selectedYear}`}
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-xs font-medium">
+            <span>Group by</span>
+            <select
+              aria-label="Group project pie chart by"
+              value={projectGroupBy}
+              onChange={(event) => setProjectGroupBy(event.target.value as typeof projectGroupBy)}
+              className="rounded-lg border px-3 py-2 text-xs"
+              style={{ background: bg, borderColor: border, color: text }}
+            >
+              {projectBreakdownOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {projectBreakdown.length ? (
+          <div className="flex flex-wrap items-center gap-4">
+            <ResponsiveContainer width={240} height={210}>
+              <PieChart>
+                <Pie
+                  data={projectBreakdown}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={48}
+                  outerRadius={82}
+                  paddingAngle={2}
+                >
+                  {projectBreakdown.map((item, index) => (
+                    <Cell key={item.name} fill={pieColors[index % pieColors.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip dark={dark} />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <ul className="min-w-[160px] flex-1 space-y-2">
+              {projectBreakdown.map((item, index) => (
+                <li key={item.name} className="flex items-center justify-between gap-4 text-xs">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: pieColors[index % pieColors.length] }} />
+                    <span className="truncate">{item.name}</span>
+                  </span>
+                  <strong>{item.value}</strong>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="py-8 text-center text-sm" style={{ color: muted }}>No projects for this year.</p>
+        )}
+      </section>
+
+      <section aria-labelledby="dashboard-projects-heading" className="space-y-3">
+        <h2 id="dashboard-projects-heading" className="text-base font-semibold">
+          Project
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {kpiCards.slice(0, 4).map((card) => {
+            const commonProps = {
+              title: card.title,
+              value: card.value,
+              change: "Live",
+              trend: "neutral" as const,
+              lastUpdated: "now",
+              accent: card.accent,
+              icon: card.icon,
+              subtitle: card.subtitle,
+            };
+            return (
+              <button key={card.title} type="button" onClick={card.action} className="text-left w-full" aria-label={`Open ${card.title}`}>
+                <KPICard {...commonProps} />
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section aria-labelledby="dashboard-risks-heading" className="space-y-3">
+        <h2 id="dashboard-risks-heading" className="text-base font-semibold">
+          Risks
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {kpiCards.slice(4).map((card) => {
+            const commonProps = {
+              title: card.title,
+              value: card.value,
+              change: "Live",
+              trend: "neutral" as const,
+              lastUpdated: "now",
+              accent: card.accent,
+              icon: card.icon,
+              subtitle: card.subtitle,
+            };
+            return (
+              <button key={card.title} type="button" onClick={card.action} className="text-left w-full" aria-label={`Open ${card.title}`}>
+                <KPICard {...commonProps} />
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>

@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
+  ChevronUp,
   Download,
   Pencil,
   Plus,
@@ -13,12 +15,17 @@ import {
 
 import { MANDATORY_DOCUMENTS } from "../data/projectDocuments";
 import { showCloudOrbixAlert } from "../alert";
+import {
+  normalizeProjectStatus,
+  PROJECT_STATUSES,
+} from "../../shared/project-status.js";
 
 type ProjectPageProps = {
   dark: boolean;
   clientId: string;
   onBack: () => void;
   onOpenDocuments: () => void;
+  onEditProject: () => void;
   user: { firstName: string; lastName: string; email: string };
 };
 
@@ -40,13 +47,27 @@ type Project = {
   client_name: string;
   account_manager: string;
   project_manager: string;
+  region?: string | null;
+  industry?: string | null;
   project_progress: number;
   project_brief: string;
   current_status: string;
   completion: number;
   hyperscaler: string;
   project_type: string;
+  service_category?: string | null;
   project_billing_code?: string | null;
+  year?: number | null;
+  revenue?: number | string | null;
+  isow?: string | null;
+  estimated_start_date?: string | null;
+  estimated_end_date?: string | null;
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
+  contract_start_date?: string | null;
+  contract_end_date?: string | null;
+  remarks?: string | null;
+  services?: string[];
   resources?: { resourceName: string; fte: number | null }[];
   voumetric?: number | null;
 };
@@ -116,19 +137,12 @@ const emptyTask: TaskDraft = {
   actualStartDate: "",
   actualEndDate: "",
   progress: "0",
-  status: "On-track",
+  status: "On Track",
   remark: "",
 };
 
-const statuses = [
-  "On-track",
-  "ON Hold",
-  "Delayed",
-  "Completed",
-  "Cancelled",
-];
-
-const riskStatuses = statuses;
+const statuses = PROJECT_STATUSES;
+const riskStatuses = PROJECT_STATUSES;
 
 const riskLevels = ["Low", "Medium", "High"];
 
@@ -146,7 +160,7 @@ const emptyRisk: RiskDraft = {
   level: "Medium",
   impact: "Medium",
   impactDescription: "",
-  status: "On-track",
+  status: "On Track",
   mitigation: "",
   commentsActions: "",
 };
@@ -159,7 +173,7 @@ const toDraft = (task: Task): TaskDraft => ({
   actualStartDate: task.actual_start_date || "",
   actualEndDate: task.actual_end_date || "",
   progress: String(task.progress || 0),
-  status: task.status || "On-track",
+  status: normalizeProjectStatus(task.status),
   remark: task.remark || "",
 });
 
@@ -168,6 +182,7 @@ export default function ProjectPage({
   clientId,
   onBack,
   onOpenDocuments,
+  onEditProject,
   user,
 }: ProjectPageProps) {
   const [project, setProject] = useState<Project | null>(null);
@@ -204,6 +219,7 @@ export default function ProjectPage({
   const [showAllTasks, setShowAllTasks] = useState(false);
 
   const [showAllRisks, setShowAllRisks] = useState(false);
+  const [showProjectDetails, setShowProjectDetails] = useState(false);
   const [downloadingRisks, setDownloadingRisks] = useState(false);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showRiskForm, setShowRiskForm] = useState(false);
@@ -650,7 +666,7 @@ export default function ProjectPage({
     (uploadedMandatoryDocuments / mandatoryDocumentTypes.length) * 100,
   );
 
-  const openRisks = risks.filter((item) => item.status === "On-track").length;
+  const openRisks = risks.filter((item) => item.status === "On Track").length;
 
   const riskColor = (value: string) =>
     value === "High" ? "#DC2626" : value === "Medium" ? "#D97706" : "#CA8A04";
@@ -805,7 +821,16 @@ export default function ProjectPage({
             · {project.hyperscaler || "No hyperscaler"}
           </p>
         </div>
-        <div className="flex justify-end items-center w-[180px]">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onEditProject}
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white"
+            style={{ background: "#1E40AF" }}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit Project
+          </button>
           {(() => {
             const progress = overallProgress;
             const radius = 42;
@@ -1014,6 +1039,90 @@ export default function ProjectPage({
           </div>
         </div>
       </div>
+      <div
+        className="rounded-xl border overflow-hidden"
+        style={{ background: bg, borderColor: border }}
+      >
+        <div className="flex items-center justify-between gap-4 border-b px-5 py-4" style={{ borderColor: border }}>
+          <div>
+            <h2 className="font-semibold text-sm">Project Details</h2>
+            <p className="mt-1 text-xs" style={{ color: muted }}>
+              Overview of the project information available to the editor.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-expanded={showProjectDetails}
+            aria-controls="project-details-content"
+            onClick={() => setShowProjectDetails((show) => !show)}
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold"
+            style={{ borderColor: border, color: text }}
+          >
+            {showProjectDetails ? (
+              <>
+                <ChevronUp className="h-3.5 w-3.5" />
+                Hide details
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3.5 w-3.5" />
+                View all details
+              </>
+            )}
+          </button>
+        </div>
+        {showProjectDetails && <div id="project-details-content" className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <tbody>
+              {[
+                ["Project ID", project.client_id],
+                ["Project Name", project.client_name],
+                ["Project Manager", project.project_manager || "-"],
+                ["Account Manager", project.account_manager || "-"],
+                ["Region", project.region || "-"],
+                ["Industry", project.industry || "-"],
+                ["Project Status", project.current_status || "-"],
+                ["Project Type", project.project_type || "-"],
+                ["Service Category", project.service_category || "-"],
+                ["Services", project.services?.join(", ") || "-"],
+                ["Hyperscaler", project.hyperscaler || "-"],
+                ["Project Billing Code", project.project_billing_code || "-"],
+                ["ISOW", project.isow || "-"],
+                ["Year", project.year || "-"],
+                ["Revenue", project.revenue == null ? "-" : `$${Number(project.revenue).toLocaleString()}`],
+                ["Completion", `${Number(project.completion || 0)}%`],
+                ["Volumetric", project.voumetric ?? "-"],
+                ["Estimated Start", project.estimated_start_date || "-"],
+                ["Estimated End", project.estimated_end_date || "-"],
+                ["Actual Start", project.actual_start_date || "-"],
+                ["Actual End", project.actual_end_date || "-"],
+                ["Contract Start", project.contract_start_date || "-"],
+                ["Contract End", project.contract_end_date || "-"],
+                ["Resources", project.resources?.map((resource) => resource.resourceName).filter(Boolean).join(", ") || "-"],
+                ["Project Brief", project.project_brief || "-"],
+                ["Notes", project.remarks || "-"],
+              ].map(([label, value]) => (
+                <tr
+                  key={label}
+                  className="border-b last:border-b-0"
+                  style={{ borderColor: border }}
+                >
+                  <th
+                    scope="row"
+                    className="w-1/4 min-w-36 px-5 py-3 font-medium"
+                    style={{ color: muted }}
+                  >
+                    {label}
+                  </th>
+                  <td className="whitespace-pre-wrap px-5 py-3" style={{ color: text }}>
+                    {value}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>}
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div
           className="rounded-xl border p-5"
@@ -1099,7 +1208,7 @@ export default function ProjectPage({
         >
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-semibold text-sm">On-track risks</h2>
+              <h2 className="font-semibold text-sm">On Track risks</h2>
               <p className="text-xs mt-1" style={{ color: muted }}>
                 Current risk tracker
               </p>
@@ -1124,7 +1233,7 @@ export default function ProjectPage({
                 >
                   {
                     risks.filter(
-                      (item) => item.status === "On-track" && item.level === level,
+                      (item) => item.status === "On Track" && item.level === level,
                     ).length
                   }
                 </div>
@@ -1674,6 +1783,9 @@ export default function ProjectPage({
                       className="bg-transparent"
                       style={{ color: text }}
                     >
+                      {!riskStatuses.includes(item.status) && (
+                        <option value={item.status}>{item.status}</option>
+                      )}
                       {riskStatuses.map((value) => (
                         <option key={value}>{value}</option>
                       ))}
@@ -1912,8 +2024,15 @@ export default function ProjectPage({
                     void updateRisk(item.id, "status", event.target.value)
                   }
                   className="rounded border px-2 py-1 text-[10px]"
-                  style={{ borderColor, color: text, background: bg }}
+                  style={{
+                    borderColor,
+                    color: text,
+                    background: bg,
+                  }}
                 >
+                  {!riskStatuses.includes(item.status) && (
+                    <option value={item.status}>{item.status}</option>
+                  )}
                   {riskStatuses.map((value) => (
                     <option key={value}>{value}</option>
                   ))}

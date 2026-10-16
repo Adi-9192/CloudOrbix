@@ -6,7 +6,7 @@ export function calculateKpis(clients = [], risks = []) {
   const openRisks = risks.filter((risk) => risk.status === 'Open');
   return {
     totalClients: approved.length,
-    activeClients: approved.filter((client) => ['On-track', 'In Progress', 'Onboarded'].includes(client.current_status)).length,
+    activeClients: approved.filter((client) => ['On Track', 'On-track', 'In Progress', 'Onboarded'].includes(client.current_status)).length,
     totalRevenue,
     activeProjects,
     completedProjects,

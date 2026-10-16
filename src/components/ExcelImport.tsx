@@ -41,6 +41,7 @@ interface ImportPreviewRow {
   actualEnd: string | null;
   importKind: string;
   duplicateInFile: boolean;
+  duplicateAction?: "new" | "update";
 }
 
 const previewColumns: { key: keyof ImportPreviewRow; label: string }[] = [
@@ -99,6 +100,9 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
   const [progress, setProgress] = useState(0);
   const [previewRows, setPreviewRows] = useState<ImportPreviewRow[]>([]);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [duplicateDecisions, setDuplicateDecisions] = useState<
+    Map<number, "accept" | "reject">
+  >(new Map());
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [summary, setSummary] = useState({
@@ -187,6 +191,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
       setPreviewRows(payload.records || []);
       setSelectedFile(file);
       setSelectedRows(new Set());
+      setDuplicateDecisions(new Map());
       setImportWarnings(payload.warnings || []);
       setProgress(100);
       setStage("preview");
@@ -203,13 +208,22 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
     }
   };
 
-  const confirmImport = async (rowsToImport: number[]) => {
-    if (!selectedFile || !rowsToImport.length) return;
+  const confirmImport = async (
+    rowsToImport: number[],
+    rejectedDuplicateRows: number[],
+  ) => {
+    if (
+      !selectedFile ||
+      (!rowsToImport.length && !rejectedDuplicateRows.length)
+    ) {
+      return;
+    }
     setConfirming(true);
     setError("");
     const body = new FormData();
     body.append("file", selectedFile);
     body.append("selectedRows", JSON.stringify(rowsToImport));
+    body.append("rejectedRows", JSON.stringify(rejectedDuplicateRows));
 
     try {
       const response = await fetch("/api/excel/upload", {
@@ -236,8 +250,32 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
     }
   };
 
+  const decideDuplicate = (
+    rowNumber: number,
+    decision: "accept" | "reject",
+  ) => {
+    setDuplicateDecisions((current) =>
+      new Map(current).set(rowNumber, decision),
+    );
+    setSelectedRows((current) => {
+      const next = new Set(current);
+      if (decision === "accept") next.add(rowNumber);
+      else next.delete(rowNumber);
+      return next;
+    });
+  };
+
+  const duplicateRows = previewRows.filter((row) => row.duplicateInFile);
+  const unresolvedDuplicates = duplicateRows.filter(
+    (row) => !duplicateDecisions.has(row.rowNumber),
+  );
+  const rejectedDuplicateRows = duplicateRows
+    .filter((row) => duplicateDecisions.get(row.rowNumber) === "reject")
+    .map((row) => row.rowNumber);
+
   const rejectAll = () => {
     setSelectedRows(new Set());
+    setDuplicateDecisions(new Map());
     setPreviewRows([]);
     setSelectedFile(null);
     setStage("idle");
@@ -306,6 +344,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
               setProgress(0);
               setPreviewRows([]);
               setSelectedRows(new Set());
+              setDuplicateDecisions(new Map());
               setSelectedFile(null);
               setError("");
             }}
@@ -485,29 +524,43 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                         previewRows.filter((row) => !row.duplicateInFile).every((row) => selectedRows.has(row.rowNumber))
                       }
                       onChange={(event) => {
-                        setSelectedRows(
-                          event.target.checked
-                            ? new Set(previewRows.filter((row) => !row.duplicateInFile).map((row) => row.rowNumber))
-                            : new Set(),
-                        );
+                        setSelectedRows(() => {
+                          const next = new Set(
+                            previewRows
+                              .filter((row) => row.duplicateInFile && duplicateDecisions.get(row.rowNumber) === "accept")
+                              .map((row) => row.rowNumber),
+                          );
+                          if (event.target.checked) {
+                            previewRows
+                              .filter((row) => !row.duplicateInFile)
+                              .forEach((row) => next.add(row.rowNumber));
+                          }
+                          return next;
+                        });
                       }}
                     />
-                    Select all new or matched projects
+                    Select all non-duplicate rows
                   </label>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => void confirmImport(previewRows.filter((row) => !row.duplicateInFile).map((row) => row.rowNumber))}
-                      disabled={confirming || !previewRows.some((row) => !row.duplicateInFile)}
+                      onClick={() => void confirmImport(
+                        [...new Set([
+                          ...previewRows.filter((row) => !row.duplicateInFile).map((row) => row.rowNumber),
+                          ...selectedRows,
+                        ])],
+                        rejectedDuplicateRows,
+                      )}
+                      disabled={confirming || unresolvedDuplicates.length > 0 || !previewRows.length}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
                       style={{ background: "#1E40AF" }}
                     >
-                      Confirm all
+                      Confirm reviewed rows
                     </button>
                     <button
                       type="button"
-                      onClick={() => void confirmImport([...selectedRows])}
-                      disabled={confirming || selectedRows.size === 0}
+                      onClick={() => void confirmImport([...selectedRows], rejectedDuplicateRows)}
+                      disabled={confirming || unresolvedDuplicates.length > 0 || (!selectedRows.size && !rejectedDuplicateRows.length)}
                       className="px-3 py-1.5 rounded-lg border text-xs font-semibold disabled:opacity-50"
                       style={{ borderColor: "#16A34A", color: "#15803D" }}
                     >
@@ -577,7 +630,6 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                           className="border-b"
                           style={{
                             borderColor: border,
-                            opacity: r.duplicateInFile ? 0.6 : 1,
                           }}
                         >
                           <td className="px-4 py-2.5">
@@ -585,8 +637,12 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                               type="checkbox"
                               aria-label={`Select row ${r.rowNumber}`}
                               checked={selectedRows.has(r.rowNumber)}
-                              disabled={r.duplicateInFile || confirming}
+                              disabled={confirming}
                               onChange={(event) => {
+                                if (r.duplicateInFile) {
+                                  decideDuplicate(r.rowNumber, event.target.checked ? "accept" : "reject");
+                                  return;
+                                }
                                 setSelectedRows((current) => {
                                   const next = new Set(current);
                                   if (event.target.checked) next.add(r.rowNumber);
@@ -620,8 +676,40 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                             <div className="flex items-center gap-2">
                               <span style={{ color: r.duplicateInFile ? "#D97706" : r.importKind.startsWith("Update") ? "#7C3AED" : "#64748B" }}>
                                 {r.importKind}
+                                {r.duplicateInFile && duplicateDecisions.get(r.rowNumber) && (
+                                  <span className="ml-1 font-semibold">
+                                    · {duplicateDecisions.get(r.rowNumber) === "accept" ? "Accepted" : "Rejected"}
+                                  </span>
+                                )}
                               </span>
-                              {!r.duplicateInFile && (
+                              {r.duplicateInFile ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={confirming}
+                                    onClick={() => decideDuplicate(r.rowNumber, "accept")}
+                                    className={`rounded border px-2 py-1 disabled:opacity-50 ${
+                                      duplicateDecisions.get(r.rowNumber) === "accept"
+                                        ? "border-green-600 bg-green-100 text-green-800"
+                                        : "border-green-200 text-green-700"
+                                    }`}
+                                  >
+                                    {r.duplicateAction === "update" ? "Accept update" : "Accept as new"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={confirming}
+                                    onClick={() => decideDuplicate(r.rowNumber, "reject")}
+                                    className={`rounded border px-2 py-1 disabled:opacity-50 ${
+                                      duplicateDecisions.get(r.rowNumber) === "reject"
+                                        ? "border-red-600 bg-red-100 text-red-800"
+                                        : "border-red-200 text-red-600"
+                                    }`}
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              ) : (
                                 <>
                                   <button
                                     type="button"
@@ -669,7 +757,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
                     <Trash2 className="w-3.5 h-3.5" /> Reject all
                   </button>
                   <p className="text-xs my-auto ml-2" style={{ color: muted }}>
-                    Nothing is added or updated until you confirm. Repeated rows in this workbook cannot be selected.
+                    Review every exact duplicate before confirming. Accepted repeated names are imported as separate projects with numbered names.
                   </p>
                 </div>
               </div>
@@ -690,7 +778,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
               <p className="text-sm mb-6" style={{ color: muted }}>
                 {summary.imported} project{summary.imported === 1 ? "" : "s"} added ·{" "}
                 {summary.updated} existing project{summary.updated === 1 ? "" : "s"} updated ·{" "}
-                {summary.duplicates} duplicate{summary.duplicates === 1 ? "" : "s"} skipped ·{" "}
+                {summary.duplicates} exact duplicate{summary.duplicates === 1 ? "" : "s"} reviewed ·{" "}
                 {summary.failed} failed
               </p>
               <div className="grid grid-cols-3 gap-3 mb-6">
