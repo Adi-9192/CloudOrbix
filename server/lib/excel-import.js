@@ -1,3 +1,8 @@
+import {
+  isProjectStatus,
+  normalizeProjectStatus as normalizeSharedProjectStatus,
+} from "../../shared/project-status.js"
+
 const cellText = (value) => {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime())
@@ -48,7 +53,9 @@ export const parseSpreadsheetDate = (raw, yearHint) => {
   }
 
   const text = String(raw)
+
     .trim()
+
     .replace(/\s*\(TBD\)\s*$/i, "")
 
   if (/^\d+(?:\.\d+)?$/.test(text)) {
@@ -197,7 +204,9 @@ export const worksheetRecords = (worksheet) => {
 
   for (let column = 1; column <= worksheet.columnCount; column += 1) {
     const first = cellText(firstHeader.getCell(column).value)
+
       .replace(/\s+/g, " ")
+
       .trim()
 
     const second =
@@ -264,6 +273,24 @@ export const worksheetRecords = (worksheet) => {
   return records
 }
 
+export const spreadsheetValue = (record, ...keys) => {
+  const normalizedEntries = Object.entries(record).map(([key, entry]) => [
+    key.replace(/\s+/g, " ").trim().toLowerCase(),
+
+    entry,
+  ])
+
+  for (const key of keys) {
+    const entry = normalizedEntries.find(
+      ([header]) => header === key.replace(/\s+/g, " ").trim().toLowerCase(),
+    )?.[1]
+
+    if (entry !== undefined && entry !== "") return entry
+  }
+
+  return ""
+}
+
 export const parseSpreadsheetPercentage = (raw) => {
   const text = String(raw ?? "").trim()
 
@@ -281,35 +308,148 @@ export const parseSpreadsheetPercentage = (raw) => {
 }
 
 export const normalizeProjectStatus = (raw) => {
-  const status = String(raw ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
+  const status = normalizeSharedProjectStatus(raw)
 
-  if (/^(on\s*)?track$|^in\s+progress$|^onboarded$/.test(status)) {
-    return "On-track"
+  return isProjectStatus(status) ? status : "On Track"
+}
+
+const normalizeMatchValue = (value) =>
+  String(value ?? "")
+
+    .normalize("NFKD")
+
+    .replace(/[\u0300-\u036f]/g, "")
+
+    .trim()
+
+    .replace(/\s+/g, " ")
+
+    .toLowerCase()
+
+    .replace(/&/g, " and ")
+
+    .replace(/[^a-z0-9]+/g, "")
+
+const exactProjectFields = [
+  "clientId",
+
+  "clientName",
+
+  "year",
+
+  "region",
+
+  "currentStatus",
+
+  "completion",
+
+  "projectBillingCode",
+
+  "voumetric",
+
+  "revenue",
+
+  "hyperscaler",
+
+  "projectType",
+
+  "projectBrief",
+
+  "projectManager",
+
+  "isow",
+
+  "estimatedStart",
+
+  "estimatedEnd",
+
+  "actualStart",
+
+  "actualEnd",
+]
+
+const normalizeExactProjectValue = (field, value) => {
+  if (value === null || value === undefined || value === "") return ""
+
+  if (["year", "completion"].includes(field)) {
+    const number = Number(value)
+
+    return Number.isFinite(number) ? String(number) : String(value).trim()
   }
 
-  if (/^on\s+hold$|^hold$/.test(status)) return "ON Hold"
+  if (
+    ["estimatedStart", "estimatedEnd", "actualStart", "actualEnd"].includes(
+      field,
+    )
+  ) {
+    const date =
+      value instanceof Date
+        ? value.toISOString().slice(0, 10)
+        : String(value).slice(0, 10)
 
-  if (/^delayed?(?:\b|[\s(])/.test(status)) return "Delayed"
+    return date
+  }
 
-  if (/^(completed?|finished)$/.test(status)) return "Completed"
+  const normalized = String(value)
 
-  if (/^cancelled?$/.test(status)) return "Cancelled"
+    .normalize("NFKD")
 
-  return "On-track"
-}
+    .replace(/[\u0300-\u036f]/g, "")
 
 const normalizeMatchValue = (value) =>
   String(value ?? "")
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
+
     .replace(/\s+/g, " ")
+
     .toLowerCase()
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9]+/g, "")
+
+  return field === "currentStatus"
+    ? normalizeProjectStatus(normalized).toLowerCase()
+    : normalized
+}
+
+export const findExactDuplicateProject = (project, existingProjects) =>
+  existingProjects.find((existing) =>
+    exactProjectFields.every(
+      (field) => {
+        if (
+          field === "clientId" &&
+          (!normalizeExactProjectValue(field, project[field]) ||
+            !normalizeExactProjectValue(field, existing[field]))
+        ) {
+          return true
+        }
+
+        return (
+          normalizeExactProjectValue(field, project[field]) ===
+          normalizeExactProjectValue(field, existing[field])
+        )
+      },
+    ),
+  ) || null
+
+export const exactProjectMatch = (left, right) =>
+  exactProjectFields.every(
+    (field) => {
+      if (
+        field === "clientId" &&
+        (!normalizeExactProjectValue(field, left[field]) ||
+          !normalizeExactProjectValue(field, right[field]))
+      ) {
+        return true
+      }
+
+      return (
+        normalizeExactProjectValue(field, left[field]) ===
+        normalizeExactProjectValue(field, right[field])
+      )
+    },
+  )
 
 export const findExistingProject = (
   { clientId, clientName, year, isow },
@@ -322,6 +462,10 @@ export const findExistingProject = (
     const exactIdMatch = existingClients.find(
       (client) =>
         !matchedClientIds.has(client.clientId) &&
+        normalizeMatchValue(client.clientId) === normalizeMatchValue(clientId),
+    )
+
+    if (exactIdMatch) return exactIdMatch
         normalizeMatchValue(client.clientId) ===
           normalizeMatchValue(clientId),
     );
@@ -344,10 +488,36 @@ export const findExistingProject = (
     if (exactIsowMatches.length === 1) return exactIsowMatches[0]
   }
 
+  const compatibleYear = (client) => {
+    const existingYear = Number(client.year) || null
+
+    return !year || !existingYear || existingYear === Number(year)
+  }
+
+  const eligibleClients = existingClients.filter(
+    (client) =>
+      !matchedClientIds.has(client.clientId) && compatibleYear(client),
+  )
+
+  if (normalizedIsow) {
+    const exactIsowMatches = eligibleClients.filter(
+      (client) => normalizeMatchValue(client.isow) === normalizedIsow,
+    )
+
+    if (exactIsowMatches.length === 1) return exactIsowMatches[0]
+  }
+
   const candidates = existingClients.filter((client) => {
     if (matchedClientIds.has(client.clientId)) return false
 
     const existingName = normalizeMatchValue(client.clientName)
+
+    if (!normalizedName || existingName !== normalizedName) return false
+
+    if (!compatibleYear(client)) return false
+
+    const existingIsow = normalizeMatchValue(client.isow)
+
     if (!normalizedName || existingName !== normalizedName) return false
 
     if (!compatibleYear(client)) return false
@@ -364,6 +534,7 @@ export const findExistingProject = (
     const exactIsowCandidates = candidates.filter(
       (client) => normalizeMatchValue(client.isow) === normalizedIsow,
     )
+
     if (exactIsowCandidates.length === 1) return exactIsowCandidates[0]
   }
 
@@ -382,11 +553,13 @@ export const resolveImportedProjectId = ({
 
   allocator,
 
-  period,
+  plannedStartDate,
+
+  year,
 }) => {
   if (isCanonicalProjectId(sourceClientId)) return sourceClientId
 
   if (isCanonicalProjectId(existingClientId)) return existingClientId
 
-  return allocator.next(period)
+  return allocator.next({ date: plannedStartDate, year })
 }

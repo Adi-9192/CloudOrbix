@@ -51,6 +51,7 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("clmp-theme") !== "light");
   const [user, setUser] = useState<AuthUser | null>(getStoredUser());
   const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem("clmp-project-id"));
+  const [requestedEditProjectId, setRequestedEditProjectId] = useState<string | null>(null);
   const [repositoryDocuments, setRepositoryDocuments] = useState(() => localStorage.getItem("clmp-repository-documents") === "true");
   const [globalSearch, setGlobalSearch] = useState("");
   const [rfpProjectSeed, setRfpProjectSeed] = useState<RfpProjectPrefill | null>(null);
@@ -141,8 +142,13 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case "dashboard":   return <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
+<<<<<<< HEAD
+      case "clients":     return <Clients dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} onOpenProject={(id) => openProject(id)} />;
+      case "project":     return projectId ? <ProjectPage dark={dark} clientId={projectId} user={user} onBack={() => navigateTo("clients")} onOpenDocuments={() => navigateTo("documents")} onEditProject={() => { setRequestedEditProjectId(projectId); navigateTo("clients"); }} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} onOpenProject={(id) => openProject(id)} />;
+=======
       case "clients":     return <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} />;
       case "project":     return projectId ? <ProjectPage dark={dark} clientId={projectId} user={user} onBack={() => navigateTo("clients")} onOpenDocuments={() => navigateTo("documents")} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
+>>>>>>> origin/main
       case "documents":  return projectId ? <DocumentsPage dark={dark} clientId={projectId} readOnly={repositoryDocuments} onBack={() => navigateTo(repositoryDocuments ? "repository" : "project")} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
       case "repository": return <ProjectRepository dark={dark} onOpenProject={(id) => openProject(id, "documents")} />;
       case "projectframework": return <ProjectFramework dark={dark} />;

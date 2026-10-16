@@ -26,12 +26,19 @@ async function projectFor(clientId) {
   const project = result.rows[0];
   if (!project) return null;
 
-  const resources = await pool.query(
-    'SELECT resource_name, fte FROM project_resources WHERE client_id = $1 ORDER BY id',
-    [project.id],
-  );
+  const [resources, services] = await Promise.all([
+    pool.query(
+      'SELECT resource_name, fte FROM project_resources WHERE client_id = $1 ORDER BY id',
+      [project.id],
+    ),
+    pool.query(
+      'SELECT s.name FROM services s JOIN client_services cs ON cs.service_id = s.id WHERE cs.client_id = $1 ORDER BY s.name',
+      [project.id],
+    ),
+  ]);
   return {
     ...project,
+    services: services.rows.map((service) => service.name),
     resources: resources.rows.map((resource) => ({
       resourceName: resource.resource_name,
       fte: resource.fte === null ? null : Number(resource.fte),
@@ -247,7 +254,7 @@ router.post('/:clientId/risks', protectRoute, async (req, res, next) => {
     const body = req.body || {};
     const riskTitle = String(body.riskTitle || body.description || '').trim();
     if (!riskTitle) return res.status(400).json({ message: 'Risk description is required.' });
-    const status = body.status || 'On-track';
+    const status = body.status || 'On Track';
     if (!isProjectStatus(status)) return res.status(400).json({ message: 'Invalid risk status.' });
     const result = await getPool().query('INSERT INTO project_risks(client_id,customer_name,initiative_name,risk_title,risk_category,date_raised,raised_by,description,probability,owner,level,impact,impact_description,status,mitigation,comments_actions) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *', [project.id, project.client_name, body.initiativeName || null, riskTitle, body.riskCategory || null, body.dateRaised || null, `${req.user.firstName} ${req.user.lastName}`.trim() || req.user.email, body.description || riskTitle, body.probability || 'Medium', body.owner || null, body.level || 'Medium', body.impact || 'Medium', body.impactDescription || null, status, body.mitigation || null, body.commentsActions || null]);
     return res.status(201).json({

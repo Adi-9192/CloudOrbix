@@ -1,11 +1,20 @@
 import express from 'express';
 import { appState, getPool } from '../db.js';
-import { calculateDashboardSummary } from '../lib/dashboard-metrics.js';
+import {
+  calculateDashboardProjectBreakdown,
+  calculateDashboardSummary,
+} from '../lib/dashboard-metrics.js';
 import { protectRoute } from '../middleware/auth.js';
 
 const router = express.Router();
 const colors = ['#1E40AF', '#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE'];
 const approvedClients = "COALESCE(approval_status, 'approved') = 'approved'";
+const projectBreakdownColumns = {
+  status: 'current_status',
+  region: 'region',
+  hyperscaler: 'hyperscaler',
+  projectType: 'project_type',
+};
 
 function getPeriodExpressions(period) {
   const expressions = {
@@ -34,14 +43,33 @@ router.get('/', protectRoute, async (req, res, next) => {
     const period = ['Weekly', 'Monthly', 'Quarterly', 'Yearly'].includes(req.query.period)
       ? req.query.period
       : 'Monthly';
+    const yearParam = String(req.query.year ?? 'all').trim().toLowerCase();
+    if (yearParam !== 'all' && !/^\d{4}$/.test(yearParam)) {
+      return res.status(400).json({ message: 'Project year must be a four-digit year or "all".' });
+    }
+    const selectedYear = yearParam === 'all' ? null : Number(yearParam);
+    const groupBy = String(req.query.groupBy || 'status');
+    const groupColumn = projectBreakdownColumns[groupBy];
+    if (!groupColumn) {
+      return res.status(400).json({ message: 'Unsupported project breakdown field.' });
+    }
     const periodExpressions = getPeriodExpressions(period);
     const pool = getPool();
 
     if (!pool) {
-      const clients = appState.clients.filter(
+      const approved = appState.clients.filter(
         (client) => String(client.approvalStatus || 'approved').toLowerCase() === 'approved',
       );
-      const summary = calculateDashboardSummary(clients);
+      const availableYears = [...new Set(approved.map((client) => Number(client.year)).filter(Number.isInteger))].sort((a, b) => b - a);
+      const clients = selectedYear === null
+        ? approved
+        : approved.filter((client) => Number(client.year) === selectedYear);
+      const clientKeys = new Set(clients.flatMap((client) => [client.id, client.clientId].filter((id) => id !== undefined && id !== null).map(String)));
+      const risks = selectedYear === null
+        ? appState.risks || []
+        : (appState.risks || []).filter((risk) => clientKeys.has(String(risk.clientId ?? risk.client_id)));
+      const summary = calculateDashboardSummary(clients, risks);
+      const projectBreakdown = calculateDashboardProjectBreakdown(clients, groupBy);
       const services = appState.services.map((service) => ({
         name: service.name,
         clients: clients.filter((client) => client.services?.includes(service.name)).length,
@@ -58,6 +86,8 @@ router.get('/', protectRoute, async (req, res, next) => {
       });
       return res.json({
         summary,
+        availableYears,
+        projectBreakdown,
         onboardingTrend: [{
           month: period,
           onboarded: clients.filter((client) => client.actualOnboardDate || client.plannedOnboardDate).length,
@@ -70,7 +100,7 @@ router.get('/', protectRoute, async (req, res, next) => {
       });
     }
 
-    const [summaryResult, onboardingResult, revenueResult, servicesResult, risksResult, upcomingResult, regionResult] = await Promise.all([
+    const [summaryResult, onboardingResult, revenueResult, servicesResult, risksResult, upcomingResult, regionResult, yearsResult, projectBreakdownResult] = await Promise.all([
       pool.query(`
         SELECT COUNT(*) AS total_clients,
           CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) IN ('on-track','on track','in progress','onboarded') THEN 1 END) AS int) AS active_clients,
@@ -78,18 +108,18 @@ router.get('/', protectRoute, async (req, res, next) => {
             OR (completion >= 100 AND LOWER(LTRIM(RTRIM(current_status))) NOT IN ('cancelled','canceled','offboarded')) THEN 1 END) AS int) AS completed_projects,
           CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) NOT IN ('completed','cancelled','canceled','offboarded')
             AND COALESCE(completion,0) < 100 THEN 1 END) AS int) AS active_projects,
-          CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) = 'blocked'
-            OR LOWER(LTRIM(RTRIM(current_status))) LIKE 'delayed%' THEN 1 END) AS int) AS delayed_projects,
+          CAST(COUNT(CASE WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(current_status)), ' ', ''), '-', ''), '(', ''), ')', '')) = 'delayedexternal' THEN 1 END) AS int) AS delayed_projects_external,
+          CAST(COUNT(CASE WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(current_status)), ' ', ''), '-', ''), '(', ''), ')', '')) = 'delayedinternal' THEN 1 END) AS int) AS delayed_projects_internal,
           CAST(COALESCE(SUM(revenue), 0) AS numeric(18,2)) AS total_revenue,
           CAST(COALESCE(AVG(revenue), 0) AS numeric(18,2)) AS average_revenue,
           CAST(COALESCE(AVG(completion), 0) AS numeric(18,2)) AS average_completion
-        FROM clients WHERE ${approvedClients}
-      `),
+        FROM clients WHERE ${approvedClients} AND ($1 IS NULL OR [year] = $1)
+      `, [selectedYear]),
       pool.query(`
         WITH project_dates AS (
           SELECT COALESCE(actual_onboard_date, planned_onboard_date) AS onboard_date,
             COALESCE(actual_offboard_date, planned_offboard_date) AS offboard_date
-          FROM clients WHERE ${approvedClients}
+          FROM clients WHERE ${approvedClients} AND ($1 IS NULL OR [year] = $1)
         ),
         movements AS (
           SELECT ${periodExpressions.start('onboard_date')} AS period_start,
@@ -109,42 +139,45 @@ router.get('/', protectRoute, async (req, res, next) => {
         SELECT TOP (12) ${periodExpressions.label} AS month,
           CAST(onboarded AS int) AS onboarded, CAST(offboarded AS int) AS offboarded
         FROM grouped ORDER BY period_start DESC
-      `),
+      `, [selectedYear]),
       pool.query(`
         WITH revenue_by_period AS (
           SELECT ${periodExpressions.start('COALESCE(actual_start_date, estimated_start_date, CAST(created_at AS date))')} AS period_start,
             SUM(revenue) AS revenue
-          FROM clients WHERE ${approvedClients}
+          FROM clients WHERE ${approvedClients} AND ($1 IS NULL OR [year] = $1)
           GROUP BY ${periodExpressions.start('COALESCE(actual_start_date, estimated_start_date, CAST(created_at AS date))')}
         )
         SELECT TOP (12) ${periodExpressions.label} AS month,
           CAST(ROUND(COALESCE(revenue,0) / 1000000, 2) AS numeric(18,2)) AS revenue
         FROM revenue_by_period ORDER BY period_start DESC
-      `),
+      `, [selectedYear]),
       pool.query(`
         SELECT s.name, CAST(COUNT(DISTINCT c.id) AS int) AS clients,
           CAST(ROUND(COALESCE(SUM(c.revenue),0) / 1000000, 2) AS numeric(18,2)) AS revenue
         FROM services s
         LEFT JOIN client_services cs ON cs.service_id=s.id
-        LEFT JOIN clients c ON c.id=cs.client_id AND ${approvedClients}
+        LEFT JOIN clients c ON c.id=cs.client_id AND COALESCE(c.approval_status, 'approved') = 'approved'
+          AND ($1 IS NULL OR c.[year] = $1)
         GROUP BY s.id, s.name ORDER BY clients DESC
-      `),
+      `, [selectedYear]),
       pool.query(`
-        SELECT CAST(COUNT(CASE WHEN LOWER(r.status) NOT IN ('completed','cancelled','canceled') THEN 1 END) AS int) AS open_risks,
+        SELECT CAST(COUNT(*) AS int) AS total_risks,
+          CAST(COUNT(CASE WHEN LOWER(r.status) NOT IN ('completed','cancelled','canceled') THEN 1 END) AS int) AS open_risks,
           CAST(COUNT(CASE WHEN r.level='High' AND LOWER(r.status) NOT IN ('completed','cancelled','canceled') THEN 1 END) AS int) AS high_risks
         FROM project_risks r
         JOIN clients c ON c.id=r.client_id AND ${approvedClients}
-      `),
+        WHERE ($1 IS NULL OR c.[year] = $1)
+      `, [selectedYear]),
       pool.query(`
         SELECT client_id AS client, client_name,
           COALESCE(estimated_start_date, planned_onboard_date) AS date, project_manager AS manager,
           'onboarding' AS type, CAST(0 AS bit) AS priority
-        FROM clients WHERE ${approvedClients}
+        FROM clients WHERE ${approvedClients} AND ($1 IS NULL OR [year] = $1)
           AND COALESCE(estimated_start_date, planned_onboard_date) >= CAST(GETDATE() AS date)
         UNION ALL
         SELECT client_id, client_name, COALESCE(estimated_end_date, planned_offboard_date),
           project_manager, 'offboarding', CAST(0 AS bit)
-        FROM clients WHERE ${approvedClients}
+        FROM clients WHERE ${approvedClients} AND ($1 IS NULL OR [year] = $1)
           AND COALESCE(estimated_end_date, planned_offboard_date) >= CAST(GETDATE() AS date)
         UNION ALL
         SELECT c.client_id, c.client_name, t.expected_end_date, t.assigned_to, 'delay', CAST(1 AS bit)
@@ -152,14 +185,28 @@ router.get('/', protectRoute, async (req, res, next) => {
         WHERE (LOWER(t.status) IN ('delayed','blocked')
           OR (t.expected_end_date < CAST(GETDATE() AS date) AND t.progress < 100))
           AND t.expected_end_date IS NOT NULL
+          AND ($1 IS NULL OR c.[year] = $1)
         ORDER BY date OFFSET 0 ROWS FETCH NEXT 8 ROWS ONLY
-      `),
+      `, [selectedYear]),
       pool.query(`
         SELECT region, CAST(COUNT(*) AS int) AS clients,
           CAST(ROUND(COALESCE(SUM(revenue),0) / 1000000, 2) AS numeric(18,2)) AS revenue
-        FROM clients WHERE ${approvedClients}
+        FROM clients WHERE ${approvedClients} AND ($1 IS NULL OR [year] = $1)
         GROUP BY region ORDER BY clients DESC
+      `, [selectedYear]),
+      pool.query(`
+        SELECT DISTINCT [year] AS year
+        FROM clients WHERE ${approvedClients} AND [year] IS NOT NULL
+        ORDER BY [year] DESC
       `),
+      pool.query(`
+        SELECT COALESCE(NULLIF(LTRIM(RTRIM(${groupColumn})), ''), 'Unspecified') AS name,
+          CAST(COUNT(*) AS int) AS value
+        FROM clients
+        WHERE ${approvedClients} AND ($1 IS NULL OR [year] = $1)
+        GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(${groupColumn})), ''), 'Unspecified')
+        ORDER BY value DESC, name
+      `, [selectedYear]),
     ]);
 
     const summary = summaryResult.rows[0];
@@ -172,13 +219,20 @@ router.get('/', protectRoute, async (req, res, next) => {
         averageRevenue: Number(summary.average_revenue),
         activeProjects: Number(summary.active_projects),
         completedProjects: Number(summary.completed_projects),
-        delayedProjects: Number(summary.delayed_projects),
+        delayedProjectsExternal: Number(summary.delayed_projects_external),
+        delayedProjectsInternal: Number(summary.delayed_projects_internal),
+        totalRisks: Number(risks.total_risks),
         openRisks: Number(risks.open_risks),
         highRisks: Number(risks.high_risks),
         averageCompletion: Number(summary.average_completion),
         azureClients: Number(servicesResult.rows.find((item) => item.name === 'Azure')?.clients || 0),
         awsClients: Number(servicesResult.rows.find((item) => item.name === 'AWS')?.clients || 0),
       },
+      availableYears: yearsResult.rows.map((item) => Number(item.year)).filter(Number.isInteger),
+      projectBreakdown: projectBreakdownResult.rows.map((item) => ({
+        name: item.name,
+        value: Number(item.value),
+      })),
       onboardingTrend: onboardingResult.rows.reverse(),
       revenueTrend: revenueResult.rows.reverse(),
       serviceAdoption: servicesResult.rows,

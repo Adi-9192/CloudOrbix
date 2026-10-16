@@ -161,6 +161,22 @@ export default function Shell({
           read: Boolean(item.read),
           metadata: item.metadata && typeof item.metadata === "object" ? item.metadata : {},
         }));
+        const alerts = (payload?.notifications || [])
+          .slice(0, 6)
+          .map((item: any) => ({
+            id: `${item.id || item.title}-${item.createdAt || item.created_at || Math.random()}`,
+            text: item.title || item.message || "Project update",
+            message: item.message || "",
+            type: item.type === "approval" ? "info" : "warning",
+            time: new Date(
+              item.createdAt || item.created_at || Date.now(),
+            ).toLocaleDateString(),
+            read: Boolean(item.read),
+            metadata:
+              item.metadata && typeof item.metadata === "object"
+                ? item.metadata
+                : {},
+          }));
         setNotifications(alerts);
       })
       .catch(() => setNotifications([]));
@@ -442,6 +458,16 @@ export default function Shell({
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   {notifications.length ? (showAllNotifications ? notifications : notifications.slice(0, 6)).map(n => (
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-white text-blue-700 font-bold">
+                    {
+                      notifications.filter((notification) => !notification.read)
+                        .length
+                    }{" "}
+                    new
+                  </span>
+                </div>
+                {notifications.length ? (
+                  notifications.map((n) => (
                     <button
                       key={n.id}
                       type="button"
@@ -457,6 +483,56 @@ export default function Shell({
                       </div>
                     </button>
                   )) : <div className="px-5 py-4 text-xs" style={{ color: textMuted }}>No new alerts</div>}
+                      <div
+                        className="w-1 rounded-full flex-shrink-0"
+                        style={{
+                          background:
+                            n.type === "warning"
+                              ? "#D97706"
+                              : n.type === "success"
+                                ? "#16A34A"
+                                : "#3B82F6",
+                        }}
+                      />
+                      <div>
+                        <div
+                          className="text-xs font-semibold mb-1"
+                          style={{ color: textBody }}
+                        >
+                          {n.text}
+                        </div>
+                        {n.message && (
+                          <div
+                            className="text-[11px] mb-1"
+                            style={{ color: textMuted }}
+                          >
+                            {n.message}
+                          </div>
+                        )}
+                        <div
+                          className="text-[10px]"
+                          style={{ color: textMuted }}
+                        >
+                          {n.time}
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div
+                    className="px-5 py-4 text-xs"
+                    style={{ color: textMuted }}
+                  >
+                    No new alerts
+                  </div>
+                )}
+                <div className="px-4 py-2 text-center">
+                  <button
+                    className="text-xs font-semibold"
+                    style={{ color: "#1E40AF" }}
+                  >
+                    View all alerts
+                  </button>
                 </div>
                 {notifications.length > 6 && (
                   <div className="px-4 py-2 text-center">

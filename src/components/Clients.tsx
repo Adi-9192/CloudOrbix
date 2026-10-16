@@ -20,7 +20,15 @@ import {
 import { showCloudOrbixAlert } from "../alert"
 
 import { createProjectIdAllocator } from "../../shared/project-id.js"
+<<<<<<< HEAD
+import {
+  normalizeProjectStatus,
+  PROJECT_STATUSES,
+  PROJECT_STATUS_COLORS,
+} from "../../shared/project-status.js"
+=======
 import type { RfpProjectPrefill } from "./RfpEstimation"
+>>>>>>> origin/main
 
 interface ClientsProps {
   dark: boolean
@@ -35,10 +43,15 @@ interface ClientsProps {
   onOpenProject?: (clientId: string) => void
 
   initialSearch?: string
+<<<<<<< HEAD
+  requestedEditId?: string | null
+  onEditRequestHandled?: () => void
+=======
 
   newProjectSeed?: RfpProjectPrefill | null
 
   onProjectSeedConsumed?: () => void
+>>>>>>> origin/main
 }
 
 interface ApiClient {
@@ -177,18 +190,6 @@ interface ClientRow {
   [key: string]: unknown
 }
 
-const PROJECT_STATUSES = [
-  "On-track",
-
-  "ON Hold",
-
-  "Delayed",
-
-  "Completed",
-
-  "Cancelled",
-] as const
-
 const STATUS_PRIORITY = new Map(
   PROJECT_STATUSES.map((status, index) => [
     status.toLowerCase(),
@@ -197,28 +198,13 @@ const STATUS_PRIORITY = new Map(
   ]),
 )
 
-const STATUS_COLORS: Record<string, { bg: string text: string dot: string }> = {
-  "On-track": { bg: "rgb(233, 253, 81)", text: "#4e6310", dot: "#204b04" },
-
-  "On track": { bg: "rgb(233, 253, 81)", text: "#4e6310", dot: "#204b04" },
-
-  "ON Hold": { bg: "#FEF3C7", text: "#B45309", dot: "#D97706" },
-
-  "On Hold": { bg: "#FEF3C7", text: "#B45309", dot: "#D97706" },
-
-  Delayed: { bg: "#FEF3C7", text: "#B45309", dot: "#D97706" },
-
-  Completed: { bg: "#DCFCE7", text: "#15803D", dot: "#16A34A" },
-
-  Cancelled: { bg: "#FEE2E2", text: "#B91C1C", dot: "#DC2626" },
-
-  Onboarded: { bg: "#DCFCE7", text: "#16A34A", dot: "#16A34A" },
-
-  "Pending Onboarding": { bg: "#DBEAFE", text: "#1D4ED8", dot: "#1D4ED8" },
-
-  "Offboarding Scheduled": { bg: "#FEF3C7", text: "#D97706", dot: "#D97706" },
-
-  Offboarded: { bg: "#F1F5F9", text: "#64748B", dot: "#94A3B8" },
+const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  ...Object.fromEntries(
+    Object.entries(PROJECT_STATUS_COLORS).map(([status, palette]) => [
+      status,
+      { bg: palette.background, text: palette.color, dot: palette.color },
+    ]),
+  ),
 }
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -373,7 +359,7 @@ const EMPTY_FORM = {
 
   notes: "",
 
-  status: "On-track",
+  status: "On Track",
 }
 
 export default function Clients({
@@ -384,10 +370,16 @@ export default function Clients({
   onOpenProject,
 
   initialSearch = "",
+<<<<<<< HEAD
+  requestedEditId = null,
+  onEditRequestHandled,
+=======
   newProjectSeed,
   onProjectSeedConsumed,
+>>>>>>> origin/main
 }: ClientsProps) {
   const [clientList, setClientList] = useState<ClientRow[]>([])
+  const [clientsLoaded, setClientsLoaded] = useState(false)
 
   const [search, setSearch] = useState("")
 
@@ -466,7 +458,7 @@ export default function Clients({
 
         industry: client.industry,
 
-        status: client.currentStatus,
+        status: normalizeProjectStatus(client.currentStatus),
 
         projectBillingCode: client.projectBillingCode || "",
 
@@ -522,8 +514,10 @@ export default function Clients({
       }))
 
       setClientList(mapped)
+      setClientsLoaded(true)
     } catch (error) {
       console.error("Unable to load projects:", error)
+      setClientsLoaded(true)
 
       showCloudOrbixAlert(
         error instanceof Error
@@ -829,11 +823,25 @@ export default function Clients({
 
       notes: (client as any).notes || "",
 
-      status: client.status,
+      status: normalizeProjectStatus(client.status),
     })
 
     setShowAdd(true)
   }
+
+  useEffect(() => {
+    if (!requestedEditId || !clientsLoaded) return
+    const client = clientList.find((item) => item.id === requestedEditId)
+    if (client) {
+      openEditClient(client)
+    } else {
+      showCloudOrbixAlert(
+        "Unable to find this project in the project list.",
+        "error",
+      )
+    }
+    onEditRequestHandled?.()
+  }, [requestedEditId, clientsLoaded, clientList, onEditRequestHandled])
 
   const requestProjectAccess = async (clientId: string) => {
     const token = localStorage.getItem("clmp-token")
@@ -936,7 +944,7 @@ export default function Clients({
 
       actualEndDate: form.actualEndDate || null,
 
-      currentStatus: form.status || "On-track",
+      currentStatus: form.status || "On Track",
 
       services: form.services,
 
@@ -1402,14 +1410,11 @@ export default function Clients({
             </thead>
             <tbody>
               {paged.map((c) => {
-                const sc = STATUS_COLORS[c.status] || {
+                const sc = STATUS_COLORS[normalizeProjectStatus(c.status)] || {
                   bg: dark ? "#334155" : "#F1F5F9",
-
                   text: dark ? "#E2E8F0" : "#475569",
-
                   dot: dark ? "#94A3B8" : "#64748B",
                 }
-
                 const isSelected = selected.includes(c.id)
 
                 return (
@@ -1913,13 +1918,16 @@ export default function Clients({
                           className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
                           style={{
                             background: inputBg,
-
                             borderColor: border,
-
                             color: text,
                           }}
                         >
                           <option value="">{f.placeholder}</option>
+                          {f.key === "status" &&
+                            form.status &&
+                            !PROJECT_STATUSES.includes(normalizeProjectStatus(form.status)) && (
+                              <option value={form.status}>{form.status}</option>
+                            )}
                           {f.key === "manager" &&
                             form.manager &&
                             !projectUsers.some(
@@ -2088,7 +2096,7 @@ export default function Clients({
                         Project Resources
                       </h3>
                       <p className="text-[10px] mt-1" style={{ color: muted }}>
-                        Add each resource with its corresponding FTE.
+                        Add project resources.
                       </p>
                     </div>
                     <button
@@ -2113,7 +2121,7 @@ export default function Clients({
                   {form.resources.map((resource, index) => (
                     <div
                       key={index}
-                      className="grid grid-cols-[1fr_180px_auto] gap-3 items-end"
+                      className="grid grid-cols-[1fr_auto] gap-3 items-end"
                     >
                       <label className="block">
                         <span
@@ -2148,48 +2156,6 @@ export default function Clients({
                             })
                           }
                           placeholder="Enter resource name"
-                          className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                          style={{
-                            background: inputBg,
-
-                            borderColor: border,
-
-                            color: text,
-                          }}
-                        />
-                      </label>
-                      <label className="block">
-                        <span
-                          className="block text-xs font-semibold mb-1.5"
-                          style={{ color: text }}
-                        >
-                          FTE
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={resource.fte ?? ""}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-
-                              resources: current.resources.map(
-                                (item, itemIndex) =>
-                                  itemIndex === index
-                                    ? {
-                                        ...item,
-
-                                        fte:
-                                          event.target.value === ""
-                                            ? null
-                                            : Number(event.target.value),
-                                      }
-                                    : item,
-                              ),
-                            }))
-                          }
-                          placeholder="e.g. 0.50"
                           className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
                           style={{
                             background: inputBg,
