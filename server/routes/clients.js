@@ -253,7 +253,7 @@ async function mapDbClients(pool, rows) {
 
   const placeholders = clients.map((_, index) => `$${index + 1}`).join(',');
   const resources = await pool.query(
-    `SELECT client_id,resource_name,fte FROM project_resources WHERE client_id IN (${placeholders}) ORDER BY id`,
+    `SELECT client_id,resource_name,fte,role_for_project,infrastructure_access FROM project_resources WHERE client_id IN (${placeholders}) ORDER BY id`,
     clients.map((client) => client.id),
   );
   const resourcesByClient = new Map();
@@ -262,6 +262,8 @@ async function mapDbClients(pool, rows) {
     allocations.push({
       resourceName: resource.resource_name,
       fte: resource.fte === null ? null : Number(resource.fte),
+      roleForProject: resource.role_for_project || '',
+      infrastructureAccess: Boolean(resource.infrastructure_access),
     });
     resourcesByClient.set(resource.client_id, allocations);
   }
@@ -281,9 +283,16 @@ async function saveProjectResources(pool, clientDbId, resources = []) {
   await pool.query('DELETE FROM project_resources WHERE client_id=@p1', [clientDbId]);
   for (const resource of resources || []) {
     const resourceName = resource.resourceName.trim();
+    const roleForProject = String(resource.roleForProject || '').trim();
     await pool.query(
-      'INSERT INTO project_resources(client_id,resource_name,fte) VALUES(@p1,@p2,@p3)',
-      [clientDbId, resourceName, resource.fte === '' ? null : resource.fte],
+      'INSERT INTO project_resources(client_id,resource_name,fte,role_for_project,infrastructure_access) VALUES(@p1,@p2,@p3,@p4,@p5)',
+      [
+        clientDbId,
+        resourceName,
+        resource.fte === '' ? null : resource.fte,
+        roleForProject || null,
+        Boolean(resource.infrastructureAccess),
+      ],
     );
   }
 }
