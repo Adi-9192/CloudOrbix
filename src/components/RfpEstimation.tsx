@@ -78,6 +78,7 @@ type RatePayload = {
   resourceTypes: ResourceType[];
   currencies: string[];
   grades?: string[];
+  years?: number[];
 };
 type EstimateCalculation = {
   resourceCosts: Array<{
@@ -347,7 +348,7 @@ export default function RfpEstimation({
     setLoading(true);
     try {
       const [cardsResult, projectsResult] = await Promise.allSettled([
-        api(isAdmin ? "/rates" : `/rates/options/${estimate.year}`),
+        api(isAdmin ? "/rates" : `/rates/options/${estimate.year}?currency=${encodeURIComponent(estimate.currency)}`),
         api("/projects"),
       ]);
       const errors: string[] = [];
@@ -364,6 +365,7 @@ export default function RfpEstimation({
                 resourceTypes: cards.resourceTypes,
                 currencies: cards.currencies,
                 grades: cards.grades,
+                years: cards.years,
               },
         );
       } else {
@@ -393,7 +395,7 @@ export default function RfpEstimation({
   useEffect(() => {
     if (isAdmin) return;
     let active = true;
-    void api(`/rates/options/${estimate.year}`)
+    void api(`/rates/options/${estimate.year}?currency=${encodeURIComponent(estimate.currency)}`)
       .then((options) => {
         if (active)
           setRatePayload({
@@ -404,6 +406,7 @@ export default function RfpEstimation({
             resourceTypes: options.resourceTypes,
             currencies: options.currencies,
             grades: options.grades,
+            years: options.years,
           });
       })
       .catch((reason) => {
@@ -417,7 +420,7 @@ export default function RfpEstimation({
     return () => {
       active = false;
     };
-  }, [estimate.year, isAdmin]);
+  }, [estimate.currency, estimate.year, isAdmin]);
 
   useEffect(() => {
     if (isAdmin) return;
@@ -912,6 +915,29 @@ export default function RfpEstimation({
       currencyYear,
     ]),
   ].sort((a, b) => b - a);
+  const estimateYearOptions = useMemo(() => {
+    if (!isAdmin) return ratePayload?.years || [];
+    const resourceYears = new Set(
+      (ratePayload?.resourceRates || []).map((row) => Number(row.year)),
+    );
+    const exchangeYears = new Set(
+      (ratePayload?.exchangeRates || [])
+        .filter((row) => row.currency_pair === `${estimate.currency}/INR`)
+        .map((row) => Number(row.year)),
+    );
+    return [...resourceYears]
+      .filter((year) => estimate.currency === "INR" || exchangeYears.has(year))
+      .sort((a, b) => b - a);
+  }, [estimate.currency, isAdmin, ratePayload]);
+
+  useEffect(() => {
+    if (
+      estimateYearOptions.length &&
+      !estimateYearOptions.includes(Number(estimate.year))
+    ) {
+      patchEstimate({ year: estimateYearOptions[0] });
+    }
+  }, [estimate.year, estimateYearOptions]);
 
   return (
     <div className="rfp-page min-h-full" style={{ color: ink }}>
@@ -1322,8 +1348,8 @@ export default function RfpEstimation({
                     <label className="text-xs font-semibold" style={labelStyle}>Requestor Email ID (optional)<input type="email" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestorEmail} onChange={(event) => patchEstimate({ requestorEmail: event.target.value })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Requested Date<input type="date" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestedDate} onChange={(event) => patchEstimate({ requestedDate: event.target.value })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Region<input className={`${inputClass} mt-1`} style={inputStyle} value={estimate.region} onChange={(event) => patchEstimate({ region: event.target.value })} /></label>
-                    <label className="text-xs font-semibold" style={labelStyle}>Cloud<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.cloud} onChange={(event) => patchEstimate({ cloud: event.target.value })}><option value="">Select</option><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option></select></label>
-                    <label className="text-xs font-semibold" style={labelStyle}>Year<input type="number" min="2000" max="2100" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.year} onChange={(event) => patchEstimate({ year: Number(event.target.value) })} /></label>
+                    <label className="text-xs font-semibold" style={labelStyle}>Cloud<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.cloud} onChange={(event) => patchEstimate({ cloud: event.target.value })}><option value="">Select</option><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option><option value="multi cloud">Multi Cloud</option></select></label>
+                    <label className="text-xs font-semibold" style={labelStyle}>Year<select className={`${inputClass} mt-1`} style={inputStyle} value={estimateYearOptions.includes(Number(estimate.year)) ? estimate.year : ""} onChange={(event) => { if (event.target.value) patchEstimate({ year: Number(event.target.value) }); }}><option value="" disabled>{estimateYearOptions.length ? "Select year" : "No configured rate years"}</option>{estimateYearOptions.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Currency<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.currency} onChange={(event) => patchEstimate({ currency: event.target.value })}>{CURRENCIES.map((currency) => <option key={currency}>{currency}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Number of Months<input type="number" min="0" max="120" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.durationMonths} onChange={(event) => patchEstimate({ durationMonths: Number(event.target.value) })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Number of Days<input type="number" min="0" max="30" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.durationDays} onChange={(event) => patchEstimate({ durationDays: Number(event.target.value) })} /></label>

@@ -53,7 +53,7 @@ function validateProject(body) {
   if (projectType && !['Std', 'Non Std'].includes(projectType)) return { error: 'Select Std or Non Std project type.' };
   if (!['Tentative', 'Completed', 'Project Initiated', 'Cancelled', 'In Discussion', 'Firm'].includes(projectStatus)) return { error: 'Select a valid project status.' };
   if (requestorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requestorEmail)) return { error: 'Enter a valid requestor email address.' };
-  if (cloud && !['aws', 'azure', 'gcp'].includes(cloud)) return { error: 'Select AWS, Azure, or GCP.' };
+  if (cloud && !['aws', 'azure', 'gcp', 'multi cloud'].includes(cloud)) return { error: 'Select AWS, Azure, GCP, or Multi Cloud.' };
   if (!Number.isFinite(allowance) || allowance < 0 || allowance > 100) return { error: 'Allowance must be between 0 and 100 percent.' };
   if (!Number.isFinite(workingDays) || workingDays <= 0 || workingDays > 31) return { error: 'Working days per month must be greater than 0 and no more than 31.' };
   if (!resources.length) return { error: 'Add at least one resource row.' };
@@ -157,8 +157,29 @@ router.get('/rates/options/:year', async (req, res, next) => {
   if (!pool) return;
   try {
     const year = Number(req.params.year);
-    const result = await pool.query('SELECT DISTINCT r.grade FROM resource_rate_cards r JOIN resource_rate_card_versions v ON v.id = r.version_id WHERE v.[year] = $1 ORDER BY r.grade', [year]);
-    return res.json({ grades: result.rows.map((row) => row.grade), resourceTypes, currencies });
+    const currency = String(req.query.currency || 'INR').toUpperCase();
+    if (!currencies.includes(currency)) return res.status(400).json({ message: 'Select a supported currency.' });
+    const [gradesResult, yearsResult] = await Promise.all([
+      pool.query('SELECT DISTINCT r.grade FROM resource_rate_cards r JOIN resource_rate_card_versions v ON v.id = r.version_id WHERE v.[year] = $1 ORDER BY r.grade', [year]),
+      pool.query(`
+        SELECT DISTINCT v.[year] AS year
+        FROM resource_rate_card_versions v
+        WHERE EXISTS (SELECT 1 FROM resource_rate_cards r WHERE r.version_id = v.id)
+          AND ($2 = 'INR' OR EXISTS (
+            SELECT 1
+            FROM currency_exchange_rate_versions cv
+            JOIN currency_exchange_rates cr ON cr.version_id = cv.id
+            WHERE cv.[year] = v.[year] AND cr.currency_pair = $2 + '/INR'
+          ))
+        ORDER BY v.[year] DESC
+      `, [year, currency]),
+    ]);
+    return res.json({
+      grades: gradesResult.rows.map((row) => row.grade),
+      years: yearsResult.rows.map((row) => Number(row.year)),
+      resourceTypes,
+      currencies,
+    });
   } catch (error) { return next(error); }
 });
 
