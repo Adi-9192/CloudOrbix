@@ -1239,9 +1239,7 @@ export default function Clients({
           >
             <Download className="w-3.5 h-3.5" /> Export
           </button> */}
-          {user?.roles.some((role) =>
-            ["Admin", "Manager", "Operations Team"].includes(role),
-          ) && (
+          {user?.roles.includes("Admin") && (
             <button
               onClick={openAddClient}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-colors"

@@ -1,12 +1,7 @@
 export type MandatoryDocument = {
   id: string;
   name: string;
-  templateName: string;
-  templateContent: string;
 };
-
-const createTemplate = (name: string) =>
-  `${name}\n\nProject:\nClient:\nOwner:\nDate:\n\nDetails:\n\nReview / approval:\n`;
 
 const mandatoryDocuments = [
   ["project-intake-form", "Project Intake Form"],
@@ -31,6 +26,4 @@ export const MANDATORY_DOCUMENTS: MandatoryDocument[] =
   mandatoryDocuments.map(([id, name]) => ({
     id,
     name,
-    templateName: `${id}-template.txt`,
-    templateContent: createTemplate(name),
   }));
