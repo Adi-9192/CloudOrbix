@@ -1,4 +1,5 @@
 import express from 'express';
+import { randomUUID } from 'node:crypto';
 import multer from 'multer';
 import ExcelJS from 'exceljs';
 import { BlobServiceClient } from '@azure/storage-blob';
@@ -120,7 +121,18 @@ router.get('/repository', protectRoute, async (req, res, next) => {
       WHERE COALESCE(c.approval_status,'approved')='approved'
       ORDER BY c.updated_at DESC,c.id DESC
     `);
-    return res.json({ projects: result.rows });
+    return res.json({
+      projects: result.rows.map((project) => {
+        const completion = Number(project.completion || 0);
+        return {
+          ...project,
+          completion: completion > 0 && completion <= 1
+            ? Math.round(completion * 100)
+            : completion,
+          current_status: normalizeProjectStatus(project.current_status),
+        };
+      }),
+    });
   } catch (error) { return next(error); }
 });
 
@@ -346,6 +358,62 @@ router.delete('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) =
     if (!result.rows[0]) return res.status(404).json({ message: 'Task not found.' });
     const completion = await syncCompletion(project.id);
     return res.json({ deleted: true, completion });
+  } catch (error) { return next(error); }
+});
+
+router.post('/:clientId/documents/link', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+
+    const documentType = String(req.body?.documentType || '').trim();
+    const fileName = String(req.body?.fileName || '').trim();
+    const link = String(req.body?.url || '').trim();
+    if (!/^[a-z0-9-]{1,100}$/i.test(documentType)) return res.status(400).json({ message: 'A valid document type is required.' });
+    if (!fileName || fileName.length > 255) return res.status(400).json({ message: 'A valid document name is required.' });
+    if (!link || link.length > 2048) return res.status(400).json({ message: 'A valid document link is required.' });
+
+    let parsedLink;
+    try {
+      parsedLink = new URL(link);
+    } catch {
+      return res.status(400).json({ message: 'Enter a valid document link.' });
+    }
+    if (!['http:', 'https:'].includes(parsedLink.protocol) || parsedLink.username || parsedLink.password) {
+      return res.status(400).json({ message: 'Document links must use a valid HTTP or HTTPS address.' });
+    }
+
+    const result = await getPool().query(
+      'INSERT INTO project_documents(client_id,file_name,blob_name,blob_url,content_type,document_type,uploaded_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [project.id, fileName, `link-${randomUUID()}`, parsedLink.href, 'text/uri-list', documentType, req.user.email],
+    );
+    return res.status(201).json({ document: result.rows[0] });
+  } catch (error) { return next(error); }
+});
+
+router.delete('/:clientId/documents/:documentId', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+
+    const pool = getPool();
+    const existing = await pool.query(
+      'SELECT id,blob_name FROM project_documents WHERE id=$1 AND client_id=$2',
+      [req.params.documentId, project.id],
+    );
+    const document = existing.rows[0];
+    if (!document) return res.status(404).json({ message: 'Document not found.' });
+
+    if (document.blob_name && !document.blob_name.startsWith('link-')) {
+      const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+      if (!connectionString) return res.status(503).json({ message: 'Azure document storage is not configured. Set AZURE_STORAGE_CONNECTION_STRING on the API server.' });
+      const service = BlobServiceClient.fromConnectionString(connectionString);
+      const container = service.getContainerClient(process.env.AZURE_STORAGE_CONTAINER || 'cloudorbix-project-documents');
+      await container.getBlockBlobClient(document.blob_name).deleteIfExists();
+    }
+
+    await pool.query('DELETE FROM project_documents WHERE id=$1 AND client_id=$2', [document.id, project.id]);
+    return res.json({ deleted: true });
   } catch (error) { return next(error); }
 });
 
