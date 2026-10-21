@@ -4,9 +4,9 @@ CloudOrbix is a React and Vite application for CIS professional-services operati
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 22 or newer
 - npm 10 or newer
-- Azure SQL Database or Azure SQL Managed Instance
+- Azure SQL Database or Azure SQL Managed Instance for persistent API data
 
 The API now targets Azure SQL via the `mssql` driver. `DATABASE_URL` must therefore be an Azure SQL connection string such as `Server=tcp:<server>.database.windows.net,1433;Database=<database>;User ID=<user>;Password=<password>;Encrypt=true;TrustServerCertificate=false;HostNameInCertificate=*.database.windows.net;LoginTimeout=30;`.
 
@@ -29,15 +29,18 @@ The main runtime dependencies are:
 
 ## Configuration
 
-Create a `.env` file in the project root:
+For local development, create a `.env` file in the project root. Replace the example database connection string with your own Azure SQL connection string; the masked password in the sample is a placeholder, not a usable credential.
 
 ```env
 NODE_ENV=development
 DATABASE_URL=Server=tcp:cloudorbix-prod.database.windows.net,1433;Database=cloudorbix;User ID=cloudorbix_admin;Password=replace-with-a-strong-password;Encrypt=true;TrustServerCertificate=false;HostNameInCertificate=*.database.windows.net;LoginTimeout=30;
 PORT=4000
-CORS_ORIGINS=http://localhost:5173
+VITE_PORT=8443
+CORS_ORIGINS=http://localhost:8443
 JWT_SECRET=replace-with-a-long-random-secret
 ```
+
+Set `DATABASE_URL` to your Azure SQL connection string to enable persistent database access. Set `AZURE_STORAGE_CONNECTION_STRING` to enable document and template storage. Without these settings, the API can still start in development, but database-backed data and Azure file operations are unavailable. Keep secrets out of source control.
 
 For the one-time administrator setup, also provide:
 
@@ -77,12 +80,13 @@ npm run dev:server
 npm run dev:client
 ```
 
-The frontend runs on `http://localhost:5173` and the API runs on `http://localhost:4000` by default.
+The frontend runs at `http://localhost:8443` by default and proxies `/api` requests to the API at `http://localhost:4000`. `npm start` starts only the API; to view the website during development, use `npm run dev` or run both separate development commands.
 
 ## Scripts
 
 | Command | Purpose |
 | --- | --- |
+| `npm start` | Start the Express API |
 | `npm run dev` | Start the frontend and API in development mode |
 | `npm run dev:client` | Start the Vite frontend |
 | `npm run dev:server` | Start the Express API with Nodemon |

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Users, UserCheck, Clock, UserMinus,
-  CalendarDays, AlertCircle, FolderKanban, CheckCircle2, AlertTriangle, ShieldAlert
+  CalendarDays, AlertCircle, FolderKanban, CheckCircle2, AlertTriangle, ShieldAlert, RefreshCw
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis,
@@ -50,6 +50,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
   const pieColors = pieColorsByGroup[projectGroupBy];
   const [summary, setSummary] = useState({ totalClients: 0, activeProjects: 0, delayedProjectsExternal: 0, delayedProjectsInternal: 0, totalRisks: 0, openRisks: 0 });
   const [projectBreakdown, setProjectBreakdown] = useState<{ name: string; value: number }[]>([]);
+  const [rfpBreakdown, setRfpBreakdown] = useState<{ name: string; value: number; revenueInr: number }[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [revenueSeries, setRevenueSeries] = useState<any[]>([]);
   const [serviceSeries, setServiceSeries] = useState<any[]>([]);
@@ -75,6 +76,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
         setLastUpdated(new Date());
         setSummary(payload.summary);
         setProjectBreakdown(payload.projectBreakdown || []);
+        setRfpBreakdown(payload.rfpBreakdown || []);
         setChartData((payload.onboardingTrend?.length ? payload.onboardingTrend : [{ month: "No data", onboarded: 0, offboarded: 0 }]).map((item: any) => ({ ...item, offboarded: item.offboarded || 0 })));
         setRevenueSeries(payload.revenueTrend?.length ? payload.revenueTrend : [{ month: "No data", revenue: 0 }]);
         setServiceSeries(payload.serviceAdoption || []);
@@ -327,6 +329,81 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
           </div>
         ) : (
           <p className="py-8 text-center text-sm" style={{ color: muted }}>No projects for this year.</p>
+        )}
+      </section>
+
+      <section aria-labelledby="dashboard-rfp-heading" className="space-y-3">
+        <h2 id="dashboard-rfp-heading" className="text-base font-semibold">
+          RFP Dashboard
+        </h2>
+        <div
+          className="w-full max-w-2xl rounded-xl border p-5"
+          style={{ background: bg, borderColor: border }}
+        >
+          <div className="mb-3">
+            <h3 className="font-semibold text-sm">RFPs by status</h3>
+            <p className="mt-0.5 text-xs" style={{ color: muted }}>
+              {selectedYear === "all" ? "All estimation years" : `Estimation year ${selectedYear}`}
+            </p>
+          </div>
+          {rfpBreakdown.length ? (
+            <div className="flex flex-wrap items-center gap-4">
+              <ResponsiveContainer width={240} height={210}>
+                <PieChart>
+                  <Pie
+                    data={rfpBreakdown}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={48}
+                    outerRadius={82}
+                    paddingAngle={2}
+                  >
+                    {rfpBreakdown.map((item, index) => (
+                      <Cell key={item.name} fill={pieColorsByGroup.status[index % pieColorsByGroup.status.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip dark={dark} />} />
+                </PieChart>
+              </ResponsiveContainer>
+              <ul className="min-w-[160px] flex-1 space-y-2">
+                {rfpBreakdown.map((item, index) => (
+                  <li key={item.name} className="flex items-center justify-between gap-4 text-xs">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: pieColorsByGroup.status[index % pieColorsByGroup.status.length] }} />
+                      <span className="truncate">{item.name}</span>
+                    </span>
+                    <strong>{item.value}</strong>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm" style={{ color: muted }}>No RFPs for this year.</p>
+          )}
+        </div>
+        {rfpBreakdown.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {rfpBreakdown.map((item, index) => (
+              <div
+                key={item.name}
+                className="rounded-xl border p-5"
+                style={{ background: bg, borderColor: border }}
+              >
+                <div className="flex items-center gap-2 text-xs font-medium" style={{ color: muted }}>
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: pieColorsByGroup.status[index % pieColorsByGroup.status.length] }} />
+                  {item.name} RFP revenue
+                </div>
+                <p className="mt-3 text-xl font-bold" style={{ color: text }}>
+                  {new Intl.NumberFormat("en-IN", {
+                    style: "currency",
+                    currency: "INR",
+                    maximumFractionDigits: 0,
+                  }).format(item.revenueInr)}
+                </p>
+                <p className="mt-1 text-xs" style={{ color: muted }}>{item.value} RFPs</p>
+              </div>
+            ))}
+          </div>
         )}
       </section>
 
