@@ -25,6 +25,7 @@ import {
   PROJECT_STATUSES,
   PROJECT_STATUS_COLORS,
 } from "../../shared/project-status.js"
+import { MANDATORY_DOCUMENTS } from "../data/projectDocuments"
 import type { RfpProjectPrefill } from "./RfpEstimation"
 
 interface ClientsProps {
@@ -1928,57 +1929,65 @@ export default function Clients({
                         )}
                       </label>
                       {f.type === "select" ? (
-                        <select
-                          value={(form as any)[f.key]}
-                          required={f.required}
-                          onChange={(e) =>
-                            setForm((fm) => ({
-                              ...fm,
+                        <>
+                          <select
+                            value={(form as any)[f.key]}
+                            required={f.required}
+                            onChange={(e) =>
+                              setForm((fm) => ({
+                                ...fm,
 
-                              [f.key]: e.target.value,
-                            }))
-                          }
-                          className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                          style={{
-                            background: inputBg,
-                            borderColor: border,
-                            color: text,
-                          }}
-                        >
-                          <option value="">{f.placeholder}</option>
+                                [f.key]: e.target.value,
+                              }))
+                            }
+                            className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                            style={{
+                              background: inputBg,
+                              borderColor: border,
+                              color: text,
+                            }}
+                          >
+                            <option value="">{f.placeholder}</option>
+                            {f.key === "status" &&
+                              form.status &&
+                              !PROJECT_STATUSES.includes(normalizeProjectStatus(form.status)) && (
+                                <option value={form.status}>{form.status}</option>
+                              )}
+                            {f.key === "manager" &&
+                              form.manager &&
+                              !projectUsers.some(
+                                (projectUser) =>
+                                  projectUser.fullName === form.manager,
+                              ) && (
+                                <option value={form.manager}>
+                                  {form.manager} (current assignment)
+                                </option>
+                              )}
+                            {f.key === "manager"
+                              ? projectUsers.map((projectUser) => (
+                                  <option
+                                    key={projectUser.email}
+                                    value={projectUser.fullName}
+                                  >
+                                    {projectUser.fullName} —{" "}
+                                    {projectUser.roles.join(", ")}
+                                  </option>
+                                ))
+                              : (f.key === "region" && form.region && !f.options?.includes(form.region)
+                                  ? [...(f.options || []), form.region]
+                                  : f.options || []).map((o) => (
+                                  <option key={o} value={o}>
+                                    {o}
+                                  </option>
+                                ))}
+                          </select>
                           {f.key === "status" &&
-                            form.status &&
-                            !PROJECT_STATUSES.includes(normalizeProjectStatus(form.status)) && (
-                              <option value={form.status}>{form.status}</option>
+                            normalizeProjectStatus(form.status) === "Completed" && (
+                              <p className="mt-1.5 text-[11px]" style={{ color: muted }}>
+                                All {MANDATORY_DOCUMENTS.length} mandatory project documents must be added before this project can be completed.
+                              </p>
                             )}
-                          {f.key === "manager" &&
-                            form.manager &&
-                            !projectUsers.some(
-                              (projectUser) =>
-                                projectUser.fullName === form.manager,
-                            ) && (
-                              <option value={form.manager}>
-                                {form.manager} (current assignment)
-                              </option>
-                            )}
-                          {f.key === "manager"
-                            ? projectUsers.map((projectUser) => (
-                                <option
-                                  key={projectUser.email}
-                                  value={projectUser.fullName}
-                                >
-                                  {projectUser.fullName} —{" "}
-                                  {projectUser.roles.join(", ")}
-                                </option>
-                              ))
-                            : (f.key === "region" && form.region && !f.options?.includes(form.region)
-                                ? [...(f.options || []), form.region]
-                                : f.options || []).map((o) => (
-                                <option key={o} value={o}>
-                                  {o}
-                                </option>
-                              ))}
-                        </select>
+                        </>
                       ) : (
                         <input
                           type={f.type === "number" ? "number" : "text"}

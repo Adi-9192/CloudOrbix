@@ -1,0 +1,18 @@
+export const MANDATORY_DOCUMENTS = [
+  { id: "project-intake-form", name: "Project Intake Form" },
+  { id: "kick-off", name: "Kick Off" },
+  { id: "isow", name: "ISOW" },
+  { id: "sow", name: "SOW" },
+  { id: "inventory", name: "Inventory" },
+  { id: "gap-analysis", name: "Gap Analysis" },
+  { id: "raid-log", name: "RAID LOG" },
+  { id: "raci", name: "RACI" },
+  { id: "project-plan", name: "Project Plan" },
+  { id: "solution-review-sign-off", name: "Solution review / sign off" },
+  { id: "design-documents-hld-lld", name: "Design Documents - HLD/LLD" },
+  { id: "project-reports", name: "Project Reports" },
+  { id: "test-reports-evidences", name: "Test reports / Evidences" },
+  { id: "project-sign-off", name: "Project Sign off" },
+  { id: "atr", name: "ATR" },
+  { id: "offboarding-project-team", name: "Offboarding the project team" },
+];
