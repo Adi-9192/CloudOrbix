@@ -29,7 +29,7 @@ async function projectFor(clientId) {
 
   const [resources, services] = await Promise.all([
     pool.query(
-      'SELECT resource_name, fte FROM project_resources WHERE client_id = $1 ORDER BY id',
+      'SELECT resource_name, fte, role_for_project, infrastructure_access FROM project_resources WHERE client_id = $1 ORDER BY id',
       [project.id],
     ),
     pool.query(
@@ -43,6 +43,8 @@ async function projectFor(clientId) {
     resources: resources.rows.map((resource) => ({
       resourceName: resource.resource_name,
       fte: resource.fte === null ? null : Number(resource.fte),
+      roleForProject: resource.role_for_project || '',
+      infrastructureAccess: Boolean(resource.infrastructure_access),
     })),
   };
 }
