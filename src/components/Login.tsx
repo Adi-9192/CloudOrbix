@@ -195,6 +195,13 @@ export default function Login({ onLogin }: LoginProps) {
             <div className="flex-1 h-px bg-slate-200" />
           </div>
 
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (resetMode) void handlePasswordReset();
+              else void handleAuth("manual");
+            }}
+          >
           <div className="space-y-4 mb-6">
             <div>
               <label htmlFor="emailAddress" className="block text-xs font-semibold text-slate-200 mb-1.5">Email Address</label>
@@ -204,6 +211,7 @@ export default function Login({ onLogin }: LoginProps) {
                   id="emailAddress"
                   name="email"
                   type="email"
+                  required
                   value={email}
                   aria-label="Email Address"
                   autoComplete="email"
@@ -224,6 +232,7 @@ export default function Login({ onLogin }: LoginProps) {
                   id="passwordField"
                   name="password"
                   type={showPassword ? "text" : "password"}
+                  required
                   value={password}
                   aria-label="Password"
                   autoComplete="current-password"
@@ -246,8 +255,7 @@ export default function Login({ onLogin }: LoginProps) {
             <label className="block text-xs font-semibold text-slate-200">Confirm new password<input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Re-enter the new password" className="mt-1 w-full px-3 py-2 rounded-lg border text-sm bg-white text-slate-900 placeholder:text-slate-500" style={{ borderColor: "#94A3B8" }} /></label>
           </div>}
           <button
-            type="button"
-            onClick={() => resetMode ? handlePasswordReset() : handleAuth("manual")}
+            type="submit"
             disabled={loading}
             aria-label="Sign In"
             className="w-full py-3 rounded-lg font-semibold text-white text-sm transition-colors"
@@ -257,6 +265,7 @@ export default function Login({ onLogin }: LoginProps) {
           >
             {resetMode ? "Update password" : "Sign In"}
           </button>
+          </form>
 
           <div className="mt-8 p-4 rounded-lg bg-slate-50 border border-slate-100">
             <div className="text-xs text-slate-500 text-center mb-2 font-medium">Need help?</div>

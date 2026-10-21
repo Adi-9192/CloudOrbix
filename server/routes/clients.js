@@ -16,11 +16,45 @@ import {
 import { MANDATORY_DOCUMENTS } from '../../shared/project-documents.js';
 import { protectRoute, requireRole } from '../middleware/auth.js';
 import { resolveNewProjectId } from '../../shared/project-id.js';
+import { normalizeProjectName } from '../../shared/project-name.js';
+import { normalizeProjectStatus } from '../../shared/project-status.js';
 
 const router = express.Router();
 let accessRequestTableReady;
 let serviceCategoryColumnReady;
 const publicClient = (client) => ({ ...client, id: client.id, name: client.clientName, status: client.currentStatus, lastUpdated: client.updatedAt });
+const hasActualEndDate = (value) => Boolean(String(value || '').trim());
+const completedWithoutActualEndDate = (status, actualEndDate) =>
+  normalizeProjectStatus(status) === 'Completed' && !hasActualEndDate(actualEndDate);
+const actualEndDateFromUpdate = (payload, existingClient) => {
+  if (Object.hasOwn(payload, 'actualEndDate')) return payload.actualEndDate;
+  if (Object.hasOwn(payload, 'actualOffboardDate')) return payload.actualOffboardDate;
+  return existingClient.actualEndDate || existingClient.actualOffboardDate;
+};
+
+async function projectNameConflict(pool, name, excludingClientId = null) {
+  const normalizedName = normalizeProjectName(name);
+  if (!normalizedName) return false;
+  if (!pool) {
+    return appState.clients.some((client) =>
+      client.clientId !== excludingClientId &&
+      [client.clientName, client.pendingPayload?.clientName].some(
+        (candidate) => normalizeProjectName(candidate) === normalizedName,
+      ),
+    );
+  }
+  const result = await pool.query(`
+    SELECT TOP (1) client_id
+    FROM clients
+    WHERE ($2 IS NULL OR client_id <> $2)
+      AND (
+        LOWER(LTRIM(RTRIM(client_name))) = LOWER(LTRIM(RTRIM($1)))
+        OR LOWER(LTRIM(RTRIM(CASE WHEN ISJSON(pending_payload) = 1 THEN JSON_VALUE(pending_payload, '$.clientName') END))) = LOWER(LTRIM(RTRIM($1)))
+      )
+  `, [normalizedName, excludingClientId]);
+  return result.rows.length > 0;
+}
+
 async function getMissingMandatoryDocuments(pool, clientDbId) {
   if (!pool) return missingMandatoryProjectDocuments([]);
 
@@ -386,6 +420,12 @@ router.post('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team'
     if (metricError) return res.status(400).json({ message: metricError });
     const canManage = canManageProject(req.user?.roles || []);
     const pool = getPool();
+    if (await projectNameConflict(pool, body.clientName)) {
+      return res.status(409).json({ message: 'A project with this name already exists. Enter a unique project name.' });
+    }
+    if (completedWithoutActualEndDate(body.currentStatus, body.actualEndDate || body.actualOffboardDate)) {
+      return res.status(400).json({ message: 'Actual End Date is required to mark a project as completed.' });
+    }
     if (requiresMandatoryProjectDocuments(body.currentStatus)) {
       const missingDocuments = missingMandatoryProjectDocuments([]);
       return res.status(400).json({
@@ -403,7 +443,7 @@ router.post('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team'
         period,
       );
       const requester = canManage ? null : getSubmittedBy(req.user);
-      const client = { id: Date.now(), clientId, clientName: body.clientName, accountManager: body.accountManager, projectManager: body.projectManager || body.accountManager, serviceCategory: body.serviceCategory || null, region: body.region || 'North America', industry: body.industry || 'Technology', revenue: Number(body.revenue || 0), currentStatus: body.currentStatus || 'Pending Onboarding', services: body.services || [], createdAt: new Date().toISOString().slice(0,10), updatedAt: new Date().toISOString().slice(0,10), plannedOnboardDate: body.plannedOnboardDate || null, actualOnboardDate: body.actualOnboardDate || null, plannedOffboardDate: body.plannedOffboardDate || null, actualOffboardDate: body.actualOffboardDate || null, contractStartDate: body.contractStartDate || null, contractEndDate: body.contractEndDate || null, projectBillingCode: body.projectBillingCode || null, resources: body.resources || [], voumetric: body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric), remarks: body.remarks || '', approvalStatus: canManage ? 'approved' : 'pending', pendingPayload: requester ? { ...body, ...requester } : null, pendingCreate: !canManage };
+      const client = { id: Date.now(), clientId, clientName: body.clientName, accountManager: body.accountManager, projectManager: body.projectManager || body.accountManager, serviceCategory: body.serviceCategory || null, region: body.region || 'North America', industry: body.industry || 'Technology', revenue: Number(body.revenue || 0), currentStatus: body.currentStatus || 'Pending Onboarding', services: body.services || [], createdAt: new Date().toISOString().slice(0,10), updatedAt: new Date().toISOString().slice(0,10), plannedOnboardDate: body.plannedOnboardDate || null, actualOnboardDate: body.actualOnboardDate || null, plannedOffboardDate: body.plannedOffboardDate || null, actualOffboardDate: body.actualOffboardDate || null, actualEndDate: body.actualEndDate || body.actualOffboardDate || null, contractStartDate: body.contractStartDate || null, contractEndDate: body.contractEndDate || null, projectBillingCode: body.projectBillingCode || null, resources: body.resources || [], voumetric: body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric), remarks: body.remarks || '', approvalStatus: canManage ? 'approved' : 'pending', pendingPayload: requester ? { ...body, ...requester } : null, pendingCreate: !canManage };
       appState.clients.unshift(client);
       if (requester) await notifyAdminsOfRequest(client.clientId, client.clientName, requester);
       createAuditEntry(req.user.email, canManage ? 'Client Created' : 'Client Submitted for Approval', '—', client.clientName);
@@ -594,6 +634,15 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
       });
     }
 
+    const nextStatus = body.currentStatus ?? existingClient.currentStatus;
+    const nextActualEndDate = actualEndDateFromUpdate(body, existingClient);
+    if (completedWithoutActualEndDate(nextStatus, nextActualEndDate)) {
+      return res.status(400).json({ message: 'Actual End Date is required to mark a project as completed.' });
+    }
+    if (await projectNameConflict(pool, body.clientName ?? existingClient.clientName, req.params.clientId)) {
+      return res.status(409).json({ message: 'A project with this name already exists. Enter a unique project name.' });
+    }
+
     if (
       requiresMandatoryProjectDocuments(
         body.currentStatus ?? existingClient.currentStatus,
@@ -774,6 +823,14 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
         return res.status(403).json({ message: 'You are not authorized to approve this project change.' });
       }
       const payload = client.pendingPayload || {};
+      const approvedStatus = payload.currentStatus ?? client.currentStatus;
+      const approvedEndDate = actualEndDateFromUpdate(payload, client);
+      if (completedWithoutActualEndDate(approvedStatus, approvedEndDate)) {
+        return res.status(400).json({ message: 'Actual End Date is required to mark a project as completed.' });
+      }
+      if (await projectNameConflict(pool, payload.clientName ?? client.clientName, req.params.clientId)) {
+        return res.status(409).json({ message: 'A project with this name already exists. Enter a unique project name.' });
+      }
         if (requiresMandatoryProjectDocuments(payload.currentStatus ?? client.currentStatus)) {
           const missingDocuments = missingMandatoryProjectDocuments([]);
           if (missingDocuments.length) {
@@ -807,6 +864,14 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
     }
 
     const payload = parsePendingPayload(record.pending_payload) || {};
+    const approvedStatus = payload.currentStatus ?? currentClient.currentStatus;
+    const approvedEndDate = actualEndDateFromUpdate(payload, currentClient);
+    if (completedWithoutActualEndDate(approvedStatus, approvedEndDate)) {
+      return res.status(400).json({ message: 'Actual End Date is required to mark a project as completed.' });
+    }
+    if (await projectNameConflict(pool, payload.clientName ?? currentClient.clientName, req.params.clientId)) {
+      return res.status(409).json({ message: 'A project with this name already exists. Enter a unique project name.' });
+    }
     const metricError = validateProjectMetrics(payload);
     if (metricError) return res.status(400).json({ message: metricError });
     if (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { normalizeProjectName } from "../../shared/project-name.js";
 import {
   Archive,
   ArrowDownToLine,
@@ -777,6 +778,18 @@ export default function RfpEstimation({
       (durationMonths === 0 && durationDays === 0)
     ) {
       setError("Enter at least one month, or a duration of 1 to 30 days.");
+      return;
+    }
+    const normalizedName = normalizeProjectName(estimate.accountName);
+    if (
+      normalizedName &&
+      estimates.some(
+        (project) =>
+          project.id !== estimate.id &&
+          normalizeProjectName(project.project_name) === normalizedName,
+      )
+    ) {
+      setError("An RFP estimate with this name already exists. Enter a unique project name.");
       return;
     }
     setBusy(true);

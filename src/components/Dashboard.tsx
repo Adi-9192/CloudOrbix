@@ -255,7 +255,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
             }}
           >
             <option value="all">All years</option>
-            {[2024, 2025, 2026, 2027].map((year) => (
+            {[2025, 2026, 2027].map((year) => (
               <option key={year} value={year}>{year}</option>
             ))}
           </select>
@@ -457,7 +457,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -500,7 +500,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
             </AreaChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </div> */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {user?.roles.includes("Admin") && <div className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>

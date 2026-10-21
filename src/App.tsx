@@ -29,6 +29,9 @@ type AuthUser = {
   isActive: boolean;
 };
 
+const IDLE_LOGOUT_MS = 2 * 60 * 60 * 1000;
+const LAST_ACTIVITY_KEY = "clmp-last-activity";
+
 const getStoredUser = (): AuthUser | null => {
   try {
     const raw = localStorage.getItem("clmp-user");
@@ -113,6 +116,7 @@ export default function App() {
   const handleLogin = (authUser: AuthUser, token: string) => {
     localStorage.setItem("clmp-token", token);
     localStorage.setItem("clmp-user", JSON.stringify(authUser));
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
     setUser(authUser);
     setLoggedIn(true);
   };
@@ -120,6 +124,7 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem("clmp-token");
     localStorage.removeItem("clmp-user");
+    localStorage.removeItem(LAST_ACTIVITY_KEY);
     localStorage.removeItem("clmp-project-id");
     localStorage.removeItem("clmp-repository-documents");
     for (const key of Object.keys(sessionStorage)) {
@@ -130,6 +135,59 @@ export default function App() {
     setLoggedIn(false);
     setUser(null);
   };
+
+  useEffect(() => {
+    if (!loggedIn) return;
+
+    if (!localStorage.getItem(LAST_ACTIVITY_KEY)) {
+      localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+    }
+    let lastActivityAt = Number(localStorage.getItem(LAST_ACTIVITY_KEY)) || Date.now();
+    let lastActivityWrite = 0;
+    const recordActivity = () => {
+      const now = Date.now();
+      const lastActivity = Math.max(
+        lastActivityAt,
+        Number(localStorage.getItem(LAST_ACTIVITY_KEY)) || 0,
+      );
+      if (Number.isFinite(lastActivity) && lastActivity > 0 && now - lastActivity >= IDLE_LOGOUT_MS) {
+        handleLogout();
+        return;
+      }
+      lastActivityAt = now;
+      if (now - lastActivityWrite >= 5_000) {
+        localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+        lastActivityWrite = now;
+      }
+    };
+    const checkIdleTimeout = () => {
+      const lastActivity = Math.max(
+        lastActivityAt,
+        Number(localStorage.getItem(LAST_ACTIVITY_KEY)) || 0,
+      );
+      if (Number.isFinite(lastActivity) && lastActivity > 0 && Date.now() - lastActivity >= IDLE_LOGOUT_MS) {
+        handleLogout();
+      }
+    };
+    const onStorageChange = (event: StorageEvent) => {
+      if (event.key === "clmp-token" && !event.newValue) {
+        handleLogout();
+      } else if (event.key === LAST_ACTIVITY_KEY) {
+        checkIdleTimeout();
+      }
+    };
+    const activityEvents: Array<keyof WindowEventMap> = ["pointerdown", "pointermove", "keydown", "scroll", "touchstart"];
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, recordActivity, { passive: true }));
+    const idleCheck = window.setInterval(checkIdleTimeout, 30_000);
+    window.addEventListener("storage", onStorageChange);
+    checkIdleTimeout();
+
+    return () => {
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, recordActivity));
+      window.clearInterval(idleCheck);
+      window.removeEventListener("storage", onStorageChange);
+    };
+  }, [loggedIn]);
 
   if (booting) {
     return <LoadingScreen />;

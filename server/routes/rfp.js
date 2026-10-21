@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import { createNotification, getPool } from '../db.js';
 import { protectRoute, requireRole } from '../middleware/auth.js';
 import { buildPeriods, periodAllocationKey } from '../lib/rfp-periods.js';
+import { normalizeProjectName } from '../../shared/project-name.js';
 
 const router = express.Router();
 const resourceTypes = ['Long Term', 'Standard', 'Moderate', 'Experts'];
@@ -20,6 +21,32 @@ function requireDatabase(res) {
 
 function monthDate(value) {
   return /^\d{4}-\d{2}$/.test(String(value || '')) ? `${value}-01` : null;
+}
+
+async function ensureUniqueRfpName(pool, accountName, existingId = null, excludedRequestId = null) {
+  const normalizedName = normalizeProjectName(accountName);
+  const projectMatches = await pool.query(`
+    SELECT TOP (1) id
+    FROM rfp_projects
+    WHERE LOWER(LTRIM(RTRIM(project_name))) = LOWER(LTRIM(RTRIM($1)))
+      AND ($2 IS NULL OR id <> $2)
+  `, [normalizedName, existingId]);
+  if (projectMatches.rows.length) {
+    throw Object.assign(new Error('An RFP estimate with this name already exists. Enter a unique project name.'), { status: 409 });
+  }
+
+  const pendingMatches = await pool.query(`
+    SELECT TOP (1) id
+    FROM rfp_approval_requests
+    WHERE status = 'pending'
+      AND request_type IN ('create', 'update')
+      AND ($2 IS NULL OR project_id IS NULL OR project_id <> $2)
+      AND ($3 IS NULL OR id <> $3)
+      AND LOWER(LTRIM(RTRIM(CASE WHEN ISJSON(payload) = 1 THEN JSON_VALUE(payload, '$.accountName') END))) = LOWER(LTRIM(RTRIM($1)))
+  `, [normalizedName, existingId, excludedRequestId]);
+  if (pendingMatches.rows.length) {
+    throw Object.assign(new Error('An RFP estimate with this name already exists or is awaiting approval. Enter a unique project name.'), { status: 409 });
+  }
 }
 
 function validateProject(body) {
@@ -316,7 +343,7 @@ router.post('/approvals/:id/decision', requireRole('Admin'), async (req, res, ne
         const payload = typeof request.payload === 'string' ? JSON.parse(request.payload) : request.payload;
         const validation = validateProject(payload);
         if (validation.error) return res.status(400).json({ message: validation.error });
-        applied = await persistProject(pool, req.user.id, validation.value, 'Submitted', request.request_type === 'update' ? request.project_id : null);
+        applied = await persistProject(pool, req.user.id, validation.value, 'Submitted', request.request_type === 'update' ? request.project_id : null, request.id);
       }
     }
     const updated = await pool.query(`UPDATE rfp_approval_requests SET status = $1, decided_at = SYSUTCDATETIME(), decided_by = $2, project_id = COALESCE(project_id, $4) OUTPUT INSERTED.id AS id WHERE id = $3 AND status = 'pending'`, [decision === 'approve' ? 'approved' : 'rejected', req.user.id, request.id, applied?.id || null]);
@@ -396,7 +423,8 @@ router.get('/projects/:id', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-async function persistProject(pool, userId, data, status, existingId = null) {
+async function persistProject(pool, userId, data, status, existingId = null, excludedRequestId = null) {
+  await ensureUniqueRfpName(pool, data.accountName, existingId, excludedRequestId);
   const rateResult = await pool.query('SELECT r.grade, r.resource_type, r.daily_rate FROM resource_rate_cards r JOIN resource_rate_card_versions v ON v.id = r.version_id WHERE v.[year] = $1', [data.year]);
   if (!rateResult.rows.length) throw Object.assign(new Error(`No resource rate card exists for ${data.year}. Add rates in Resource Rate Card first.`), { status: 400 });
   const rateMap = new Map(rateResult.rows.map((row) => [`${row.grade}|${row.resource_type}`, Number(row.daily_rate)]));
@@ -461,6 +489,7 @@ async function saveProject(req, res, next, existingId = null) {
   if (validation.error) return res.status(400).json({ message: validation.error });
   const data = validation.value;
   try {
+    await ensureUniqueRfpName(pool, data.accountName, existingId);
     if (!isAdmin(req)) {
       if (existingId) {
         const existing = await pool.query('SELECT id FROM rfp_projects WHERE id = $1', [existingId]);

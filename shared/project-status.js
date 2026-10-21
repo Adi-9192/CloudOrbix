@@ -1,6 +1,6 @@
 export const PROJECT_STATUSES = [
   'On Track',
-  'Delayed',
+  // 'Delayed',
   'At Risk',
   'On Hold',
   'Scope Finalisation',
@@ -13,7 +13,7 @@ export const PROJECT_STATUSES = [
 
 export const PROJECT_STATUS_COLORS = {
   'On Track': { background: '#DCFCE7', color: '#15803D', border: '#86EFAC' },
-  Delayed: { background: '#FEF3C7', color: '#B45309', border: '#FCD34D' },
+  // 'Delayed': { background: '#FEF3C7', color: '#B45309', border: '#FCD34D' },
   'At Risk': { background: '#FEE2E2', color: '#B91C1C', border: '#FCA5A5' },
   'On Hold': { background: '#E2E8F0', color: '#475569', border: '#CBD5E1' },
   'Scope Finalisation': { background: '#EDE9FE', color: '#6D28D9', border: '#C4B5FD' },

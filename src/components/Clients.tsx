@@ -25,6 +25,7 @@ import {
   PROJECT_STATUSES,
   PROJECT_STATUS_COLORS,
 } from "../../shared/project-status.js"
+import { normalizeProjectName } from "../../shared/project-name.js"
 import { MANDATORY_DOCUMENTS } from "../data/projectDocuments"
 import type { RfpProjectPrefill } from "./RfpEstimation"
 
@@ -897,6 +898,26 @@ export default function Clients({
 
       showCloudOrbixAlert("Project Name is required.", "warning")
 
+      return
+    }
+
+    const normalizedName = normalizeProjectName(form.name)
+    const duplicateName = clientList.some((client) =>
+      client.id !== editingClientId &&
+      normalizeProjectName(client.name) === normalizedName
+    )
+    if (duplicateName) {
+      setStep(0)
+      showCloudOrbixAlert("A project with this name already exists. Enter a unique project name.", "warning")
+      return
+    }
+
+    if (
+      normalizeProjectStatus(form.status) === "Completed" &&
+      !form.actualEndDate.trim()
+    ) {
+      setStep(2)
+      showCloudOrbixAlert("Actual End Date is required to mark a project as completed.", "warning")
       return
     }
 
@@ -2095,9 +2116,17 @@ export default function Clients({
                         style={{ color: text }}
                       >
                         {f.label}
+                        {f.key === "actualEndDate" &&
+                          normalizeProjectStatus(form.status) === "Completed" && (
+                            <span className="ml-1 text-red-500">*</span>
+                          )}
                       </label>
                       <input
                         type="date"
+                        required={
+                          f.key === "actualEndDate" &&
+                          normalizeProjectStatus(form.status) === "Completed"
+                        }
                         value={(form as any)[f.key]}
                         onChange={(e) =>
                           setForm((fm) => ({ ...fm, [f.key]: e.target.value }))
