@@ -97,10 +97,11 @@ router.get('/', protectRoute, async (req, res, next) => {
         serviceAdoption: services,
         regionData: regions,
         upcomingActivities: [],
+        rfpBreakdown: [],
       });
     }
 
-    const [summaryResult, onboardingResult, revenueResult, servicesResult, risksResult, upcomingResult, regionResult, yearsResult, projectBreakdownResult] = await Promise.all([
+    const [summaryResult, onboardingResult, revenueResult, servicesResult, risksResult, upcomingResult, regionResult, yearsResult, projectBreakdownResult, rfpBreakdownResult] = await Promise.all([
       pool.query(`
         SELECT COUNT(*) AS total_clients,
           CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) IN ('on-track','on track','in progress','onboarded') THEN 1 END) AS int) AS active_clients,
@@ -207,6 +208,16 @@ router.get('/', protectRoute, async (req, res, next) => {
         GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(${groupColumn})), ''), 'Unspecified')
         ORDER BY value DESC, name
       `, [selectedYear]),
+      pool.query(`
+        SELECT COALESCE(NULLIF(LTRIM(RTRIM(p.project_status)), ''), 'Unspecified') AS name,
+          CAST(COUNT(*) AS int) AS value,
+          CAST(COALESCE(SUM(s.grand_total_inr), 0) AS numeric(18,2)) AS revenue_inr
+        FROM rfp_projects p
+        LEFT JOIN rfp_cost_summary s ON s.project_id = p.id
+        WHERE ($1 IS NULL OR p.[year] = $1)
+        GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(p.project_status)), ''), 'Unspecified')
+        ORDER BY value DESC, name
+      `, [selectedYear]),
     ]);
 
     const summary = summaryResult.rows[0];
@@ -238,6 +249,11 @@ router.get('/', protectRoute, async (req, res, next) => {
       serviceAdoption: servicesResult.rows,
       regionData: regionResult.rows.map((item, index) => ({ ...item, color: colors[index % colors.length] })),
       upcomingActivities: upcomingResult.rows,
+      rfpBreakdown: rfpBreakdownResult.rows.map((item) => ({
+        name: item.name,
+        value: Number(item.value),
+        revenueInr: Number(item.revenue_inr),
+      })),
     });
   } catch (error) {
     return next(error);
