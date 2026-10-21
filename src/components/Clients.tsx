@@ -25,6 +25,7 @@ import {
   PROJECT_STATUSES,
   PROJECT_STATUS_COLORS,
 } from "../../shared/project-status.js"
+import { MANDATORY_DOCUMENTS } from "../data/projectDocuments"
 import type { RfpProjectPrefill } from "./RfpEstimation"
 
 interface ClientsProps {
@@ -118,6 +119,10 @@ interface ResourceAllocation {
   resourceName: string
 
   fte: number | null
+
+  roleForProject: string
+
+  infrastructureAccess: boolean
 }
 
 interface ProjectUserOption {
@@ -335,7 +340,14 @@ const EMPTY_FORM = {
 
   voumetric: "",
 
-  resources: [{ resourceName: "", fte: null }] as ResourceAllocation[],
+  resources: [
+    {
+      resourceName: "",
+      fte: null,
+      roleForProject: "",
+      infrastructureAccess: false,
+    },
+  ] as ResourceAllocation[],
 
   isow: "",
 
@@ -454,8 +466,17 @@ export default function Clients({
         projectBillingCode: client.projectBillingCode || "",
 
         resources: client.resources?.length
-          ? client.resources
-          : [{ resourceName: "", fte: null }],
+          ? client.resources.map((resource) => ({
+              ...resource,
+              roleForProject: resource.roleForProject || "",
+              infrastructureAccess: Boolean(resource.infrastructureAccess),
+            }))
+          : [{
+              resourceName: "",
+              fte: null,
+              roleForProject: "",
+              infrastructureAccess: false,
+            }],
 
         voumetric: client.voumetric ?? null,
 
@@ -790,8 +811,17 @@ export default function Clients({
       projectBillingCode: client.projectBillingCode || "",
 
       resources: client.resources?.length
-        ? client.resources
-        : [{ resourceName: "", fte: null }],
+        ? client.resources.map((resource) => ({
+            ...resource,
+            roleForProject: resource.roleForProject || "",
+            infrastructureAccess: Boolean(resource.infrastructureAccess),
+          }))
+        : [{
+            resourceName: "",
+            fte: null,
+            roleForProject: "",
+            infrastructureAccess: false,
+          }],
 
       voumetric:
         client.voumetric === null || client.voumetric === undefined
@@ -920,9 +950,14 @@ export default function Clients({
         .filter((resource) => resource.resourceName.trim())
 
         .map((resource) => ({
+
           resourceName: resource.resourceName.trim(),
 
           fte: resource.fte,
+
+          roleForProject: resource.roleForProject.trim(),
+
+          infrastructureAccess: resource.infrastructureAccess,
         })),
 
       isow: form.isow || null,
@@ -1894,57 +1929,65 @@ export default function Clients({
                         )}
                       </label>
                       {f.type === "select" ? (
-                        <select
-                          value={(form as any)[f.key]}
-                          required={f.required}
-                          onChange={(e) =>
-                            setForm((fm) => ({
-                              ...fm,
+                        <>
+                          <select
+                            value={(form as any)[f.key]}
+                            required={f.required}
+                            onChange={(e) =>
+                              setForm((fm) => ({
+                                ...fm,
 
-                              [f.key]: e.target.value,
-                            }))
-                          }
-                          className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                          style={{
-                            background: inputBg,
-                            borderColor: border,
-                            color: text,
-                          }}
-                        >
-                          <option value="">{f.placeholder}</option>
+                                [f.key]: e.target.value,
+                              }))
+                            }
+                            className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                            style={{
+                              background: inputBg,
+                              borderColor: border,
+                              color: text,
+                            }}
+                          >
+                            <option value="">{f.placeholder}</option>
+                            {f.key === "status" &&
+                              form.status &&
+                              !PROJECT_STATUSES.includes(normalizeProjectStatus(form.status)) && (
+                                <option value={form.status}>{form.status}</option>
+                              )}
+                            {f.key === "manager" &&
+                              form.manager &&
+                              !projectUsers.some(
+                                (projectUser) =>
+                                  projectUser.fullName === form.manager,
+                              ) && (
+                                <option value={form.manager}>
+                                  {form.manager} (current assignment)
+                                </option>
+                              )}
+                            {f.key === "manager"
+                              ? projectUsers.map((projectUser) => (
+                                  <option
+                                    key={projectUser.email}
+                                    value={projectUser.fullName}
+                                  >
+                                    {projectUser.fullName} —{" "}
+                                    {projectUser.roles.join(", ")}
+                                  </option>
+                                ))
+                              : (f.key === "region" && form.region && !f.options?.includes(form.region)
+                                  ? [...(f.options || []), form.region]
+                                  : f.options || []).map((o) => (
+                                  <option key={o} value={o}>
+                                    {o}
+                                  </option>
+                                ))}
+                          </select>
                           {f.key === "status" &&
-                            form.status &&
-                            !PROJECT_STATUSES.includes(normalizeProjectStatus(form.status)) && (
-                              <option value={form.status}>{form.status}</option>
+                            normalizeProjectStatus(form.status) === "Completed" && (
+                              <p className="mt-1.5 text-[11px]" style={{ color: muted }}>
+                                All {MANDATORY_DOCUMENTS.length} mandatory project documents must be added before this project can be completed.
+                              </p>
                             )}
-                          {f.key === "manager" &&
-                            form.manager &&
-                            !projectUsers.some(
-                              (projectUser) =>
-                                projectUser.fullName === form.manager,
-                            ) && (
-                              <option value={form.manager}>
-                                {form.manager} (current assignment)
-                              </option>
-                            )}
-                          {f.key === "manager"
-                            ? projectUsers.map((projectUser) => (
-                                <option
-                                  key={projectUser.email}
-                                  value={projectUser.fullName}
-                                >
-                                  {projectUser.fullName} —{" "}
-                                  {projectUser.roles.join(", ")}
-                                </option>
-                              ))
-                            : (f.key === "region" && form.region && !f.options?.includes(form.region)
-                                ? [...(f.options || []), form.region]
-                                : f.options || []).map((o) => (
-                                <option key={o} value={o}>
-                                  {o}
-                                </option>
-                              ))}
-                        </select>
+                        </>
                       ) : (
                         <input
                           type={f.type === "number" ? "number" : "text"}
@@ -2096,7 +2139,12 @@ export default function Clients({
 
                           resources: [
                             ...current.resources,
-                            { resourceName: "", fte: null },
+                            {
+                              resourceName: "",
+                              fte: null,
+                              roleForProject: "",
+                              infrastructureAccess: false,
+                            },
                           ],
                         }))
                       }
@@ -2107,73 +2155,104 @@ export default function Clients({
                       Add Resource
                     </button>
                   </div>
-                  {form.resources.map((resource, index) => (
-                    <div
-                      key={index}
-                      className="grid grid-cols-[1fr_auto] gap-3 items-end"
-                    >
-                      <label className="block">
-                        <span
-                          className="block text-xs font-semibold mb-1.5"
-                          style={{ color: text }}
-                        >
-                          Resource Name
-                        </span>
-                        <input
-                          type="text"
-                          value={resource.resourceName}
-                          onChange={(event) =>
-                            setForm((current) => {
-                              const resources = current.resources.map(
-                                (item, itemIndex) =>
-                                  itemIndex === index
-                                    ? {
-                                        ...item,
-                                        resourceName: event.target.value,
-                                      }
-                                    : item,
-                              )
-
-                              if (
-                                index === resources.length - 1 &&
-                                event.target.value.trim()
-                              ) {
-                                resources.push({ resourceName: "", fte: null })
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[680px]">
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px_40px] items-center gap-3 border-b pb-2 text-xs font-semibold" style={{ borderColor: border, color: muted }}>
+                        <span>Resource Name</span>
+                        <span>Role for Project</span>
+                        <span className="text-center">Infrastructure Access</span>
+                        <span />
+                      </div>
+                      <div className="divide-y" style={{ borderColor: border }}>
+                        {form.resources.map((resource, index) => (
+                          <div
+                            key={index}
+                            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px_40px] items-center gap-3 py-2"
+                          >
+                            <input
+                              type="text"
+                              value={resource.resourceName}
+                              onChange={(event) =>
+                                setForm((current) => {
+                                  const resources = current.resources.map(
+                                    (item, itemIndex) =>
+                                      itemIndex === index
+                                        ? { ...item, resourceName: event.target.value }
+                                        : item,
+                                  )
+                                  if (index === resources.length - 1 && event.target.value.trim()) {
+                                    resources.push({
+                                      resourceName: "",
+                                      fte: null,
+                                      roleForProject: "",
+                                      infrastructureAccess: false,
+                                    })
+                                  }
+                                  return { ...current, resources }
+                                })
                               }
-
-                              return { ...current, resources }
-                            })
-                          }
-                          placeholder="Enter resource name"
-                          className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
-                          style={{
-                            background: inputBg,
-
-                            borderColor: border,
-
-                            color: text,
-                          }}
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm((current) => ({
-                            ...current,
-
-                            resources: current.resources.filter(
-                              (_, itemIndex) => itemIndex !== index,
-                            ),
-                          }))
-                        }
-                        aria-label={`Remove resource ${index + 1}`}
-                        className="p-2 rounded-lg border"
-                        style={{ borderColor: border, color: muted }}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                              placeholder="Enter resource name"
+                              aria-label={`Resource ${index + 1} name`}
+                              className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                              style={{ background: inputBg, borderColor: border, color: text }}
+                            />
+                            <input
+                              type="text"
+                              value={resource.roleForProject || ""}
+                              onChange={(event) =>
+                                setForm((current) => ({
+                                  ...current,
+                                  resources: current.resources.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, roleForProject: event.target.value }
+                                      : item,
+                                  ),
+                                }))
+                              }
+                              placeholder="Enter project role"
+                              aria-label={`Resource ${index + 1} project role`}
+                              className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
+                              style={{ background: inputBg, borderColor: border, color: text }}
+                            />
+                            <div className="flex justify-center">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(resource.infrastructureAccess)}
+                                onChange={(event) =>
+                                  setForm((current) => ({
+                                    ...current,
+                                    resources: current.resources.map((item, itemIndex) =>
+                                      itemIndex === index
+                                        ? { ...item, infrastructureAccess: event.target.checked }
+                                        : item,
+                                    ),
+                                  }))
+                                }
+                                aria-label={`Infrastructure access for resource ${index + 1}`}
+                                className="h-4 w-4 accent-blue-700"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm((current) => ({
+                                  ...current,
+                                  resources: current.resources.filter(
+                                    (_, itemIndex) => itemIndex !== index,
+                                  ),
+                                }))
+                              }
+                              aria-label={`Remove resource ${index + 1}`}
+                              className="p-2 rounded-lg border"
+                              style={{ borderColor: border, color: muted }}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
+                  </div>
                 </div>
               )}
             </div>

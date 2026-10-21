@@ -8,6 +8,7 @@ import { canAccessProject } from '../lib/permissions.js';
 import { protectRoute } from '../middleware/auth.js';
 import { createProjectExport } from '../lib/project-export.js';
 import { createRiskExport } from '../lib/risk-export.js';
+import { MANDATORY_DOCUMENTS } from '../../shared/project-documents.js';
 import {
   isProjectStatus,
   normalizeProjectStatus,
@@ -29,7 +30,7 @@ async function projectFor(clientId) {
 
   const [resources, services] = await Promise.all([
     pool.query(
-      'SELECT resource_name, fte FROM project_resources WHERE client_id = $1 ORDER BY id',
+      'SELECT resource_name, fte, role_for_project, infrastructure_access FROM project_resources WHERE client_id = $1 ORDER BY id',
       [project.id],
     ),
     pool.query(
@@ -43,6 +44,8 @@ async function projectFor(clientId) {
     resources: resources.rows.map((resource) => ({
       resourceName: resource.resource_name,
       fte: resource.fte === null ? null : Number(resource.fte),
+      roleForProject: resource.role_for_project || '',
+      infrastructureAccess: Boolean(resource.infrastructure_access),
     })),
   };
 }
@@ -398,11 +401,26 @@ router.delete('/:clientId/documents/:documentId', protectRoute, async (req, res,
 
     const pool = getPool();
     const existing = await pool.query(
-      'SELECT id,blob_name FROM project_documents WHERE id=$1 AND client_id=$2',
+      'SELECT id,blob_name,document_type FROM project_documents WHERE id=$1 AND client_id=$2',
       [req.params.documentId, project.id],
     );
     const document = existing.rows[0];
     if (!document) return res.status(404).json({ message: 'Document not found.' });
+
+    if (
+      normalizeProjectStatus(project.current_status) === 'Completed' &&
+      MANDATORY_DOCUMENTS.some(({ id }) => id === document.document_type)
+    ) {
+      const remaining = await pool.query(
+        'SELECT COUNT(*) AS count FROM project_documents WHERE client_id=$1 AND document_type=$2',
+        [project.id, document.document_type],
+      );
+      if (Number(remaining.rows[0]?.count || 0) <= 1) {
+        return res.status(409).json({
+          message: 'A completed project must keep every mandatory document. Change the project status before removing its last copy.',
+        });
+      }
+    }
 
     if (document.blob_name && !document.blob_name.startsWith('link-')) {
       const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;

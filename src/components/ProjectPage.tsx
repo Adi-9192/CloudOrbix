@@ -68,7 +68,12 @@ type Project = {
   contract_end_date?: string | null;
   remarks?: string | null;
   services?: string[];
-  resources?: { resourceName: string; fte: number | null }[];
+  resources?: {
+    resourceName: string;
+    fte: number | null;
+    roleForProject?: string;
+    infrastructureAccess?: boolean;
+  }[];
   voumetric?: number | null;
 };
 
@@ -1288,9 +1293,21 @@ export default function ProjectPage({
                             color: text,
                           }}
                         >
-                          <span>{resource.resourceName}</span>
+                          <div>
+                            <div>{resource.resourceName}</div>
+                            {resource.roleForProject && (
+                              <div className="text-[10px]" style={{ color: muted }}>
+                                {resource.roleForProject}
+                              </div>
+                            )}
+                            {resource.infrastructureAccess && (
+                              <div className="text-[10px] font-medium text-blue-500">
+                                Infrastructure Access
+                              </div>
+                            )}
+                          </div>
                           <strong>
-                            {resource.fte === null
+                            {resource.fte === null || resource.fte === undefined
                               ? "-"
                               : Number(resource.fte).toFixed(2)}
                           </strong>

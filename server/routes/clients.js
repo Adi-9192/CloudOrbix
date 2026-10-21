@@ -8,6 +8,12 @@ import {
   isAssignedProjectManager,
 } from '../lib/permissions.js';
 import { validateProjectMetrics } from '../lib/project-metrics.js';
+import {
+  mandatoryDocumentsRequiredMessage,
+  missingMandatoryProjectDocuments,
+  requiresMandatoryProjectDocuments,
+} from '../lib/mandatory-project-documents.js';
+import { MANDATORY_DOCUMENTS } from '../../shared/project-documents.js';
 import { protectRoute, requireRole } from '../middleware/auth.js';
 import { resolveNewProjectId } from '../../shared/project-id.js';
 
@@ -15,6 +21,22 @@ const router = express.Router();
 let accessRequestTableReady;
 let serviceCategoryColumnReady;
 const publicClient = (client) => ({ ...client, id: client.id, name: client.clientName, status: client.currentStatus, lastUpdated: client.updatedAt });
+async function getMissingMandatoryDocuments(pool, clientDbId) {
+  if (!pool) return missingMandatoryProjectDocuments([]);
+
+  const documentIds = MANDATORY_DOCUMENTS.map(({ id }) => id);
+  const placeholders = documentIds.map((_, index) => `$${index + 2}`).join(',');
+  const result = await pool.query(
+    `SELECT DISTINCT document_type
+     FROM project_documents
+     WHERE client_id=$1 AND document_type IN (${placeholders})`,
+    [clientDbId, ...documentIds],
+  );
+  return missingMandatoryProjectDocuments(
+    result.rows.map((row) => row.document_type),
+  );
+}
+
 async function ensureServiceCategoryColumn(pool) {
   if (!pool) return;
   if (!serviceCategoryColumnReady) {
@@ -253,7 +275,7 @@ async function mapDbClients(pool, rows) {
 
   const placeholders = clients.map((_, index) => `$${index + 1}`).join(',');
   const resources = await pool.query(
-    `SELECT client_id,resource_name,fte FROM project_resources WHERE client_id IN (${placeholders}) ORDER BY id`,
+    `SELECT client_id,resource_name,fte,role_for_project,infrastructure_access FROM project_resources WHERE client_id IN (${placeholders}) ORDER BY id`,
     clients.map((client) => client.id),
   );
   const resourcesByClient = new Map();
@@ -262,6 +284,8 @@ async function mapDbClients(pool, rows) {
     allocations.push({
       resourceName: resource.resource_name,
       fte: resource.fte === null ? null : Number(resource.fte),
+      roleForProject: resource.role_for_project || '',
+      infrastructureAccess: Boolean(resource.infrastructure_access),
     });
     resourcesByClient.set(resource.client_id, allocations);
   }
@@ -281,9 +305,16 @@ async function saveProjectResources(pool, clientDbId, resources = []) {
   await pool.query('DELETE FROM project_resources WHERE client_id=@p1', [clientDbId]);
   for (const resource of resources || []) {
     const resourceName = resource.resourceName.trim();
+    const roleForProject = String(resource.roleForProject || '').trim();
     await pool.query(
-      'INSERT INTO project_resources(client_id,resource_name,fte) VALUES(@p1,@p2,@p3)',
-      [clientDbId, resourceName, resource.fte === '' ? null : resource.fte],
+      'INSERT INTO project_resources(client_id,resource_name,fte,role_for_project,infrastructure_access) VALUES(@p1,@p2,@p3,@p4,@p5)',
+      [
+        clientDbId,
+        resourceName,
+        resource.fte === '' ? null : resource.fte,
+        roleForProject || null,
+        Boolean(resource.infrastructureAccess),
+      ],
     );
   }
 }
@@ -355,6 +386,13 @@ router.post('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team'
     if (metricError) return res.status(400).json({ message: metricError });
     const canManage = canManageProject(req.user?.roles || []);
     const pool = getPool();
+    if (requiresMandatoryProjectDocuments(body.currentStatus)) {
+      const missingDocuments = missingMandatoryProjectDocuments([]);
+      return res.status(400).json({
+        message: mandatoryDocumentsRequiredMessage(missingDocuments),
+        missingDocuments,
+      });
+    }
     await ensureServiceCategoryColumn(pool);
     const now = new Date();
     const period = { month: now.getMonth() + 1, year: now.getFullYear() };
@@ -556,6 +594,23 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
       });
     }
 
+    if (
+      requiresMandatoryProjectDocuments(
+        body.currentStatus ?? existingClient.currentStatus,
+      )
+    ) {
+      const missingDocuments = await getMissingMandatoryDocuments(
+        pool,
+        existingClient.id,
+      );
+      if (missingDocuments.length) {
+        return res.status(400).json({
+          message: mandatoryDocumentsRequiredMessage(missingDocuments),
+          missingDocuments,
+        });
+      }
+    }
+
     const canManage = canManageProject(req.user?.roles || []);
     if (!pool) {
       const index = appState.clients.findIndex((client) => client.clientId === req.params.clientId);
@@ -719,7 +774,16 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
         return res.status(403).json({ message: 'You are not authorized to approve this project change.' });
       }
       const payload = client.pendingPayload || {};
-      const approvedClient = {
+        if (requiresMandatoryProjectDocuments(payload.currentStatus ?? client.currentStatus)) {
+          const missingDocuments = missingMandatoryProjectDocuments([]);
+          if (missingDocuments.length) {
+            return res.status(400).json({
+              message: mandatoryDocumentsRequiredMessage(missingDocuments),
+              missingDocuments,
+            });
+          }
+        }
+        const approvedClient = {
         ...client,
         ...payload,
         updatedAt: new Date().toISOString().slice(0, 10),
@@ -745,6 +809,22 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
     const payload = parsePendingPayload(record.pending_payload) || {};
     const metricError = validateProjectMetrics(payload);
     if (metricError) return res.status(400).json({ message: metricError });
+    if (
+      requiresMandatoryProjectDocuments(
+        payload.currentStatus ?? currentClient.currentStatus,
+      )
+    ) {
+      const missingDocuments = await getMissingMandatoryDocuments(
+        pool,
+        record.id,
+      );
+      if (missingDocuments.length) {
+        return res.status(400).json({
+          message: mandatoryDocumentsRequiredMessage(missingDocuments),
+          missingDocuments,
+        });
+      }
+    }
     const result = await pool.query(
       `UPDATE clients SET client_name=COALESCE($1,client_name),account_manager=COALESCE($2,account_manager),region=COALESCE($3,region),industry=COALESCE($4,industry),revenue=COALESCE($5,revenue),current_status=COALESCE($6,current_status),remarks=COALESCE($7,remarks),planned_onboard_date=$8,actual_onboard_date=$9,planned_offboard_date=$10,actual_offboard_date=$11,contract_start_date=$12,contract_end_date=$13,year=$14,completion=$15,hyperscaler=$16,project_type=$17,project_brief=$18,project_manager=$19,isow=$20,estimated_start_date=$21,estimated_end_date=$22,actual_start_date=$23,actual_end_date=$24,project_billing_code=$25,voumetric=$26,service_category=$27,pending_payload=NULL,approval_status='approved',updated_at=CURRENT_TIMESTAMP WHERE id=$28 RETURNING id`,
       [payload.clientName,payload.accountManager,payload.region,payload.industry,payload.revenue === undefined ? null : Number(payload.revenue),payload.currentStatus,payload.remarks,payload.plannedOnboardDate || null,payload.actualOnboardDate || null,payload.plannedOffboardDate || null,payload.actualOffboardDate || null,payload.contractStartDate || null,payload.contractEndDate || null,payload.year || new Date().getFullYear(),payload.completion === undefined ? 0 : Number(payload.completion),payload.hyperscaler || null,payload.projectType || null,payload.projectBrief || null,payload.projectManager || payload.accountManager || null,payload.isow || null,payload.estimatedStartDate || null,payload.estimatedEndDate || null,payload.actualStartDate || null,payload.actualEndDate || null,payload.projectBillingCode || null,payload.voumetric === null || payload.voumetric === undefined ? null : Number(payload.voumetric),payload.serviceCategory || null,record.id],
