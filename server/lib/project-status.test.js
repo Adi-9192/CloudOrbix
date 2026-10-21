@@ -15,7 +15,6 @@ test('normalizes legacy statuses and preserves the current workflow statuses', (
   assert.equal(normalizeProjectStatus('Delayed-Internal'), 'Delayed(Internal)');
   assert.deepEqual(PROJECT_STATUSES, [
     'On Track',
-    'Delayed',
     'At Risk',
     'On Hold',
     'Scope Finalisation',
@@ -25,7 +24,7 @@ test('normalizes legacy statuses and preserves the current workflow statuses', (
     'Delayed(Internal)',
     'Awaiting Sign off',
   ]);
-  assert.equal(isProjectStatus('Delayed'), true);
+  assert.equal(isProjectStatus('Delayed'), false);
   assert.equal(isProjectStatus('Open'), false);
   assert.equal(isProjectStatus('Delayed(External)'), true);
 });
