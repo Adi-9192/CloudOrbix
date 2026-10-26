@@ -49,7 +49,7 @@ async function ensureUniqueRfpName(pool, accountName, existingId = null, exclude
   }
 }
 
-function validateProject(body) {
+function validateProject(body, requireCompleteEffort = true) {
   const accountName = String(body?.accountName || body?.projectName || '').trim();
   const clientName = accountName;
   const year = Number(body?.year);
@@ -70,7 +70,18 @@ function validateProject(body) {
   const inScope = String(body?.inScope || '').trim();
   const allowance = Number(body?.allowancePercent ?? 0);
   const workingDays = Number(body?.workingDaysPerMonth ?? 22);
-  const resources = Array.isArray(body?.resources) ? body.resources : [];
+  const resources = Array.isArray(body?.resources)
+    ? body.resources.map((resource) => ({
+        ...resource,
+        dailyManDays: durationDays > 0
+          ? resource?.dailyManDays ?? (
+              Number(resource?.allocations?.days ?? 0) > 0
+                ? durationDays
+                : 0
+            )
+          : 0,
+      }))
+    : [];
 
   if (!accountName) return { error: 'Account name is required.' };
   if (!Number.isInteger(year) || year < 2000 || year > 2100) return { error: 'Select a valid estimation year.' };
@@ -93,6 +104,20 @@ function validateProject(body) {
       return !Number.isFinite(fte) || fte < 0 || fte > 999.99 || Math.abs(fte * 100 - Math.round(fte * 100)) > 1e-7;
     })) {
       return { error: 'Resource allocation must be between 0 and 999.99 with up to two decimal places.' };
+    }
+    const dailyManDays = Number(resource.dailyManDays ?? 0);
+    if (!Number.isFinite(dailyManDays) || dailyManDays < 0 || dailyManDays > durationDays || Math.abs(dailyManDays * 100 - Math.round(dailyManDays * 100)) > 1e-7) {
+      return { error: 'Daily man-days must be between 0 and the project duration with up to two decimal places.' };
+    }
+  }
+  if (requireCompleteEffort) {
+    for (let index = 0; index < durationMonths; index += 1) {
+      if (!resources.some((resource) => Number(resource.allocations?.[`month-${index + 1}`] ?? 0) > 0)) {
+        return { error: 'Enter resource allocations for every project month.' };
+      }
+    }
+    if (durationDays > 0 && !resources.some((resource) => Number(resource.dailyManDays ?? 0) > 0 && Number(resource.allocations?.days ?? 0) > 0)) {
+      return { error: 'Complete the daily plan with man-days and FTE effort.' };
     }
   }
   return { value: { accountName, clientName, year, currency, requestedDate, durationMonths, durationDays, periods, projectType, projectStatus, requestFromBy, requestorEmail, region, cloud, projectOverview, assumption, outOfScope, inScope, allowance, workingDays, resources } };
@@ -293,7 +318,7 @@ router.get('/projects', async (req, res, next) => {
 router.post('/calculate', async (req, res, next) => {
   const pool = requireDatabase(res);
   if (!pool) return;
-  const validation = validateProject(req.body);
+  const validation = validateProject(req.body, false);
   if (validation.error) return res.status(400).json({ message: validation.error });
   const data = validation.value;
   try {
@@ -305,7 +330,12 @@ router.post('/calculate', async (req, res, next) => {
     const resourceCosts = data.resources.map((resource, index) => {
       const rate = rateMap.get(`${String(resource.grade).trim()}|${resource.resourceType}`);
       let total = 0;
-      if (rate !== undefined) for (const period of data.periods) total += rate * (period.days ?? data.workingDays) * Number(resource.allocations?.[period.key] ?? 0);
+      if (rate !== undefined) {
+        for (const period of data.periods) {
+          if (data.durationMonths > 0 && period.key.startsWith('month-')) total += rate * data.workingDays * Number(resource.allocations?.[period.key] ?? 0);
+        }
+        total += rate * Number(resource.dailyManDays ?? 0) * Number(resource.allocations?.days ?? 0);
+      }
       return { id: resource.id ?? String(index), total, missingRate: Boolean(resource.grade && rate === undefined) };
     });
     const baseCost = resourceCosts.reduce((sum, row) => sum + row.total, 0);
@@ -407,7 +437,7 @@ router.get('/projects/:id', async (req, res, next) => {
     const id = Number(req.params.id);
     const project = await pool.query('SELECT p.*, s.base_cost_inr, s.allowance_cost_inr, s.grand_total_inr, s.selected_currency_total, s.exchange_rate FROM rfp_projects p LEFT JOIN rfp_cost_summary s ON s.project_id = p.id WHERE p.id = $1', [id]);
     if (!project.rows[0]) return res.status(404).json({ message: 'Estimate was not found.' });
-    const resources = await pool.query('SELECT id, resource_name, grade, resource_type, sort_order FROM rfp_resources WHERE project_id = $1 ORDER BY sort_order, id', [id]);
+    const resources = await pool.query('SELECT id, resource_name, grade, resource_type, daily_man_days, sort_order FROM rfp_resources WHERE project_id = $1 ORDER BY sort_order, id', [id]);
     const allocations = await pool.query('SELECT a.resource_id, CONVERT(char(7), a.allocation_month, 126) AS month, a.fte FROM rfp_resource_monthly_allocations a JOIN rfp_resources r ON r.id = a.resource_id WHERE r.project_id = $1', [id]);
     const allocationMap = new Map();
     const requestedDate = project.rows[0].requested_date;
@@ -419,7 +449,7 @@ router.get('/projects/:id', async (req, res, next) => {
       if (key) rowAllocations[key] = Number(row.fte);
       allocationMap.set(row.resource_id, rowAllocations);
     });
-    return res.json({ project: project.rows[0], resources: resources.rows.map((row) => ({ id: row.id, name: row.resource_name, grade: row.grade, resourceType: row.resource_type, allocations: allocationMap.get(row.id) || {} })) });
+    return res.json({ project: project.rows[0], resources: resources.rows.map((row) => ({ id: row.id, name: row.resource_name, grade: row.grade, resourceType: row.resource_type, dailyManDays: Number(row.daily_man_days || 0), allocations: allocationMap.get(row.id) || {} })) });
   } catch (error) { return next(error); }
 });
 
@@ -432,7 +462,10 @@ async function persistProject(pool, userId, data, status, existingId = null, exc
   for (const resource of data.resources) {
     const rate = rateMap.get(`${String(resource.grade).trim()}|${resource.resourceType}`);
     if (rate === undefined) throw Object.assign(new Error(`No ${resource.resourceType} rate exists for grade ${resource.grade} in ${data.year}.`), { status: 400 });
-    for (const period of data.periods) baseCost += rate * (period.days ?? data.workingDays) * Number(resource.allocations?.[period.key] ?? 0);
+    for (const period of data.periods) {
+      if (data.durationMonths > 0 && period.key.startsWith('month-')) baseCost += rate * data.workingDays * Number(resource.allocations?.[period.key] ?? 0);
+    }
+    baseCost += rate * Number(resource.dailyManDays ?? 0) * Number(resource.allocations?.days ?? 0);
   }
   const allowanceCost = baseCost * data.allowance / 100;
   const exchangeResult = data.currency === 'INR' ? { rows: [{ rate_to_inr: 1 }] } : await pool.query('SELECT r.rate_to_inr FROM currency_exchange_rates r JOIN currency_exchange_rate_versions v ON v.id = r.version_id WHERE v.[year] = $1 AND r.currency_pair = $2', [data.year, `${data.currency}/INR`]);
@@ -455,8 +488,8 @@ async function persistProject(pool, userId, data, status, existingId = null, exc
   let allocationParameters = values.length + 1;
   for (let index = 0; index < data.resources.length; index += 1) {
     const resource = data.resources[index];
-    const resourceValues = [String(resource.name).trim(), String(resource.grade).trim(), resource.resourceType, index];
-    sql.push(`DECLARE @resourceId${index} INT; INSERT INTO rfp_resources (project_id, resource_name, grade, resource_type, sort_order) VALUES (${projectRef}, $${allocationParameters}, $${allocationParameters + 1}, $${allocationParameters + 2}, $${allocationParameters + 3}); SET @resourceId${index} = CAST(SCOPE_IDENTITY() AS INT);`);
+    const resourceValues = [String(resource.name).trim(), String(resource.grade).trim(), resource.resourceType, Number(resource.dailyManDays ?? 0), index];
+    sql.push(`DECLARE @resourceId${index} INT; INSERT INTO rfp_resources (project_id, resource_name, grade, resource_type, daily_man_days, sort_order) VALUES (${projectRef}, $${allocationParameters}, $${allocationParameters + 1}, $${allocationParameters + 2}, $${allocationParameters + 3}, $${allocationParameters + 4}); SET @resourceId${index} = CAST(SCOPE_IDENTITY() AS INT);`);
     values.push(...resourceValues);
     allocationParameters += resourceValues.length;
     for (const period of data.periods) {
@@ -519,7 +552,7 @@ router.post('/projects/:id/duplicate', async (req, res, next) => {
   try {
     const project = await pool.query('SELECT * FROM rfp_projects WHERE id = $1', [Number(req.params.id)]);
     if (!project.rows[0]) return res.status(404).json({ message: 'Estimate was not found.' });
-    const resources = await pool.query('SELECT id, resource_name, grade, resource_type FROM rfp_resources WHERE project_id = $1 ORDER BY sort_order, id', [Number(req.params.id)]);
+    const resources = await pool.query('SELECT id, resource_name, grade, resource_type, daily_man_days FROM rfp_resources WHERE project_id = $1 ORDER BY sort_order, id', [Number(req.params.id)]);
     const allocations = await pool.query('SELECT a.resource_id, CONVERT(char(7), a.allocation_month, 126) AS month, a.fte FROM rfp_resource_monthly_allocations a JOIN rfp_resources r ON r.id = a.resource_id WHERE r.project_id = $1', [Number(req.params.id)]);
     const source = project.rows[0];
     const durationMonths = Number(source.duration_months || 0);
@@ -528,6 +561,7 @@ router.post('/projects/:id/duplicate', async (req, res, next) => {
       name: resource.resource_name,
       grade: resource.grade,
       resourceType: resource.resource_type,
+      dailyManDays: Number(resource.daily_man_days || 0),
       allocations: Object.fromEntries(allocations.rows.filter((item) => item.resource_id === resource.id).flatMap((item) => {
         const key = periodAllocationKey(item.month, source.requested_date, durationMonths, durationDays);
         return key ? [[key, Number(item.fte)]] : [];
@@ -566,7 +600,7 @@ router.get('/projects/:id/export.xlsx', async (req, res, next) => {
     const projectResponse = await pool.query('SELECT * FROM rfp_projects WHERE id = $1', [Number(req.params.id)]);
     if (!projectResponse.rows[0]) return res.status(404).json({ message: 'Estimate was not found.' });
     const project = projectResponse.rows[0];
-    const resourcesResponse = await pool.query('SELECT r.id, r.resource_name, r.grade, r.resource_type, rr.daily_rate FROM rfp_resources r LEFT JOIN resource_rate_card_versions v ON v.[year] = $1 LEFT JOIN resource_rate_cards rr ON rr.version_id = v.id AND rr.grade = r.grade AND rr.resource_type = r.resource_type WHERE r.project_id = $2 ORDER BY r.sort_order, r.id', [project.year, Number(req.params.id)]);
+    const resourcesResponse = await pool.query('SELECT r.id, r.resource_name, r.grade, r.resource_type, r.daily_man_days, rr.daily_rate FROM rfp_resources r LEFT JOIN resource_rate_card_versions v ON v.[year] = $1 LEFT JOIN resource_rate_cards rr ON rr.version_id = v.id AND rr.grade = r.grade AND rr.resource_type = r.resource_type WHERE r.project_id = $2 ORDER BY r.sort_order, r.id', [project.year, Number(req.params.id)]);
     const allocationsResponse = await pool.query('SELECT a.resource_id, CONVERT(char(7), a.allocation_month, 126) AS month, a.fte FROM rfp_resource_monthly_allocations a JOIN rfp_resources r ON r.id = a.resource_id WHERE r.project_id = $1', [Number(req.params.id)]);
     const periods = buildPeriods(project.requested_date, Number(project.duration_months || 0), Number(project.duration_days || 0));
     const allocations = new Map();
@@ -583,20 +617,26 @@ router.get('/projects/:id/export.xlsx', async (req, res, next) => {
     sheet.addRow(['Year', project.year, 'Currency', project.currency_code]);
     sheet.addRow(['Project Status', project.project_status, 'Requested Date', new Date(project.requested_date).toISOString().slice(0, 10)]);
     sheet.addRow([]);
-    sheet.addRow(['Resource Name', 'Grade', 'Resource Type', ...periods.map((period) => period.label), 'Total Cost (INR)']);
+    const monthlyPeriods = Number(project.duration_months || 0) > 0
+      ? periods.filter((period) => period.key.startsWith('month-'))
+      : [];
+    sheet.addRow(['Resource Name', 'Grade', 'Resource Type', ...monthlyPeriods.map((period) => period.label), ...(Number(project.duration_days || 0) > 0 ? ['Man Days', 'FTE Effort', 'Total Daily Effort (Man Days)'] : []), 'Total Cost (INR)']);
     let baseCost = 0;
-    const totalFte = Object.fromEntries(periods.map((period) => [period.key, 0]));
+    const totalFte = Object.fromEntries(monthlyPeriods.map((period) => [period.key, 0]));
+    let totalDailyEffort = 0;
     for (const resource of resourcesResponse.rows) {
       const rowAllocations = allocations.get(resource.id) || {};
-      const monthlyCosts = periods.map((period) => Number(resource.daily_rate || 0) * (period.days ?? Number(project.working_days_per_month)) * Number(rowAllocations[period.key] || 0));
-      const rowCost = monthlyCosts.reduce((sum, cost) => sum + cost, 0);
+      const monthlyCosts = monthlyPeriods.map((period) => Number(resource.daily_rate || 0) * Number(project.working_days_per_month) * Number(rowAllocations[period.key] || 0));
+      const dailyEffort = Number(resource.daily_man_days || 0) * Number(rowAllocations.days || 0);
+      const rowCost = monthlyCosts.reduce((sum, cost) => sum + cost, 0) + Number(resource.daily_rate || 0) * dailyEffort;
       baseCost += rowCost;
-      periods.forEach((period) => { totalFte[period.key] += Number(rowAllocations[period.key] || 0); });
-      sheet.addRow([resource.resource_name, resource.grade, resource.resource_type, ...periods.map((period) => rowAllocations[period.key] || 0), rowCost]);
+      monthlyPeriods.forEach((period) => { totalFte[period.key] += Number(rowAllocations[period.key] || 0); });
+      totalDailyEffort += dailyEffort;
+      sheet.addRow([resource.resource_name, resource.grade, resource.resource_type, ...monthlyPeriods.map((period) => rowAllocations[period.key] || 0), ...(Number(project.duration_days || 0) > 0 ? [Number(resource.daily_man_days || 0), Number(rowAllocations.days || 0), dailyEffort] : []), rowCost]);
     }
     const allowanceCost = baseCost * Number(project.allowance_percent) / 100;
     const grandTotal = baseCost + allowanceCost;
-    const fteRow = sheet.addRow(['Total FTE', '', '', ...periods.map((period) => totalFte[period.key]), grandTotal]);
+    const fteRow = sheet.addRow(['Total FTE', '', '', ...monthlyPeriods.map((period) => totalFte[period.key]), ...(Number(project.duration_days || 0) > 0 ? ['', '', totalDailyEffort] : []), grandTotal]);
     fteRow.font = { bold: true };
     const exportExchange = project.currency_code === 'INR' ? 1 : Number((await pool.query('SELECT r.rate_to_inr FROM currency_exchange_rates r JOIN currency_exchange_rate_versions v ON v.id = r.version_id WHERE v.[year] = $1 AND r.currency_pair = $2', [project.year, `${project.currency_code}/INR`])).rows[0]?.rate_to_inr || 0);
     sheet.addRow([]);
