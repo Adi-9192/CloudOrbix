@@ -1,3 +1,5 @@
+import { normalizeProjectStatus } from '../../shared/project-status.js';
+
 const normalizedStatus = (value) =>
   String(value || '')
     .trim()
@@ -23,7 +25,12 @@ export function calculateDashboardProjectBreakdown(clients = [], groupBy = 'stat
     if (String(client.approval_status ?? client.approvalStatus ?? 'approved').toLowerCase() !== 'approved') {
       continue;
     }
-    const label = String(getValue(client) ?? '').trim() || 'Unspecified';
+    const rawLabel = String(getValue(client) ?? '').trim();
+    const label = rawLabel
+      ? groupBy === 'status'
+        ? normalizeProjectStatus(rawLabel)
+        : rawLabel
+      : 'Unspecified';
     counts.set(label, (counts.get(label) || 0) + 1);
   }
 

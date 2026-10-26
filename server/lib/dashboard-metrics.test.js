@@ -35,6 +35,16 @@ test('groups approved projects for the dashboard pie chart', () => {
   );
 });
 
+test('normalizes equivalent on-track statuses in the dashboard breakdown', () => {
+  assert.deepEqual(calculateDashboardProjectBreakdown([
+    { current_status: 'On Track' },
+    { current_status: 'On-track' },
+    { current_status: 'on_track' },
+  ], 'status'), [
+    { name: 'On Track', value: 3 },
+  ]);
+});
+
 test('calculates dashboard project counts from approved status values only', () => {
   const summary = calculateDashboardSummary([
     { approval_status: 'approved', current_status: 'Delayed (External)', revenue: 100, completion: 25 },

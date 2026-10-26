@@ -367,6 +367,7 @@ const EMPTY_FORM = {
   notes: "",
 
   status: "On Track",
+  rfpProjectId: null as number | null,
 }
 
 export default function Clients({
@@ -575,7 +576,8 @@ export default function Clients({
       ].filter(([, value]) => value).map(([label, value]) => `${label}:\n${value}`).join("\n\n"),
       plannedStartDate: newProjectSeed.initiatedAt,
       actualStartDate: newProjectSeed.initiatedAt,
-      status: "On-track",
+      status: "On Track",
+      rfpProjectId: newProjectSeed.rfpId,
     })
     setShowAdd(true)
     onProjectSeedConsumed?.()
@@ -992,6 +994,7 @@ export default function Clients({
       actualEndDate: form.actualEndDate || null,
 
       currentStatus: form.status || "On Track",
+      rfpProjectId: form.rfpProjectId,
 
       services: form.services,
 

@@ -22,8 +22,10 @@ type ResourceRate = {
   dailyRate: number;
 };
 type CurrencyRate = { currency: string; rateToInr: number };
+type ResourcePlanType = "monthly" | "daily";
 type ResourceRow = {
   id: string;
+  planType: ResourcePlanType;
   name: string;
   grade: string;
   resourceType: ResourceType;
@@ -96,6 +98,7 @@ type EstimateCalculation = {
   selectedTotal: number;
 };
 export type RfpProjectPrefill = {
+  rfpId: number;
   accountName: string;
   revenue: number;
   projectType: string;
@@ -141,8 +144,9 @@ const fmt = (value: number, currency = "INR") =>
   }).format(Number.isFinite(value) ? value : 0);
 const makeId = () => Math.random().toString(36).slice(2);
 const today = () => new Date().toISOString().slice(0, 10);
-const blankResource = (): ResourceRow => ({
+const blankResource = (planType: ResourcePlanType = "monthly"): ResourceRow => ({
   id: makeId(),
+  planType,
   name: "",
   grade: "",
   resourceType: "Standard",
@@ -171,7 +175,7 @@ const emptyEstimate = (): Estimate => {
     allowancePercent: 0,
     workingDaysPerMonth: 22,
     status: "Draft",
-    resources: [blankResource()],
+    resources: [blankResource("monthly"), blankResource("daily")],
   };
 };
 
@@ -205,7 +209,7 @@ const restoreEstimateDraft = (value: unknown): Estimate => {
       ? `${startMonth}-01`
       : today();
   const anchor = new Date(`${requestedDate.slice(0, 7)}-01T00:00:00Z`);
-  const resources = Array.isArray(stored.resources) ? stored.resources.map((item) => {
+  const restoredResources = Array.isArray(stored.resources) ? stored.resources.flatMap((item) => {
     const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
     const sourceAllocations = row.allocations && typeof row.allocations === "object"
       ? row.allocations as Record<string, number | string>
@@ -222,15 +226,26 @@ const restoreEstimateDraft = (value: unknown): Estimate => {
       if (stored.endMonthHalf && key === endMonth && durationDays > 0) allocations.days = fte;
       else if (offset >= 0 && offset < durationMonths) allocations[`month-${offset + 1}`] = fte;
     }
-    return {
+    const resource: ResourceRow = {
       id: typeof row.id === "string" ? row.id : makeId(),
+      planType: row.planType === "daily" ? "daily" : "monthly",
       name: typeof row.name === "string" ? row.name : "",
       grade: typeof row.grade === "string" ? row.grade : "",
       resourceType: RESOURCE_TYPES.includes(row.resourceType as ResourceType) ? row.resourceType as ResourceType : "Standard",
       allocations,
       dailyManDays: Number(row.dailyManDays ?? (durationDays > 0 && Number(allocations.days || 0) > 0 ? durationDays : 0)),
     };
+    if (!row.planType && durationDays > 0 && Number(allocations.days || 0) > 0) {
+      return [
+        { ...resource, allocations: Object.fromEntries(Object.entries(allocations).filter(([key]) => key !== "days")), dailyManDays: 0 },
+        { ...resource, id: makeId(), planType: "daily" as const, allocations: { days: allocations.days } },
+      ];
+    }
+    return [resource];
   }) : emptyEstimate().resources;
+  const resources = restoredResources.length
+    ? restoredResources
+    : emptyEstimate().resources;
 
   return {
     ...emptyEstimate(),
@@ -431,9 +446,15 @@ export default function RfpEstimation({
 
   useEffect(() => {
     if (isAdmin) return;
+    const activeResources = estimate.resources.filter((resource) =>
+      resource.planType === "monthly"
+        ? estimate.durationMonths > 0
+        : estimate.durationDays > 0,
+    );
     const validForCalculation =
       estimate.accountName.trim() &&
-      estimate.resources.every(
+      activeResources.length > 0 &&
+      activeResources.every(
         (resource) => resource.name.trim() && resource.grade,
       );
     if (!validForCalculation) {
@@ -444,7 +465,7 @@ export default function RfpEstimation({
     const timer = window.setTimeout(() => {
       void api("/calculate", {
         method: "POST",
-        body: JSON.stringify(estimate),
+        body: JSON.stringify({ ...estimate, resources: activeResources }),
         signal: controller.signal,
       })
         .then((result) => setCalculation(result))
@@ -510,6 +531,17 @@ export default function RfpEstimation({
       (_, index) => ({ key: `month-${index + 1}`, label: `Month ${index + 1}`, days: null as number | null }),
     );
   }, [estimate.durationMonths]);
+  const activeResources = estimate.resources.filter((resource) =>
+    resource.planType === "monthly"
+      ? estimate.durationMonths > 0
+      : estimate.durationDays > 0,
+  );
+  const monthlyResources = activeResources.filter(
+    (resource) => resource.planType === "monthly",
+  );
+  const dailyResources = activeResources.filter(
+    (resource) => resource.planType === "daily",
+  );
 
   useEffect(() => {
     if (resourcePlanTab === "monthly" && estimate.durationMonths === 0 && estimate.durationDays > 0) {
@@ -540,7 +572,7 @@ export default function RfpEstimation({
       ),
     [estimate.year, ratePayload],
   );
-  const resourceCosts = estimate.resources.map((resource) => {
+  const resourceCosts = activeResources.map((resource) => {
     const dailyRate =
       rateLookup.get(`${resource.grade}|${resource.resourceType}`) || 0;
     const monthlyCost = periods.reduce(
@@ -765,10 +797,11 @@ export default function RfpEstimation({
         resources: result.resources.map((row: ResourceRow) => ({
           ...row,
           id: String(row.id),
+          planType: row.planType || "monthly",
           dailyManDays: Number(row.dailyManDays || 0),
         })),
       });
-      setResourcePlanTab(Number(project.durationMonths || 0) > 0 ? "monthly" : "daily");
+      setResourcePlanTab(Number(project.duration_months || 0) > 0 ? "monthly" : "daily");
       setSection("estimate");
     } catch (reason) {
       setError(
@@ -799,10 +832,10 @@ export default function RfpEstimation({
       durationMonths > 120 ||
       !Number.isInteger(durationDays) ||
       durationDays < 0 ||
-      durationDays > 30 ||
+      durationDays > 365 ||
       (durationMonths === 0 && durationDays === 0)
     ) {
-      setError("Enter at least one month, or a duration of 1 to 30 days.");
+      setError("Enter at least one month, or a duration of 1 to 365 days.");
       return;
     }
     if (
@@ -818,12 +851,12 @@ export default function RfpEstimation({
       (durationMonths > 0 &&
         periods.some(
           (period) =>
-            !estimate.resources.some(
+            !monthlyResources.some(
               (resource) => Number(resource.allocations[period.key] || 0) > 0,
             ),
         )) ||
       (durationDays > 0 &&
-        !estimate.resources.some(
+        !dailyResources.some(
           (resource) =>
             Number(resource.dailyManDays || 0) > 0 &&
             Number(resource.allocations.days || 0) > 0,
@@ -856,7 +889,8 @@ export default function RfpEstimation({
         durationMonths,
         durationDays,
         status,
-        resources: estimate.resources.map(({ name, grade, resourceType, allocations, dailyManDays }) => ({
+        resources: activeResources.map(({ name, grade, resourceType, allocations, dailyManDays, planType }) => ({
+          planType,
           name,
           grade,
           resourceType,
@@ -1425,7 +1459,7 @@ export default function RfpEstimation({
                     <label className="text-xs font-semibold" style={labelStyle}>Year<select className={`${inputClass} mt-1`} style={inputStyle} value={estimateYearOptions.includes(Number(estimate.year)) ? estimate.year : ""} onChange={(event) => { if (event.target.value) patchEstimate({ year: Number(event.target.value) }); }}><option value="" disabled>{estimateYearOptions.length ? "Select year" : "No configured rate years"}</option>{estimateYearOptions.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Currency<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.currency} onChange={(event) => patchEstimate({ currency: event.target.value })}>{CURRENCIES.map((currency) => <option key={currency}>{currency}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Number of Months<input type="number" min="0" max="120" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.durationMonths} onChange={(event) => patchEstimate({ durationMonths: Number(event.target.value) })} /></label>
-                    <label className="text-xs font-semibold" style={labelStyle}>Number of Days<input type="number" min="0" max="30" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.durationDays} onChange={(event) => patchEstimate({ durationDays: Number(event.target.value) })} /></label>
+                    <label className="text-xs font-semibold" style={labelStyle}>Number of Days<input type="number" min="0" max="365" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.durationDays} onChange={(event) => patchEstimate({ durationDays: Number(event.target.value) })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Allowance %<input type="number" min="0" max="100" step="0.1" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.allowancePercent} onChange={(event) => patchEstimate({ allowancePercent: Number(event.target.value) })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Working Days / Month<input type="number" min="1" max="31" step="0.5" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.workingDaysPerMonth} onChange={(event) => patchEstimate({ workingDaysPerMonth: Number(event.target.value) })} /></label>
                     {([
@@ -1484,7 +1518,10 @@ export default function RfpEstimation({
                         onClick={() =>
                           setEstimate((current) => ({
                             ...current,
-                            resources: [...current.resources, blankResource()],
+                            resources: [
+                              ...current.resources,
+                              blankResource(resourcePlanTab),
+                            ],
                           }))
                         }
                       >
@@ -1523,9 +1560,9 @@ export default function RfpEstimation({
                         </tr>
                       </thead>
                       <tbody>
-                        {estimate.resources.map((resource, rowIndex) => {
+                        {monthlyResources.map((resource, rowIndex) => {
                           const cost = isAdmin
-                            ? resourceCosts[rowIndex]
+                            ? resourceCosts.find((item) => item.id === resource.id)!
                             : calculation?.resourceCosts.find(
                                 (item) => item.id === resource.id,
                               ) || {
@@ -1637,6 +1674,9 @@ export default function RfpEstimation({
                                     aria-label="Duplicate resource row"
                                     onClick={() =>
                                       setEstimate((current) => {
+                                        const resourceIndex = current.resources.findIndex(
+                                          (item) => item.id === resource.id,
+                                        );
                                         const original = current.resources.find(
                                           (item) => item.id === resource.id,
                                         )!;
@@ -1645,7 +1685,7 @@ export default function RfpEstimation({
                                           resources: [
                                             ...current.resources.slice(
                                               0,
-                                              rowIndex + 1,
+                                              resourceIndex + 1,
                                             ),
                                             {
                                               ...original,
@@ -1655,7 +1695,7 @@ export default function RfpEstimation({
                                               },
                                             },
                                             ...current.resources.slice(
-                                              rowIndex + 1,
+                                              resourceIndex + 1,
                                             ),
                                           ],
                                         };
@@ -1697,7 +1737,7 @@ export default function RfpEstimation({
                               className="border-l p-3 text-center tabular-nums"
                               style={{ borderColor: line }}
                             >
-                              {estimate.resources
+                              {monthlyResources
                                 .reduce(
                                   (sum, row) =>
                                     sum + Number(row.allocations[period.key] || 0),
@@ -1736,9 +1776,9 @@ export default function RfpEstimation({
                           </tr>
                         </thead>
                         <tbody>
-                          {estimate.resources.map((resource, rowIndex) => {
+                          {dailyResources.map((resource, rowIndex) => {
                             const cost = isAdmin
-                              ? resourceCosts[rowIndex]
+                              ? resourceCosts.find((item) => item.id === resource.id)!
                               : calculation?.resourceCosts.find((item) => item.id === resource.id) || { total: 0, missingRate: false };
                             return (
                               <tr key={resource.id} className="border-t" style={{ borderColor: line }}>
@@ -1771,8 +1811,9 @@ export default function RfpEstimation({
                                 <td className="p-2">
                                   <div className="flex items-center gap-1">
                                     <button className="rfp-icon-action" title="Duplicate row" aria-label="Duplicate resource row" onClick={() => setEstimate((current) => {
+                                      const resourceIndex = current.resources.findIndex((item) => item.id === resource.id);
                                       const original = current.resources.find((item) => item.id === resource.id)!;
-                                      return { ...current, resources: [...current.resources.slice(0, rowIndex + 1), { ...original, id: makeId(), allocations: { ...original.allocations } }, ...current.resources.slice(rowIndex + 1)] };
+                                      return { ...current, resources: [...current.resources.slice(0, resourceIndex + 1), { ...original, id: makeId(), allocations: { ...original.allocations } }, ...current.resources.slice(resourceIndex + 1)] };
                                     })}><Copy size={14} /></button>
                                     <button className="rfp-icon-action text-red-600" title="Delete row" aria-label="Delete resource row" onClick={() => setEstimate((current) => ({ ...current, resources: current.resources.filter((item) => item.id !== resource.id) }))}><Trash2 size={14} /></button>
                                   </div>
@@ -1783,7 +1824,7 @@ export default function RfpEstimation({
                           <tr className="border-t font-semibold" style={{ background: panel, borderColor: line }}>
                             <td className="rfp-sticky-1 p-3" colSpan={5}>Total Daily Effort (Man Days)</td>
                             <td className="border-l p-3 text-center tabular-nums" style={{ borderColor: line }}>
-                              {estimate.resources.reduce((sum, resource) => sum + Number(resource.dailyManDays || 0) * Number(resource.allocations.days || 0), 0).toLocaleString("en", { maximumFractionDigits: 2 })}
+                              {dailyResources.reduce((sum, resource) => sum + Number(resource.dailyManDays || 0) * Number(resource.allocations.days || 0), 0).toLocaleString("en", { maximumFractionDigits: 2 })}
                             </td>
                             <td className="border-l p-3 text-right" style={{ borderColor: line }}>{fmt(grandTotal)}</td>
                             <td />
@@ -1867,6 +1908,7 @@ export default function RfpEstimation({
                                       className="rfp-action"
                                       disabled={!item.initiated_at || busy}
                                       onClick={() => onMoveToProject({
+                                        rfpId: item.id,
                                         accountName: item.project_name,
                                         revenue: Number(item.grand_total_inr || 0),
                                         projectType: item.project_type || "Std",
