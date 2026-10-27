@@ -18,6 +18,11 @@ const projectBreakdownOptions = [
   { value: "hyperscaler", label: "Hyperscaler" },
   { value: "projectType", label: "Project Type" },
 ] as const;
+const rfpBreakdownOptions = [
+  { value: "status", label: "Status" },
+  { value: "projectType", label: "Project Type" },
+  { value: "region", label: "Region" },
+] as const;
 const pieColorsByGroup = {
   status: ["#15803D", "#D97706", "#DC2626", "#7C3AED", "#2563EB", "#64748B", "#DB2777", "#0F766E"],
   region: ["#1D4ED8", "#0891B2", "#0F766E", "#65A30D", "#CA8A04", "#EA580C", "#C026D3", "#475569"],
@@ -49,6 +54,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
   const [selectedYear, setSelectedYear] = useState("all");
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>("executive");
   const [projectGroupBy, setProjectGroupBy] = useState<(typeof projectBreakdownOptions)[number]["value"]>("status");
+  const [rfpGroupBy, setRfpGroupBy] = useState<(typeof rfpBreakdownOptions)[number]["value"]>("status");
   const pieColors = pieColorsByGroup[projectGroupBy];
   const [summary, setSummary] = useState({ totalClients: 0, activeProjects: 0, delayedProjectsExternal: 0, delayedProjectsInternal: 0, totalRisks: 0, openRisks: 0 });
   const [projectBreakdown, setProjectBreakdown] = useState<{ name: string; value: number }[]>([]);
@@ -65,7 +71,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
     const token = localStorage.getItem("clmp-token");
     if (!token) return;
 
-    fetch(`/api/dashboard?period=${encodeURIComponent(chartPeriod)}&year=${encodeURIComponent(selectedYear)}&groupBy=${encodeURIComponent(projectGroupBy)}`, {
+    fetch(`/api/dashboard?period=${encodeURIComponent(chartPeriod)}&year=${encodeURIComponent(selectedYear)}&groupBy=${encodeURIComponent(projectGroupBy)}&rfpGroupBy=${encodeURIComponent(rfpGroupBy)}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (response) => {
@@ -107,7 +113,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.clearInterval(refreshInterval);
     };
-  }, [chartPeriod, selectedYear, projectGroupBy, user]);
+  }, [chartPeriod, selectedYear, projectGroupBy, rfpGroupBy, user]);
 
   /* Legacy KPI definitions retained temporarily for reference while the dashboard uses live KPIs.
   const legacyKpiCards = useMemo(() => [
@@ -243,7 +249,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
               ? "RFP Dashboard"
               : dashboardTab === "risk"
                 ? "Risk Dashboard"
-                : "Executive Dashboard"}
+                : "Project Dashboard"}
           </h1>
           <p className="text-xs mt-0.5" style={{ color: muted }}>
             {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString()}` : "Loading dashboard…"}
@@ -277,9 +283,9 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
 
       <div className="flex flex-wrap gap-2 border-b pb-3" role="tablist" aria-label="Dashboards" style={{ borderColor: border }}>
         {([
-          ["rfp", "RFP Dashboard"],
-          ["executive", "Executive Dashboard"],
+          ["executive", "Project Dashboard"],
           ["risk", "Risk Dashboard"],
+          ["rfp", "RFP Dashboard"],
         ] as const).map(([tab, label]) => (
           <button
             key={tab}
@@ -377,11 +383,29 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
           className="w-full max-w-2xl rounded-xl border p-5"
           style={{ background: bg, borderColor: border }}
         >
-          <div className="mb-3">
-            <h3 className="font-semibold text-sm">RFPs by status</h3>
-            <p className="mt-0.5 text-xs" style={{ color: muted }}>
-              {selectedYear === "all" ? "All estimation years" : `Estimation year ${selectedYear}`}
-            </p>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-sm">
+                RFPs by {rfpBreakdownOptions.find((option) => option.value === rfpGroupBy)?.label.toLowerCase()}
+              </h3>
+              <p className="mt-0.5 text-xs" style={{ color: muted }}>
+                {selectedYear === "all" ? "All estimation years" : `Estimation year ${selectedYear}`}
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <span>Group by</span>
+              <select
+                aria-label="Group RFP dashboard by"
+                value={rfpGroupBy}
+                onChange={(event) => setRfpGroupBy(event.target.value as typeof rfpGroupBy)}
+                className="rounded-lg border px-3 py-2 text-sm"
+                style={{ background: bg, borderColor: border, color: text }}
+              >
+                {rfpBreakdownOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
           </div>
           {rfpBreakdown.length ? (
             <div className="flex flex-wrap items-center gap-4">
@@ -396,7 +420,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
                     paddingAngle={2}
                   >
                     {rfpBreakdown.map((item, index) => (
-                      <Cell key={item.name} fill={pieColorsByGroup.status[index % pieColorsByGroup.status.length]} />
+                      <Cell key={item.name} fill={pieColorsByGroup[rfpGroupBy][index % pieColorsByGroup[rfpGroupBy].length]} />
                     ))}
                   </Pie>
                   <Tooltip content={<CustomTooltip dark={dark} />} />
@@ -406,7 +430,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
                 {rfpBreakdown.map((item, index) => (
                   <li key={item.name} className="flex items-center justify-between gap-4 text-xs">
                     <span className="flex min-w-0 items-center gap-2">
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: pieColorsByGroup.status[index % pieColorsByGroup.status.length] }} />
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: pieColorsByGroup[rfpGroupBy][index % pieColorsByGroup[rfpGroupBy].length] }} />
                       <span className="truncate">{item.name}</span>
                     </span>
                     <strong>{item.value}</strong>
@@ -427,7 +451,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
                 style={{ background: bg, borderColor: border }}
               >
                 <div className="flex items-center gap-2 text-xs font-medium" style={{ color: muted }}>
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: pieColorsByGroup.status[index % pieColorsByGroup.status.length] }} />
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: pieColorsByGroup[rfpGroupBy][index % pieColorsByGroup[rfpGroupBy].length] }} />
                   {item.name} RFP revenue
                 </div>
                 <p className="mt-3 text-xl font-bold" style={{ color: text }}>
