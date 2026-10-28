@@ -43,12 +43,12 @@ export type Page =
   | "rfp";
 
 const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "servicecatalogue", label: "Portfolio", icon: BookOpen },
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   // { id: "reports", label: "Reports", icon: FileText },
 
-  { id: "audit", label: "Audit Logs", icon: ClipboardList },
   { id: "rfp", label: "RFP Estimation", icon: Calculator },
+  { id: "audit", label: "Audit Logs", icon: ClipboardList },
   { id: "admin", label: "Admin", icon: Shield },
   { id: "help", label: "Help", icon: HelpCircle },
 ];
@@ -138,13 +138,23 @@ export default function Shell({
   const textMuted = dark ? "#94A3B8" : "#64748B";
   const textBody = dark ? "#E2E8F0" : "#0F172A";
   const pageBg = dark ? "#0F172A" : "#F1F5F9";
+  const viewerOnly = Boolean(
+    user?.roles.includes("Viewer") && !user.roles.includes("Admin"),
+  );
   const roleLabel =
     user?.roles?.[0] === "Admin"
       ? "System Administrator"
       : user?.roles?.[0] || "Account Manager";
+  const userInitials = `${user?.firstName || ""} ${user?.lastName || ""}`
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((namePart) => namePart[0])
+    .join("");
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   useEffect(() => {
+    if (viewerOnly) return;
     const token = localStorage.getItem("clmp-token");
     if (!token) return;
     fetch("/api/users/notifications", {
@@ -170,7 +180,7 @@ export default function Shell({
         setNotifications(alerts);
       })
       .catch(() => setNotifications([]));
-  }, [user, notifOpen]);
+  }, [user, notifOpen, viewerOnly]);
 
   const clearNotifications = async () => {
     const token = localStorage.getItem("clmp-token");
@@ -329,8 +339,8 @@ export default function Shell({
         </button>
         <button
           className="flex items-center gap-2 flex-shrink-0"
-          onClick={() => onPageChange("dashboard")}
-          aria-label="Go to dashboard"
+          onClick={() => onPageChange(viewerOnly ? "servicecatalogue" : "dashboard")}
+          aria-label={viewerOnly ? "Go to Portfolio" : "Go to dashboard"}
         >
           <img
             src="/CloudOrbix.png"
@@ -348,7 +358,7 @@ export default function Shell({
         </button>
 
         {/* Search */}
-        <div className="flex-1 max-w-md relative hidden sm:block">
+        {!viewerOnly && <div className="flex-1 max-w-md relative hidden sm:block">
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5"
             style={{ color: textMuted }}
@@ -367,7 +377,7 @@ export default function Shell({
               color: textBody,
             }}
           />
-        </div>
+        </div>}
 
         <div className="ml-auto flex items-center gap-1.5">
           {/* Dark mode */}
@@ -380,7 +390,7 @@ export default function Shell({
           </button>
 
           {/* Notifications */}
-          <div className="relative" ref={notifRef}>
+          {!viewerOnly && <div className="relative" ref={notifRef}>
             <button
               onClick={() => setNotifOpen(!notifOpen)}
               className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors"
@@ -478,7 +488,7 @@ export default function Shell({
                 )}
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Profile */}
           <div className="relative" ref={profileRef}>
@@ -490,7 +500,7 @@ export default function Shell({
                 className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white"
                 style={{ background: "#1E40AF" }}
               >
-                SC
+                {userInitials || "U"}
               </div>
               <div className="hidden sm:block text-left">
                 <div
@@ -527,26 +537,30 @@ export default function Shell({
                     {roleLabel}
                   </div>
                 </div>
-                <button
-                  onClick={() => {
-                    onPageChange("profile");
-                    setProfileOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
-                  style={{ color: textBody }}
-                >
-                  <UserCircle2 className="w-3.5 h-3.5" /> My Profile
-                </button>
-                <button
-                  onClick={() => {
-                    onPageChange("admin");
-                    setProfileOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
-                  style={{ color: textBody }}
-                >
-                  <Settings className="w-3.5 h-3.5" /> Settings
-                </button>
+                {!viewerOnly && (
+                  <>
+                    <button
+                      onClick={() => {
+                        onPageChange("profile");
+                        setProfileOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
+                      style={{ color: textBody }}
+                    >
+                      <UserCircle2 className="w-3.5 h-3.5" /> My Profile
+                    </button>
+                    <button
+                      onClick={() => {
+                        onPageChange("admin");
+                        setProfileOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
+                      style={{ color: textBody }}
+                    >
+                      <Settings className="w-3.5 h-3.5" /> Settings
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={onLogout}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 flex items-center gap-2 text-red-600"
@@ -567,7 +581,7 @@ export default function Shell({
         >
           <div className="flex-1 py-3 overflow-y-auto">
             {navItems
-              .filter(({ id }) => id === "dashboard")
+              .filter(({ id }) => id === "servicecatalogue" || (!viewerOnly && id === "dashboard"))
               .map(({ id, label, icon: Icon }) => {
                 const active = page === id;
                 return (
@@ -596,7 +610,7 @@ export default function Shell({
                   </button>
                 );
               })}
-            <div className="mb-1">
+            {!viewerOnly && <div className="mb-1">
               <button
                 onClick={() => setProjectManagementOpen(!projectManagementOpen)}
                 aria-expanded={projectManagementOpen}
@@ -643,11 +657,13 @@ export default function Shell({
                     })}
                 </div>
               )}
-            </div>
+            </div>}
             {navItems
               .filter(
                 ({ id }) =>
+                  !viewerOnly &&
                   id !== "dashboard" &&
+                  id !== "servicecatalogue" &&
                   (!(["admin", "excel", "audit", ] as Page[]).includes(
                     id,
                   ) ||

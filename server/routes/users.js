@@ -4,33 +4,55 @@ import { protectRoute, requireRole } from '../middleware/auth.js';
 
 const router = express.Router();
 const dbRole = (role) => role === 'Account Manager' ? 'Operations Team' : (role || 'Viewer');
+const getLatestLogin = (email) => {
+  const matchingLogins = appState.auditLogs.filter((entry) =>
+    String(entry.userEmail ?? entry.user_email ?? '').toLowerCase() === String(email || '').toLowerCase() &&
+    String(entry.action || '').toLowerCase() === 'user login',
+  );
+  const latest = matchingLogins.sort(
+    (a, b) => new Date(b.createdAt ?? b.created_at ?? 0).getTime() - new Date(a.createdAt ?? a.created_at ?? 0).getTime(),
+  )[0];
+  return latest?.createdAt ?? latest?.created_at ?? null;
+};
 const publicUser = (user) => ({
   id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName,
   fullName: `${user.firstName} ${user.lastName}`.trim(), roles: user.roles, isActive: user.isActive,
+  lastLogin: user.lastLogin ?? null,
 });
 
 async function findDbUser(id) {
   const result = await getPool().query(`
-    SELECT u.id, u.email, u.first_name, u.last_name, u.is_active,
+    SELECT u.id, u.email, u.first_name, u.last_name, u.is_active, login_info.last_login,
       STRING_AGG(r.name, ',') AS roles
-    FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id
-    WHERE u.id = @p1 GROUP BY u.id, u.email, u.first_name, u.last_name, u.is_active
+    FROM users u
+    OUTER APPLY (
+      SELECT MAX(a.created_at) AS last_login FROM audit_logs a
+      WHERE LOWER(a.user_email) = LOWER(u.email) AND a.action = 'User Login'
+    ) login_info
+    LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id
+    WHERE u.id = @p1 GROUP BY u.id, u.email, u.first_name, u.last_name, u.is_active, login_info.last_login
   `, [id]);
   const row = result.rows[0];
-  return row && { id: row.id, email: row.email, firstName: row.first_name, lastName: row.last_name, isActive: row.is_active, roles: row.roles ? String(row.roles).split(',').map((role) => role.trim()).filter(Boolean) : [] };
+  return row && { id: row.id, email: row.email, firstName: row.first_name, lastName: row.last_name, isActive: row.is_active, lastLogin: row.last_login, roles: row.roles ? String(row.roles).split(',').map((role) => role.trim()).filter(Boolean) : [] };
 }
 
 router.get('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team'), async (req, res, next) => {
   try {
     const pool = getPool();
-    if (!pool) return res.json({ users: appState.users.map(publicUser) });
+    if (!pool) return res.json({ users: appState.users.map((user) => publicUser({ ...user, lastLogin: getLatestLogin(user.email) })) });
     const result = await pool.query(`
-      SELECT u.id, u.email, u.first_name, u.last_name, u.is_active,
+      SELECT u.id, u.email, u.first_name, u.last_name, u.is_active, login_info.last_login,
         STRING_AGG(r.name, ',') AS roles
-      FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id
-      GROUP BY u.id, u.email, u.first_name, u.last_name, u.is_active ORDER BY u.id
+      FROM users u
+      OUTER APPLY (
+        SELECT MAX(a.created_at) AS last_login FROM audit_logs a
+        WHERE LOWER(a.user_email) = LOWER(u.email) AND a.action = 'User Login'
+      ) login_info
+      LEFT JOIN user_roles ur ON ur.user_id = u.id LEFT JOIN roles r ON r.id = ur.role_id
+      GROUP BY u.id, u.email, u.first_name, u.last_name, u.is_active, login_info.last_login
+      ORDER BY u.id
     `);
-    return res.json({ users: result.rows.map((row) => publicUser({ id: row.id, email: row.email, firstName: row.first_name, lastName: row.last_name, isActive: row.is_active, roles: row.roles ? String(row.roles).split(',').map((role) => role.trim()).filter(Boolean) : [] })) });
+    return res.json({ users: result.rows.map((row) => publicUser({ id: row.id, email: row.email, firstName: row.first_name, lastName: row.last_name, isActive: row.is_active, lastLogin: row.last_login, roles: row.roles ? String(row.roles).split(',').map((role) => role.trim()).filter(Boolean) : [] })) });
   } catch (error) { return next(error); }
 });
 

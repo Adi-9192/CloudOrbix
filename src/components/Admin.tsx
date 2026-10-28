@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Shield, Users, Settings, Plus, Edit2, Trash2, Check, X, Eye, EyeOff, ToggleLeft, ToggleRight, Upload } from "lucide-react";
+import { Shield, Users, Settings, Plus, Edit2, Trash2, Check, X, Eye, EyeOff, KeyRound, ToggleLeft, ToggleRight, Upload } from "lucide-react";
 import { showCloudOrbixAlert } from "../alert";
 
 type UserStatus = "active" | "inactive";
@@ -22,6 +22,7 @@ type ApiUser = {
   fullName?: string;
   roles?: string[];
   isActive?: boolean;
+  lastLogin?: string | null;
 };
 
 type PendingClient = {
@@ -105,7 +106,7 @@ const INITIAL_USERS: UserRecord[] = [];
 const ROLES = [
   { name: "Admin", color: "#DC2626", bg: "#FEE2E2", users: 1, permissions: ["All access", "User management", "System config", "Audit access", "Export all data"] },
   { name: "Manager", color: "#7C3AED", bg: "#EDE9FE", users: 1, permissions: ["View all projects", "Approve onboarding", "Generate reports", "View analytics", "Export data"] },
-  { name: "Operations Team", color: "#1E40AF", bg: "#DBEAFE", users: 3, permissions: ["Manage projects", "Update lifecycle", "Import/export", "View analytics", "Create reports"] },
+  { name: "Account Manager", color: "#1E40AF", bg: "#DBEAFE", users: 3, permissions: ["Manage projects", "Update lifecycle", "Import/export", "View analytics", "Create reports"] },
   { name: "Viewer", color: "#64748B", bg: "#F1F5F9", users: 2, permissions: ["View projects", "View reports", "View analytics", "No edit access", "No export"] },
 ];
 
@@ -122,6 +123,12 @@ const PERMISSIONS = [
   { module: "Audit Logs", admin: true, manager: true, ops: false, viewer: false },
   { module: "Admin Panel", admin: true, manager: false, ops: false, viewer: false },
 ];
+
+const formatLastLogin = (value?: string | null) => {
+  if (!value) return "Never";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Never" : date.toLocaleString();
+};
 
 function TemplateLibraryList() {
   const [templates, setTemplates] = useState<Array<{ id: string; fileName: string; blobUrl: string; uploadedBy?: string; createdAt?: string }>>([]);
@@ -183,7 +190,6 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
     Admin: { bg: "#FEE2E2", text: "#DC2626" },
     Manager: { bg: "#EDE9FE", text: "#7C3AED" },
     "Account Manager": { bg: "#DBEAFE", text: "#1E40AF" },
-    "Operations Team": { bg: "#DBEAFE", text: "#1E40AF" },
     Viewer: { bg: "#F1F5F9", text: "#64748B" },
   };
 
@@ -205,9 +211,11 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
               id: user.id,
               name: user.fullName || `${user.firstName || ""} ${user.lastName || ""}`.trim(),
               email: user.email,
-              role: Array.isArray(user.roles) ? user.roles[0] : "Viewer",
+              role: user.roles?.[0] === "Operations Team"
+                ? "Account Manager"
+                : user.roles?.[0] || "Viewer",
               status: user.isActive ? "active" : "inactive",
-              lastLogin: "Just now",
+              lastLogin: formatLastLogin(user.lastLogin),
             })),
           );
         }
@@ -409,9 +417,13 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
         id: savedUser.id || Date.now(),
         name: savedUser.fullName || `${savedUser.firstName || firstName} ${savedUser.lastName || lastName}`.trim(),
         email: savedUser.email || body.email,
-        role: savedUser.roles && savedUser.roles.length ? savedUser.roles[0] : draft.role,
+        role: savedUser.roles && savedUser.roles.length
+          ? savedUser.roles[0] === "Operations Team" ? "Account Manager" : savedUser.roles[0]
+          : draft.role,
         status: savedUser.isActive === false ? "inactive" : "active",
-        lastLogin: "Just now",
+        lastLogin: editingId !== null
+          ? users.find((user) => user.id === editingId)?.lastLogin || "Never"
+          : formatLastLogin(savedUser.lastLogin),
       };
 
       setUsers((current) => {
@@ -472,7 +484,6 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
             ? {
                 ...user,
                 status: updatedUser.isActive === false ? "inactive" : "active",
-                lastLogin: "Just now",
               }
             : user,
         ),
@@ -483,8 +494,16 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
   };
 
   const deleteUser = async (id: number) => {
+    const userToDelete = users.find((user) => user.id === id);
+    if (!userToDelete || !window.confirm(`Delete ${userToDelete.name} (${userToDelete.email})? This action cannot be undone.`)) {
+      return;
+    }
+
     const token = localStorage.getItem("clmp-token");
-    if (!token) return;
+    if (!token) {
+      showCloudOrbixAlert("Sign in again before deleting a user.", "error");
+      return;
+    }
 
     try {
       const response = await fetch(`/api/users/${id}`, {
@@ -492,11 +511,14 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (response.ok) {
-        setUsers((current: UserRecord[]) => current.filter((user: UserRecord) => user.id !== id));
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.message || "Unable to delete user.");
       }
+      setUsers((current: UserRecord[]) => current.filter((user: UserRecord) => user.id !== id));
+      showCloudOrbixAlert("User deleted successfully.", "success");
     } catch (error) {
-      console.error(error);
+      showCloudOrbixAlert(error instanceof Error ? error.message : "Unable to delete user.", "error");
     }
   };
 
@@ -568,7 +590,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => void resetPassword(user)} className="p-1.5 rounded-md hover:bg-blue-50 transition-colors" style={{ color: muted }} title="Reset password">
-                          <Eye className="w-3.5 h-3.5" />
+                          <KeyRound className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => deleteUser(user.id)} className="p-1.5 rounded-md hover:bg-red-50 transition-colors" style={{ color: muted }} title="Delete user">
                           <Trash2 className="w-3.5 h-3.5" />
@@ -620,7 +642,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
               <thead>
                 <tr className="border-b" style={{ borderColor: border, background: subtle }}>
                   <th className="px-5 py-3 text-left text-xs font-semibold" style={{ color: muted }}>Module</th>
-                  {["Admin", "Manager", "Ops Team", "Viewer"].map((entry) => (
+                  {["Admin", "Manager", "Account Manager", "Viewer"].map((entry) => (
                     <th key={entry} className="px-4 py-3 text-center text-xs font-semibold" style={{ color: muted }}>{entry}</th>
                   ))}
                 </tr>
