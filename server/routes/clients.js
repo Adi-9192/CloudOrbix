@@ -20,6 +20,7 @@ import { normalizeProjectName } from '../../shared/project-name.js';
 import { normalizeProjectStatus } from '../../shared/project-status.js';
 
 const router = express.Router();
+const supportedCurrencies = new Set(['INR', 'AED', 'AUD', 'CAD', 'CHF', 'DKK', 'EUR', 'GBP', 'NOK', 'SEK', 'SGD', 'USD']);
 let accessRequestTableReady;
 let serviceCategoryColumnReady;
 const publicClient = (client) => ({ ...client, id: client.id, name: client.clientName, status: client.currentStatus, lastUpdated: client.updatedAt });
@@ -301,8 +302,8 @@ const canApproveForProject = (user, client = {}) => {
     accountManager: matchingValues.join(','),
   });
 };
-const columns = `c.id,c.client_id,c.client_name,c.account_manager,c.region,c.industry,c.revenue,c.current_status,c.remarks,c.created_at,c.updated_at,c.planned_onboard_date,c.actual_onboard_date,c.planned_offboard_date,c.actual_offboard_date,c.contract_start_date,c.contract_end_date,c.year,c.completion,c.hyperscaler,c.project_type,c.service_category,c.project_brief,c.project_manager,c.isow,c.project_billing_code,c.voumetric,c.estimated_start_date,c.estimated_end_date,c.actual_start_date,c.actual_end_date,c.approval_status,c.pending_payload,c.pending_create,c.rfp_project_id,COALESCE((SELECT STRING_AGG(s2.name, ',') FROM client_services cs2 JOIN services s2 ON s2.id=cs2.service_id WHERE cs2.client_id=c.id),'') services`;
-const mapRow = (row) => ({ id: row.id, clientId: row.client_id, clientName: row.client_name, accountManager: row.account_manager, region: row.region, industry: row.industry, revenue: Number(row.revenue || 0), currentStatus: row.current_status, remarks: row.remarks, createdAt: row.created_at?.toISOString?.().slice(0,10) || row.created_at, updatedAt: row.updated_at?.toISOString?.().slice(0,10) || row.updated_at, plannedOnboardDate: row.planned_onboard_date, actualOnboardDate: row.actual_onboard_date, plannedOffboardDate: row.planned_offboard_date, actualOffboardDate: row.actual_offboard_date, contractStartDate: row.contract_start_date, contractEndDate: row.contract_end_date, year: row.year, completion: Number(row.completion || 0), hyperscaler: row.hyperscaler, projectType: row.project_type, serviceCategory: row.service_category, projectBrief: row.project_brief, projectManager: row.project_manager, isow: row.isow, projectBillingCode: row.project_billing_code, rfpProjectId: row.rfp_project_id, resources: [], voumetric: row.voumetric, estimatedStartDate: row.estimated_start_date, estimatedEndDate: row.estimated_end_date, actualStartDate: row.actual_start_date, actualEndDate: row.actual_end_date, approvalStatus: row.approval_status || 'approved', pendingCreate: Boolean(row.pending_create), pendingPayload: parsePendingPayload(row.pending_payload), services: row.services || [] });
+const columns = `c.id,c.client_id,c.client_name,c.account_manager,c.region,c.industry,c.revenue,c.currency_code,c.current_status,c.remarks,c.created_at,c.updated_at,c.planned_onboard_date,c.actual_onboard_date,c.planned_offboard_date,c.actual_offboard_date,c.contract_start_date,c.contract_end_date,c.year,c.completion,c.hyperscaler,c.project_type,c.service_category,c.project_brief,c.project_overview,c.in_scope,c.out_of_scope,c.assumption,c.project_manager,c.isow,c.project_billing_code,c.voumetric,c.estimated_start_date,c.estimated_end_date,c.actual_start_date,c.actual_end_date,c.approval_status,c.pending_payload,c.pending_create,c.rfp_project_id,COALESCE((SELECT STRING_AGG(s2.name, ',') FROM client_services cs2 JOIN services s2 ON s2.id=cs2.service_id WHERE cs2.client_id=c.id),'') services`;
+const mapRow = (row) => ({ id: row.id, clientId: row.client_id, clientName: row.client_name, accountManager: row.account_manager, region: row.region, industry: row.industry, revenue: Number(row.revenue || 0), currencyCode: row.currency_code || 'INR', currentStatus: row.current_status, remarks: row.remarks, createdAt: row.created_at?.toISOString?.().slice(0,10) || row.created_at, updatedAt: row.updated_at?.toISOString?.().slice(0,10) || row.updated_at, plannedOnboardDate: row.planned_onboard_date, actualOnboardDate: row.actual_onboard_date, plannedOffboardDate: row.planned_offboard_date, actualOffboardDate: row.actual_offboard_date, contractStartDate: row.contract_start_date, contractEndDate: row.contract_end_date, year: row.year, completion: Number(row.completion || 0), hyperscaler: row.hyperscaler, projectType: row.project_type, serviceCategory: row.service_category, projectBrief: row.project_brief, projectOverview: row.project_overview || '', inScope: row.in_scope || '', outOfScope: row.out_of_scope || '', assumption: row.assumption || '', projectManager: row.project_manager, isow: row.isow, projectBillingCode: row.project_billing_code, rfpProjectId: row.rfp_project_id, resources: [], voumetric: row.voumetric, estimatedStartDate: row.estimated_start_date, estimatedEndDate: row.estimated_end_date, actualStartDate: row.actual_start_date, actualEndDate: row.actual_end_date, approvalStatus: row.approval_status || 'approved', pendingCreate: Boolean(row.pending_create), pendingPayload: parsePendingPayload(row.pending_payload), services: row.services || [] });
 
 async function validateRfpProjectLink(pool, rfpProjectId, clientName) {
   if (rfpProjectId === null || rfpProjectId === undefined || rfpProjectId === '') return null;
@@ -445,6 +446,10 @@ router.get('/access-requests', protectRoute, requireRole('Admin'), async (req, r
 router.post('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team'), async (req, res, next) => {
   const body = req.body || {}; if (!body.clientId || !String(body.clientName || '').trim() || !String(body.projectManager || '').trim()) return res.status(400).json({ message: 'Project ID, project name, and project manager are required.' });
   try {
+    if (body.currencyCode && !supportedCurrencies.has(String(body.currencyCode).toUpperCase())) {
+      return res.status(400).json({ message: 'Select a supported project currency.' });
+    }
+    body.currencyCode = String(body.currencyCode || 'INR').toUpperCase();
     const metricError = validateProjectMetrics(body);
     if (metricError) return res.status(400).json({ message: metricError });
     const canManage = canManageProject(req.user?.roles || []);
@@ -475,15 +480,15 @@ router.post('/', protectRoute, requireRole('Admin', 'Manager', 'Operations Team'
         period,
       );
       const requester = canManage ? null : getSubmittedBy(req.user);
-      const client = { id: Date.now(), clientId, clientName: body.clientName, accountManager: body.accountManager, projectManager: body.projectManager || body.accountManager, serviceCategory: body.serviceCategory || null, region: body.region || 'North America', industry: body.industry || 'Technology', revenue: Number(body.revenue || 0), currentStatus: body.currentStatus || 'Pending Onboarding', services: body.services || [], createdAt: new Date().toISOString().slice(0,10), updatedAt: new Date().toISOString().slice(0,10), plannedOnboardDate: body.plannedOnboardDate || null, actualOnboardDate: body.actualOnboardDate || null, plannedOffboardDate: body.plannedOffboardDate || null, actualOffboardDate: body.actualOffboardDate || null, actualEndDate: body.actualEndDate || body.actualOffboardDate || null, contractStartDate: body.contractStartDate || null, contractEndDate: body.contractEndDate || null, projectBillingCode: body.projectBillingCode || null, rfpProjectId, resources: body.resources || [], voumetric: body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric), remarks: body.remarks || '', approvalStatus: canManage ? 'approved' : 'pending', pendingPayload: requester ? { ...body, ...requester } : null, pendingCreate: !canManage };
+      const client = { id: Date.now(), clientId, clientName: body.clientName, accountManager: body.accountManager, projectManager: body.projectManager || body.accountManager, serviceCategory: body.serviceCategory || null, region: body.region || 'North America', industry: body.industry || 'Technology', revenue: Number(body.revenue || 0), currencyCode: body.currencyCode || 'INR', projectOverview: body.projectOverview || '', inScope: body.inScope || '', outOfScope: body.outOfScope || '', assumption: body.assumption || '', projectBrief: body.projectBrief || '', currentStatus: body.currentStatus || 'Pending Onboarding', services: body.services || [], createdAt: new Date().toISOString().slice(0,10), updatedAt: new Date().toISOString().slice(0,10), plannedOnboardDate: body.plannedOnboardDate || null, actualOnboardDate: body.actualOnboardDate || null, plannedOffboardDate: body.plannedOffboardDate || null, actualOffboardDate: body.actualOffboardDate || null, actualEndDate: body.actualEndDate || body.actualOffboardDate || null, contractStartDate: body.contractStartDate || null, contractEndDate: body.contractEndDate || null, projectBillingCode: body.projectBillingCode || null, rfpProjectId, resources: body.resources || [], voumetric: body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric), remarks: body.remarks || '', approvalStatus: canManage ? 'approved' : 'pending', pendingPayload: requester ? { ...body, ...requester } : null, pendingCreate: !canManage };
       appState.clients.unshift(client);
       if (requester) await notifyAdminsOfRequest(client.clientId, client.clientName, requester);
       createAuditEntry(req.user.email, canManage ? 'Client Created' : 'Client Submitted for Approval', '—', client.clientName);
       return res.status(canManage ? 201 : 202).json({ pending: !canManage, client: publicClient(client) });
     }
     const pendingPayload = canManage ? null : JSON.stringify({ ...body, ...getSubmittedBy(req.user) });
-    const insertSql = `INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_type,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date,approval_status,pending_payload,pending_create,project_billing_code,resources,fte,voumetric,service_category,rfp_project_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NULL,NULL,$30,$31,$32) RETURNING id`;
-    const insertValues = (clientId) => [clientId,body.clientName,body.accountManager,body.region || 'North America',body.industry || 'Technology',Number(body.revenue || 0),body.currentStatus || 'Onboarded',body.remarks || '',body.plannedOnboardDate || null,body.actualOnboardDate || null,body.plannedOffboardDate || null,body.actualOffboardDate || null,body.contractStartDate || null,body.contractEndDate || null,body.year || period.year,Number(body.completion || 0),body.hyperscaler || null,body.projectType || null,body.projectBrief || null,body.projectManager || body.accountManager || null,body.isow || null,body.estimatedStartDate || body.plannedOnboardDate || null,body.estimatedEndDate || body.plannedOffboardDate || null,body.actualStartDate || body.actualOnboardDate || null,body.actualEndDate || body.actualOffboardDate || null,canManage ? 'approved' : 'pending',pendingPayload,!canManage,body.projectBillingCode || null,body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric),body.serviceCategory || null,rfpProjectId];
+    const insertSql = `INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_type,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date,approval_status,pending_payload,pending_create,project_billing_code,resources,fte,voumetric,service_category,rfp_project_id,currency_code,project_overview,in_scope,out_of_scope,assumption) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NULL,NULL,$30,$31,$32,$33,$34,$35,$36,$37) RETURNING id`;
+    const insertValues = (clientId) => [clientId,body.clientName,body.accountManager,body.region || 'North America',body.industry || 'Technology',Number(body.revenue || 0),body.currentStatus || 'Onboarded',body.remarks || '',body.plannedOnboardDate || null,body.actualOnboardDate || null,body.plannedOffboardDate || null,body.actualOffboardDate || null,body.contractStartDate || null,body.contractEndDate || null,body.year || period.year,Number(body.completion || 0),body.hyperscaler || null,body.projectType || null,body.projectBrief || null,body.projectManager || body.accountManager || null,body.isow || null,body.estimatedStartDate || body.plannedOnboardDate || null,body.estimatedEndDate || body.plannedOffboardDate || null,body.actualStartDate || body.actualOnboardDate || null,body.actualEndDate || body.actualOffboardDate || null,canManage ? 'approved' : 'pending',pendingPayload,!canManage,body.projectBillingCode || null,body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric),body.serviceCategory || null,rfpProjectId,body.currencyCode || 'INR',body.projectOverview || null,body.inScope || null,body.outOfScope || null,body.assumption || null];
     let clientId = body.clientId;
     let result;
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -634,6 +639,10 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
   const body = req.body || {};
 
   try {
+    if (body.currencyCode && !supportedCurrencies.has(String(body.currencyCode).toUpperCase())) {
+      return res.status(400).json({ message: 'Select a supported project currency.' });
+    }
+    if (body.currencyCode) body.currencyCode = String(body.currencyCode).toUpperCase();
     const metricError = validateProjectMetrics(body);
     if (metricError) return res.status(400).json({ message: metricError });
     const pool = getPool();
@@ -765,8 +774,13 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
          updated_at=CURRENT_TIMESTAMP,
          project_billing_code=$25,
          voumetric=$26,
-         service_category=$27
-       WHERE client_id=$28
+         service_category=$27,
+         currency_code=$28,
+         project_overview=$29,
+         in_scope=$30,
+         out_of_scope=$31,
+         assumption=$32
+       WHERE client_id=$33
        RETURNING id`,
       [
         body.clientName,
@@ -802,6 +816,11 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
         body.projectBillingCode || null,
         body.voumetric === null || body.voumetric === undefined ? null : Number(body.voumetric),
         body.serviceCategory || null,
+        body.currencyCode || existingClient.currencyCode || 'INR',
+        body.projectOverview === undefined ? existingClient.projectOverview || null : body.projectOverview,
+        body.inScope === undefined ? existingClient.inScope || null : body.inScope,
+        body.outOfScope === undefined ? existingClient.outOfScope || null : body.outOfScope,
+        body.assumption === undefined ? existingClient.assumption || null : body.assumption,
         req.params.clientId,
       ]
     );
@@ -898,6 +917,17 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
     }
 
     const payload = parsePendingPayload(record.pending_payload) || {};
+    let linkedRfpDetails;
+    if (Number.isInteger(Number(payload.rfpProjectId)) && Number(payload.rfpProjectId) > 0) {
+      linkedRfpDetails = (await pool.query(
+        `SELECT p.currency_code,p.project_overview,p.in_scope,p.out_of_scope,p.assumption,
+          s.selected_currency_total
+         FROM rfp_projects p
+         LEFT JOIN rfp_cost_summary s ON s.project_id=p.id
+         WHERE p.id=$1`,
+        [Number(payload.rfpProjectId)],
+      )).rows[0];
+    }
     const approvedStatus = payload.currentStatus ?? currentClient.currentStatus;
     const approvedEndDate = actualEndDateFromUpdate(payload, currentClient);
     if (completedWithoutActualEndDate(approvedStatus, approvedEndDate)) {
@@ -925,8 +955,8 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
       }
     }
     const result = await pool.query(
-      `UPDATE clients SET client_name=COALESCE($1,client_name),account_manager=COALESCE($2,account_manager),region=COALESCE($3,region),industry=COALESCE($4,industry),revenue=COALESCE($5,revenue),current_status=COALESCE($6,current_status),remarks=COALESCE($7,remarks),planned_onboard_date=$8,actual_onboard_date=$9,planned_offboard_date=$10,actual_offboard_date=$11,contract_start_date=$12,contract_end_date=$13,year=$14,completion=$15,hyperscaler=$16,project_type=$17,project_brief=$18,project_manager=$19,isow=$20,estimated_start_date=$21,estimated_end_date=$22,actual_start_date=$23,actual_end_date=$24,project_billing_code=$25,voumetric=$26,service_category=$27,pending_payload=NULL,approval_status='approved',updated_at=CURRENT_TIMESTAMP WHERE id=$28 RETURNING id`,
-      [payload.clientName,payload.accountManager,payload.region,payload.industry,payload.revenue === undefined ? null : Number(payload.revenue),payload.currentStatus,payload.remarks,payload.plannedOnboardDate || null,payload.actualOnboardDate || null,payload.plannedOffboardDate || null,payload.actualOffboardDate || null,payload.contractStartDate || null,payload.contractEndDate || null,payload.year || new Date().getFullYear(),payload.completion === undefined ? 0 : Number(payload.completion),payload.hyperscaler || null,payload.projectType || null,payload.projectBrief || null,payload.projectManager || payload.accountManager || null,payload.isow || null,payload.estimatedStartDate || null,payload.estimatedEndDate || null,payload.actualStartDate || null,payload.actualEndDate || null,payload.projectBillingCode || null,payload.voumetric === null || payload.voumetric === undefined ? null : Number(payload.voumetric),payload.serviceCategory || null,record.id],
+      `UPDATE clients SET client_name=COALESCE($1,client_name),account_manager=COALESCE($2,account_manager),region=COALESCE($3,region),industry=COALESCE($4,industry),revenue=COALESCE($5,revenue),current_status=COALESCE($6,current_status),remarks=COALESCE($7,remarks),planned_onboard_date=$8,actual_onboard_date=$9,planned_offboard_date=$10,actual_offboard_date=$11,contract_start_date=$12,contract_end_date=$13,year=$14,completion=$15,hyperscaler=$16,project_type=$17,project_brief=$18,project_manager=$19,isow=$20,estimated_start_date=$21,estimated_end_date=$22,actual_start_date=$23,actual_end_date=$24,project_billing_code=$25,voumetric=$26,service_category=$27,currency_code=$28,project_overview=$29,in_scope=$30,out_of_scope=$31,assumption=$32,pending_payload=NULL,approval_status='approved',updated_at=CURRENT_TIMESTAMP WHERE id=$33 RETURNING id`,
+      [payload.clientName,payload.accountManager,payload.region,payload.industry,linkedRfpDetails?.selected_currency_total ?? (payload.revenue === undefined ? null : Number(payload.revenue)),payload.currentStatus,payload.remarks,payload.plannedOnboardDate || null,payload.actualOnboardDate || null,payload.plannedOffboardDate || null,payload.actualOffboardDate || null,payload.contractStartDate || null,payload.contractEndDate || null,payload.year || new Date().getFullYear(),payload.completion === undefined ? 0 : Number(payload.completion),payload.hyperscaler || null,payload.projectType || null,payload.projectBrief || null,payload.projectManager || payload.accountManager || null,payload.isow || null,payload.estimatedStartDate || null,payload.estimatedEndDate || null,payload.actualStartDate || null,payload.actualEndDate || null,payload.projectBillingCode || null,payload.voumetric === null || payload.voumetric === undefined ? null : Number(payload.voumetric),payload.serviceCategory || null,linkedRfpDetails?.currency_code || payload.currencyCode || currentClient.currencyCode || 'INR',linkedRfpDetails?.project_overview ?? (payload.projectOverview === undefined ? currentClient.projectOverview || null : payload.projectOverview),linkedRfpDetails?.in_scope ?? (payload.inScope === undefined ? currentClient.inScope || null : payload.inScope),linkedRfpDetails?.out_of_scope ?? (payload.outOfScope === undefined ? currentClient.outOfScope || null : payload.outOfScope),linkedRfpDetails?.assumption ?? (payload.assumption === undefined ? currentClient.assumption || null : payload.assumption),record.id],
     );
     if (Array.isArray(payload.resources)) {
       await saveProjectResources(pool, record.id, payload.resources);

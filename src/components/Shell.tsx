@@ -109,6 +109,8 @@ export default function Shell({
   const [clearingNotifications, setClearingNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+  const readerOnly = user?.roles?.length === 1 && user.roles[0] === "Reader";
+  const isAdmin = user?.roles.includes("Admin") ?? false;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -142,11 +144,10 @@ export default function Shell({
     user?.roles?.[0] === "Admin"
       ? "System Administrator"
       : user?.roles?.[0] || "Account Manager";
-
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   useEffect(() => {
     const token = localStorage.getItem("clmp-token");
-    if (!token) return;
+    if (!token || readerOnly) return;
     fetch("/api/users/notifications", {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -170,7 +171,7 @@ export default function Shell({
         setNotifications(alerts);
       })
       .catch(() => setNotifications([]));
-  }, [user, notifOpen]);
+  }, [user, notifOpen, readerOnly]);
 
   const clearNotifications = async () => {
     const token = localStorage.getItem("clmp-token");
@@ -348,7 +349,7 @@ export default function Shell({
         </button>
 
         {/* Search */}
-        <div className="flex-1 max-w-md relative hidden sm:block">
+        <div className={readerOnly ? "hidden" : "flex-1 max-w-md relative hidden sm:block"}>
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5"
             style={{ color: textMuted }}
@@ -380,7 +381,7 @@ export default function Shell({
           </button>
 
           {/* Notifications */}
-          <div className="relative" ref={notifRef}>
+          <div className={`relative ${readerOnly ? "hidden" : ""}`} ref={notifRef}>
             <button
               onClick={() => setNotifOpen(!notifOpen)}
               className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors"
@@ -527,7 +528,7 @@ export default function Shell({
                     {roleLabel}
                   </div>
                 </div>
-                <button
+                {!readerOnly && <button
                   onClick={() => {
                     onPageChange("profile");
                     setProfileOpen(false);
@@ -536,8 +537,8 @@ export default function Shell({
                   style={{ color: textBody }}
                 >
                   <UserCircle2 className="w-3.5 h-3.5" /> My Profile
-                </button>
-                <button
+                </button>}
+                {isAdmin && <button
                   onClick={() => {
                     onPageChange("admin");
                     setProfileOpen(false);
@@ -546,7 +547,7 @@ export default function Shell({
                   style={{ color: textBody }}
                 >
                   <Settings className="w-3.5 h-3.5" /> Settings
-                </button>
+                </button>}
                 <button
                   onClick={onLogout}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 flex items-center gap-2 text-red-600"
@@ -567,7 +568,7 @@ export default function Shell({
         >
           <div className="flex-1 py-3 overflow-y-auto">
             {navItems
-              .filter(({ id }) => id === "dashboard")
+              .filter(({ id }) => id === "dashboard" && !readerOnly)
               .map(({ id, label, icon: Icon }) => {
                 const active = page === id;
                 return (
@@ -596,7 +597,7 @@ export default function Shell({
                   </button>
                 );
               })}
-            <div className="mb-1">
+            {!readerOnly && <div className="mb-1">
               <button
                 onClick={() => setProjectManagementOpen(!projectManagementOpen)}
                 aria-expanded={projectManagementOpen}
@@ -643,15 +644,16 @@ export default function Shell({
                     })}
                 </div>
               )}
-            </div>
+            </div>}
             {navItems
               .filter(
                 ({ id }) =>
-                  id !== "dashboard" &&
+                  (readerOnly ? id === "servicecatalogue" : id !== "dashboard") &&
                   (!(["admin", "excel", "audit", ] as Page[]).includes(
                     id,
                   ) ||
-                    user?.roles.includes("Admin")),
+                    isAdmin) &&
+                  (!readerOnly || id === "servicecatalogue"),
               )
               .map(({ id, label, icon: Icon }) => {
                 const active = page === id;

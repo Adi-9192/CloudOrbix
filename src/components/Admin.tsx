@@ -107,20 +107,22 @@ const ROLES = [
   { name: "Manager", color: "#7C3AED", bg: "#EDE9FE", users: 1, permissions: ["View all projects", "Approve onboarding", "Generate reports", "View analytics", "Export data"] },
   { name: "Operations Team", color: "#1E40AF", bg: "#DBEAFE", users: 3, permissions: ["Manage projects", "Update lifecycle", "Import/export", "View analytics", "Create reports"] },
   { name: "Viewer", color: "#64748B", bg: "#F1F5F9", users: 2, permissions: ["View projects", "View reports", "View analytics", "No edit access", "No export"] },
+  { name: "Reader", color: "#0F766E", bg: "#CCFBF1", users: 0, permissions: ["Portfolio page only", "No project access", "No settings access"] },
 ];
 
 const PERMISSIONS = [
-  { module: "Dashboard", admin: true, manager: true, ops: true, viewer: true },
-  { module: "Project Management (Read)", admin: true, manager: true, ops: true, viewer: true },
-  { module: "Project Management (Write)", admin: true, manager: true, ops: true, viewer: false },
-  { module: "Project Management (Delete)", admin: true, manager: false, ops: false, viewer: false },
-  { module: "Onboarding / Offboarding", admin: true, manager: true, ops: true, viewer: false },
-  { module: "Analytics", admin: true, manager: true, ops: true, viewer: true },
-  { module: "Reports (View)", admin: true, manager: true, ops: true, viewer: true },
-  { module: "Reports (Generate)", admin: true, manager: true, ops: true, viewer: false },
-  { module: "Excel Import/Export", admin: true, manager: true, ops: true, viewer: false },
-  { module: "Audit Logs", admin: true, manager: true, ops: false, viewer: false },
-  { module: "Admin Panel", admin: true, manager: false, ops: false, viewer: false },
+  { module: "Portfolio", admin: true, manager: true, ops: true, viewer: true, reader: true },
+  { module: "Dashboard", admin: true, manager: true, ops: true, viewer: true, reader: false },
+  { module: "Project Management (Read)", admin: true, manager: true, ops: true, viewer: true, reader: false },
+  { module: "Project Management (Write)", admin: true, manager: true, ops: true, viewer: false, reader: false },
+  { module: "Project Management (Delete)", admin: true, manager: false, ops: false, viewer: false, reader: false },
+  { module: "Onboarding / Offboarding", admin: true, manager: true, ops: true, viewer: false, reader: false },
+  { module: "Analytics", admin: true, manager: true, ops: true, viewer: true, reader: false },
+  { module: "Reports (View)", admin: true, manager: true, ops: true, viewer: true, reader: false },
+  { module: "Reports (Generate)", admin: true, manager: true, ops: true, viewer: false, reader: false },
+  { module: "Excel Import/Export", admin: true, manager: true, ops: true, viewer: false, reader: false },
+  { module: "Audit Logs", admin: true, manager: true, ops: false, viewer: false, reader: false },
+  { module: "Admin Panel", admin: true, manager: false, ops: false, viewer: false, reader: false },
 ];
 
 function TemplateLibraryList() {
@@ -185,9 +187,10 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
     "Account Manager": { bg: "#DBEAFE", text: "#1E40AF" },
     "Operations Team": { bg: "#DBEAFE", text: "#1E40AF" },
     Viewer: { bg: "#F1F5F9", text: "#64748B" },
+    Reader: { bg: "#CCFBF1", text: "#0F766E" },
   };
 
-  const roles = useMemo<string[]>(() => ["Admin", "Manager", "Account Manager", "Viewer"], []);
+  const roles = useMemo<string[]>(() => ["Admin", "Manager", "Account Manager", "Viewer", "Reader"], []);
   const tabs: TabKey[] = ["users", "roles", "permissions", "approvals", "templates"];
 
   useEffect(() => {
@@ -620,7 +623,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
               <thead>
                 <tr className="border-b" style={{ borderColor: border, background: subtle }}>
                   <th className="px-5 py-3 text-left text-xs font-semibold" style={{ color: muted }}>Module</th>
-                  {["Admin", "Manager", "Ops Team", "Viewer"].map((entry) => (
+                  {["Admin", "Manager", "Ops Team", "Viewer", "Reader"].map((entry) => (
                     <th key={entry} className="px-4 py-3 text-center text-xs font-semibold" style={{ color: muted }}>{entry}</th>
                   ))}
                 </tr>
@@ -629,7 +632,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
                 {PERMISSIONS.map((permission) => (
                   <tr key={permission.module} className="border-b" style={{ borderColor: border }}>
                     <td className="px-5 py-3 text-xs font-medium" style={{ color: text }}>{permission.module}</td>
-                    {[permission.admin, permission.manager, permission.ops, permission.viewer].map((value, index) => (
+                    {[permission.admin, permission.manager, permission.ops, permission.viewer, permission.reader].map((value, index) => (
                       <td key={`${permission.module}-${index}`} className="px-4 py-3 text-center">
                         {value ? (
                           <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100"><Check className="w-3 h-3 text-green-600" /></span>

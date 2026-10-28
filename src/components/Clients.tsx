@@ -72,6 +72,7 @@ interface ApiClient {
   actualOffboardDate?: string | null
 
   revenue?: number | string | null
+  currencyCode?: string | null
 
   services?: string[]
 
@@ -96,6 +97,10 @@ interface ApiClient {
   serviceCategory?: string | null
 
   projectBrief?: string | null
+  projectOverview?: string | null
+  inScope?: string | null
+  outOfScope?: string | null
+  assumption?: string | null
 
   projectManager?: string | null
 
@@ -182,6 +187,11 @@ interface ClientRow {
   notes: string
 
   revenue: number
+  currencyCode: string
+  projectOverview: string
+  inScope: string
+  outOfScope: string
+  assumption: string
 
   services: string[]
 
@@ -321,6 +331,16 @@ const EMPTY_FORM = {
 
   revenue: "",
 
+  currencyCode: "INR",
+
+  projectOverview: "",
+
+  inScope: "",
+
+  outOfScope: "",
+
+  assumption: "",
+
   services: [] as string[],
 
   year: new Date().getFullYear(),
@@ -369,6 +389,17 @@ const EMPTY_FORM = {
   status: "On Track",
   rfpProjectId: null as number | null,
 }
+
+const CURRENCIES = [
+  "INR", "AED", "AUD", "CAD", "CHF", "DKK", "EUR", "GBP", "NOK", "SEK", "SGD", "USD",
+]
+const formatRevenue = (value: number, currency: string) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: CURRENCIES.includes(currency) ? currency : "INR",
+    notation: value >= 1_000_000 ? "compact" : "standard",
+    maximumFractionDigits: value >= 1_000_000 ? 1 : 0,
+  }).format(value)
 
 export default function Clients({
   dark,
@@ -506,6 +537,16 @@ export default function Clients({
 
         revenue: Number(client.revenue || 0),
 
+        currencyCode: client.currencyCode || "INR",
+
+        projectOverview: client.projectOverview || "",
+
+        inScope: client.inScope || "",
+
+        outOfScope: client.outOfScope || "",
+
+        assumption: client.assumption || "",
+
         services: client.services || [],
 
         lastUpdated: client.updatedDate || client.lastUpdated || "",
@@ -566,14 +607,14 @@ export default function Clients({
       manager: newProjectSeed.requestFromBy,
       region: newProjectSeed.region,
       revenue: String(newProjectSeed.revenue),
+      currencyCode: newProjectSeed.currency,
       hyperscaler: newProjectSeed.cloud.toUpperCase(),
       projectType: newProjectSeed.projectType === "Non Std" ? "Non-STD" : "STD",
-      projectBrief: [
-        ["Project Overview", newProjectSeed.projectOverview],
-        ["Assumption", newProjectSeed.assumption],
-        ["In Scope", newProjectSeed.inScope],
-        ["Out of Scope", newProjectSeed.outOfScope],
-      ].filter(([, value]) => value).map(([label, value]) => `${label}:\n${value}`).join("\n\n"),
+      projectBrief: newProjectSeed.projectOverview,
+      projectOverview: newProjectSeed.projectOverview,
+      assumption: newProjectSeed.assumption,
+      inScope: newProjectSeed.inScope,
+      outOfScope: newProjectSeed.outOfScope,
       plannedStartDate: newProjectSeed.initiatedAt,
       actualStartDate: newProjectSeed.initiatedAt,
       status: "On Track",
@@ -794,6 +835,16 @@ export default function Clients({
 
       revenue: String(client.revenue || ""),
 
+      currencyCode: client.currencyCode || "INR",
+
+      projectOverview: client.projectOverview || "",
+
+      inScope: client.inScope || "",
+
+      outOfScope: client.outOfScope || "",
+
+      assumption: client.assumption || "",
+
       services: client.services || [],
 
       year: Number((client as any).year || new Date().getFullYear()),
@@ -950,6 +1001,16 @@ export default function Clients({
 
       revenue: Number(form.revenue) || 0,
 
+      currencyCode: form.currencyCode,
+
+      projectOverview: form.projectOverview || null,
+
+      inScope: form.inScope || null,
+
+      outOfScope: form.outOfScope || null,
+
+      assumption: form.assumption || null,
+
       year: Number(form.year) || new Date().getFullYear(),
 
       completion: toPercentage(form.completion),
@@ -1095,6 +1156,16 @@ export default function Clients({
         notes: serverClient?.remarks || payload.remarks || "",
 
         revenue: Number(serverClient?.revenue || payload.revenue || 0),
+
+        currencyCode: serverClient?.currencyCode || payload.currencyCode,
+
+        projectOverview: serverClient?.projectOverview || payload.projectOverview || "",
+
+        inScope: serverClient?.inScope || payload.inScope || "",
+
+        outOfScope: serverClient?.outOfScope || payload.outOfScope || "",
+
+        assumption: serverClient?.assumption || payload.assumption || "",
 
         services: serverClient?.services || payload.services || [],
 
@@ -1551,7 +1622,7 @@ export default function Clients({
                       style={{ color: text }}
                     >
                       {c.revenue > 0
-                        ? `$${(c.revenue / 1000000).toFixed(1)}M`
+                        ? formatRevenue(c.revenue, c.currencyCode)
                         : "—"}
                     </td>
                     <td className="px-4 py-3">
@@ -1808,11 +1879,23 @@ export default function Clients({
                     },
 
                     {
-                      label: "Revenue ($)",
+                      label: "Revenue",
 
                       key: "revenue",
 
                       placeholder: "e.g. 1200000",
+                    },
+
+                    {
+                      label: "Revenue Currency",
+
+                      key: "currencyCode",
+
+                      placeholder: "Select currency",
+
+                      type: "select",
+
+                      options: CURRENCIES,
                     },
 
                     {
@@ -2072,6 +2155,25 @@ export default function Clients({
                       }}
                     />
                   </label>
+                  {([
+                    ["Project Overview", "projectOverview"],
+                    ["In Scope", "inScope"],
+                    ["Out of Scope", "outOfScope"],
+                    ["Assumptions", "assumption"],
+                  ] as const).map(([label, key]) => (
+                    <label key={key} className="block mb-4">
+                      <span className="block text-xs font-semibold mb-1.5" style={{ color: text }}>
+                        {label}
+                      </span>
+                      <textarea
+                        value={form[key]}
+                        onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+                        rows={3}
+                        className="w-full rounded-lg border px-3 py-2 text-xs"
+                        style={{ background: inputBg, borderColor: border, color: text }}
+                      />
+                    </label>
+                  ))}
                   <p className="text-xs mb-4" style={{ color: muted }}>
                     Select all services this client will use
                   </p>

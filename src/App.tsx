@@ -58,6 +58,7 @@ export default function App() {
   const [repositoryDocuments, setRepositoryDocuments] = useState(() => localStorage.getItem("clmp-repository-documents") === "true");
   const [globalSearch, setGlobalSearch] = useState("");
   const [rfpProjectSeed, setRfpProjectSeed] = useState<RfpProjectPrefill | null>(null);
+  const readerOnly = user?.roles.length === 1 && user.roles[0] === "Reader";
 
   useEffect(() => {
     const timer = window.setTimeout(() => setBooting(false), 700);
@@ -79,8 +80,9 @@ export default function App() {
   }, []);
 
   const navigateTo = (nextPage: Page) => {
-    setPage(nextPage);
-    window.history.pushState({ page: nextPage }, "", nextPage === "dashboard" ? "/" : `#${nextPage}`);
+    const destination = readerOnly ? "servicecatalogue" : nextPage;
+    setPage(destination);
+    window.history.pushState({ page: destination }, "", destination === "dashboard" ? "/" : `#${destination}`);
   };
 
   const openProject = (id: string, destination: Page = "project") => {
@@ -197,8 +199,9 @@ export default function App() {
     return <Login onLogin={handleLogin} />;
   }
 
+  const visiblePage: Page = readerOnly ? "servicecatalogue" : page;
   const renderPage = () => {
-    switch (page) {
+    switch (visiblePage) {
       case "dashboard":   return <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
       case "clients":     return <Clients dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
       case "project":     return projectId ? <ProjectPage dark={dark} clientId={projectId} user={user} onBack={() => navigateTo("clients")} onOpenDocuments={() => navigateTo("documents")} onEditProject={() => { setRequestedEditProjectId(projectId); navigateTo("clients"); }} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
@@ -220,7 +223,7 @@ export default function App() {
 
   return (
     <Shell
-      page={page}
+      page={visiblePage}
       onPageChange={navigateTo}
       onLogout={handleLogout}
       dark={dark}
