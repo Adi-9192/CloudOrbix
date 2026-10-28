@@ -109,7 +109,7 @@ export default function Login({ onLogin }: LoginProps) {
               <img src="/CloudOrbix.png" alt="CloudOrbix" className="h-20 w-20 rounded-lg object-contain " />
             <div>
               <div className="text-white font-bold text-3xl leading-none">CloudOrbix</div>
-              <div className="text-blue-100 text-xs font-medium">Orbiting Every Project Aroun Success</div>
+              <div className="text-blue-100 text-xs font-medium">Orbiting Every Project Around Success</div>
             </div>
           </div>
 

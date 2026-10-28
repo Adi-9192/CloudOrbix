@@ -41,7 +41,14 @@ const getStoredUser = (): AuthUser | null => {
   }
 };
 
+const hasViewerOnlyAccess = (authUser: AuthUser | null): boolean =>
+  Boolean(
+    authUser?.roles.some((role) => role === "Viewer" || role === "Reader") &&
+      !authUser.roles.includes("Admin"),
+  );
+
 const getInitialPage = (): Page => {
+  if (hasViewerOnlyAccess(getStoredUser())) return "servicecatalogue";
   const hash = window.location.hash.replace(/^#/, "") as Page;
   const validPages: Page[] = ["dashboard", "clients", "projectframework", "reports", "excel", "audit", "admin", "help", "project", "documents", "repository", "servicecatalogue", "profile", "risks", "rfp"];
   return validPages.includes(hash) ? hash : "dashboard";
@@ -58,7 +65,6 @@ export default function App() {
   const [repositoryDocuments, setRepositoryDocuments] = useState(() => localStorage.getItem("clmp-repository-documents") === "true");
   const [globalSearch, setGlobalSearch] = useState("");
   const [rfpProjectSeed, setRfpProjectSeed] = useState<RfpProjectPrefill | null>(null);
-  const readerOnly = user?.roles.length === 1 && user.roles[0] === "Reader";
 
   useEffect(() => {
     const timer = window.setTimeout(() => setBooting(false), 700);
@@ -72,17 +78,22 @@ export default function App() {
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
       const nextPage = (event.state?.page || window.location.hash.replace(/^#/, "")) as Page | undefined;
-      if (nextPage) setPage(nextPage);
-      else setPage("dashboard");
+      const accessiblePage = hasViewerOnlyAccess(getStoredUser())
+        ? "servicecatalogue"
+        : nextPage || "dashboard";
+      setPage(accessiblePage);
+      if (accessiblePage !== nextPage) {
+        window.history.replaceState({ page: accessiblePage }, "", `#${accessiblePage}`);
+      }
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   const navigateTo = (nextPage: Page) => {
-    const destination = readerOnly ? "servicecatalogue" : nextPage;
-    setPage(destination);
-    window.history.pushState({ page: destination }, "", destination === "dashboard" ? "/" : `#${destination}`);
+    const accessiblePage = hasViewerOnlyAccess(user) ? "servicecatalogue" : nextPage;
+    setPage(accessiblePage);
+    window.history.pushState({ page: accessiblePage }, "", accessiblePage === "dashboard" ? "/" : `#${accessiblePage}`);
   };
 
   const openProject = (id: string, destination: Page = "project") => {
@@ -101,6 +112,7 @@ export default function App() {
 
   const handleGlobalSearch = (query: string) => {
     setGlobalSearch(query);
+    if (hasViewerOnlyAccess(user)) return;
     if (query && page !== "clients") {
       setPage("clients");
       window.history.replaceState({ page: "clients" }, "", "#clients");
@@ -120,6 +132,8 @@ export default function App() {
     localStorage.setItem("clmp-user", JSON.stringify(authUser));
     localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
     setUser(authUser);
+    setPage("servicecatalogue");
+    window.history.replaceState({ page: "servicecatalogue" }, "", "#servicecatalogue");
     setLoggedIn(true);
   };
 
@@ -199,7 +213,7 @@ export default function App() {
     return <Login onLogin={handleLogin} />;
   }
 
-  const visiblePage: Page = readerOnly ? "servicecatalogue" : page;
+  const visiblePage: Page = hasViewerOnlyAccess(user) ? "servicecatalogue" : page;
   const renderPage = () => {
     switch (visiblePage) {
       case "dashboard":   return <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;

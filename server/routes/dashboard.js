@@ -15,6 +15,11 @@ const projectBreakdownColumns = {
   hyperscaler: 'hyperscaler',
   projectType: 'project_type',
 };
+const rfpBreakdownColumns = {
+  status: 'project_status',
+  projectType: 'project_type',
+  region: 'region',
+};
 
 function getPeriodExpressions(period) {
   const expressions = {
@@ -52,6 +57,11 @@ router.get('/', protectRoute, async (req, res, next) => {
     const groupColumn = projectBreakdownColumns[groupBy];
     if (!groupColumn) {
       return res.status(400).json({ message: 'Unsupported project breakdown field.' });
+    }
+    const rfpGroupBy = String(req.query.rfpGroupBy || 'status');
+    const rfpGroupColumn = rfpBreakdownColumns[rfpGroupBy];
+    if (!rfpGroupColumn) {
+      return res.status(400).json({ message: 'Unsupported RFP breakdown field.' });
     }
     const periodExpressions = getPeriodExpressions(period);
     const pool = getPool();
@@ -209,13 +219,13 @@ router.get('/', protectRoute, async (req, res, next) => {
         ORDER BY value DESC, name
       `, [selectedYear]),
       pool.query(`
-        SELECT COALESCE(NULLIF(LTRIM(RTRIM(p.project_status)), ''), 'Unspecified') AS name,
+        SELECT COALESCE(NULLIF(LTRIM(RTRIM(p.${rfpGroupColumn})), ''), 'Unspecified') AS name,
           CAST(COUNT(*) AS int) AS value,
           CAST(COALESCE(SUM(s.grand_total_inr), 0) AS numeric(18,2)) AS revenue_inr
         FROM rfp_projects p
         LEFT JOIN rfp_cost_summary s ON s.project_id = p.id
         WHERE ($1 IS NULL OR p.[year] = $1)
-        GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(p.project_status)), ''), 'Unspecified')
+        GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(p.${rfpGroupColumn})), ''), 'Unspecified')
         ORDER BY value DESC, name
       `, [selectedYear]),
     ]);

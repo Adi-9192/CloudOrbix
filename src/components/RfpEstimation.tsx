@@ -1468,10 +1468,10 @@ export default function RfpEstimation({
                     <label className="text-xs font-semibold" style={labelStyle}>Working Days / Month<input type="number" className={`${inputClass} mt-1`} style={inputStyle} value={WORKING_DAYS_PER_MONTH} readOnly aria-readonly="true" /></label>
                     {([
                       ["Project Overview", "projectOverview"],
-                      ["Assumption", "assumption"],
-                      ["Out of Scope", "outOfScope"],
                       ["In Scope", "inScope"],
-                    ] as const).map(([label, key]) => <label key={key} className="text-xs font-semibold sm:col-span-2" style={labelStyle}>{label}<textarea className={`${inputClass} mt-1 min-h-20 resize-y`} style={inputStyle} value={estimate[key]} onChange={(event) => patchEstimate({ [key]: event.target.value })} /></label>)}
+                      ["Out of Scope", "outOfScope"],
+                      ["Assumption", "assumption"],
+                    ] as const).map(([label, key]) => <label key={key} className="text-xs font-semibold sm:col-span-2 xl:col-span-4" style={labelStyle}>{label}<textarea className={`${inputClass} mt-1 min-h-20 resize-y`} style={inputStyle} value={estimate[key]} onChange={(event) => patchEstimate({ [key]: event.target.value })} /></label>)}
                   </div>
                 </section>
 

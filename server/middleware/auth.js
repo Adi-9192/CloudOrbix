@@ -45,7 +45,7 @@ export async function protectRoute(req, res, next) {
       roles: user.roles,
       isActive: user.isActive,
     };
-    const readerOnly = user.roles.length === 1 && user.roles[0] === 'Reader';
+    const readerOnly = user.roles.includes('Reader') && !user.roles.includes('Admin');
     if (readerOnly && !(req.method === 'GET' && req.baseUrl === '/api/services')) {
       return res.status(403).json({ message: 'Reader access is limited to the Portfolio page.' });
     }
