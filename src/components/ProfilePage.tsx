@@ -1,12 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   ArrowUpRight,
-  CalendarClock,
-  CheckSquare,
   FolderOpen,
-  ListTodo,
-  UserCircle2,
+  Lock,
 } from "lucide-react";
 
 interface ProfilePageProps {
@@ -31,7 +28,6 @@ type ProjectAlert = {
 
 type TodoItem = {
   id: string;
-  projectId?: string;
   text: string;
   dueDate: string;
   done: boolean;
@@ -69,12 +65,16 @@ const getProjectDueDate = (project: ApiProject) => {
 export default function ProfilePage({ dark, user, onOpenProject }: ProfilePageProps) {
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [taskText, setTaskText] = useState("");
   const [taskDate, setTaskDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
-  const bg = dark ? "#0F172A" : "#FFFFFF";
   const panel = dark ? "#111827" : "#FFFFFF";
   const border = dark ? "#334155" : "#E2E8F0";
   const borderColor = border;
@@ -89,8 +89,10 @@ export default function ProfilePage({ dark, user, onOpenProject }: ProfilePagePr
       return;
     }
 
-    const currentUserName = user ? `${user.firstName} ${user.lastName}`.trim() : "";
-    const currentUserEmail = user?.email || "";
+    const managerIdentifiers = [
+      user ? `${user.firstName} ${user.lastName}`.trim() : "",
+      user?.email || "",
+    ].map((value) => value.trim().toLocaleLowerCase()).filter(Boolean);
 
     const loadProjects = async () => {
       try {
@@ -100,27 +102,25 @@ export default function ProfilePage({ dark, user, onOpenProject }: ProfilePagePr
 
         if (!response.ok) {
           setProjects([]);
-          setSelectedProjectId(null);
-          setLoading(false);
           return;
         }
 
         const payload = await response.json();
         const allProjects = Array.isArray(payload?.clients) ? payload.clients : [];
         const assignedProjects = allProjects.filter((project: ApiProject) => {
-          const managerSet = [project.accountManager, project.projectManager];
-          return managerSet.some((value) => {
-            if (!value) return false;
-            return value === currentUserName || value === currentUserEmail || value.toLowerCase() === currentUserName.toLowerCase();
-          });
+          const managers = [project.accountManager, project.projectManager]
+            .flatMap((value) => (value || "").split(/[,;/|]+/))
+            .map((value) => value.trim().toLocaleLowerCase())
+            .filter(Boolean);
+          return managers.some((manager) => managerIdentifiers.includes(manager));
         });
 
         const mappedProjects: ApiProject[] = assignedProjects.filter(Boolean) as ApiProject[];
         setProjects(mappedProjects);
-        setSelectedProjectId(mappedProjects[0]?.clientId || null);
       } catch {
         setProjects([]);
-        setSelectedProjectId(null);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -151,8 +151,67 @@ export default function ProfilePage({ dark, user, onOpenProject }: ProfilePagePr
     };
 
     loadProjects();
-    loadTasks();
   }, [user]);
+
+  const handlePasswordChange = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordError("");
+    setPasswordMessage("");
+
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("The new passwords do not match.");
+      return;
+    }
+
+    const token = localStorage.getItem("clmp-token");
+    if (!token) {
+      setPasswordError("Your session has expired. Please sign in again.");
+      return;
+    }
+
+    setPasswordSubmitting(true);
+    try {
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ oldPassword: currentPassword, newPassword }),
+      });
+      const responseText = await response.text();
+      let payload: { message?: string } = {};
+      if (responseText) {
+        try {
+          payload = JSON.parse(responseText);
+        } catch {
+          throw new Error("The server returned an invalid response. Please try again.");
+        }
+      }
+      if (!response.ok) {
+        throw new Error(payload.message || "Unable to change password.");
+      }
+
+      setPasswordMessage(payload.message || "Password updated successfully.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (error) {
+      setPasswordError(
+        error instanceof TypeError
+          ? "Unable to reach the server. Please try again."
+          : error instanceof Error
+            ? error.message
+            : "Unable to change password.",
+      );
+    } finally {
+      setPasswordSubmitting(false);
+    }
+  };
 
   const alerts = useMemo<ProjectAlert[]>(() => {
     return projects.flatMap((project) => {
@@ -311,10 +370,7 @@ export default function ProfilePage({ dark, user, onOpenProject }: ProfilePagePr
               </span>
             ))}
             <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: dark ? "#1E293B" : "#EFF6FF", color: "#1E40AF" }}>
-              {projects.length} active project{projects.length === 1 ? "" : "s"}
-            </span>
-            <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: dark ? "#1E293B" : "#EFF6FF", color: "#1E40AF" }}>
-              {todos.filter((item) => !item.done).length} open tasks
+              {projects.length} project{projects.length === 1 ? "" : "s"}
             </span>
           </div>
         </section>
@@ -322,19 +378,18 @@ export default function ProfilePage({ dark, user, onOpenProject }: ProfilePagePr
         <section className="rounded-2xl border p-5" style={{ background: panel, borderColor: border }}>
           <div className="mb-4 flex items-center gap-2">
             <FolderOpen className="h-4 w-4" style={{ color: "#1E40AF" }} />
-            <h3 className="text-lg font-semibold">Projects I maintain</h3>
+            <h3 className="text-lg font-semibold">Projects assigned to me</h3>
           </div>
 
           {projects.length === 0 ? (
             <div className="rounded-xl border border-dashed p-6 text-sm" style={{ borderColor, color: muted }}>
-              You are not assigned to any active projects yet.
+              No projects are assigned to you yet.
             </div>
           ) : (
             <div className="grid gap-3">
               {projects.map((project) => {
                 const projectStatus = formatProjectStatus(project.currentStatus);
                 const completion = Number(project.completion || 0);
-                const isSelected = selectedProjectId === project.clientId;
                 const statusTone =
                   projectStatus === "Delayed"
                     ? { bg: "#FEF3C7", text: "#92400E" }
@@ -346,20 +401,17 @@ export default function ProfilePage({ dark, user, onOpenProject }: ProfilePagePr
                   <button
                     key={project.clientId}
                     type="button"
-                    onClick={() => {
-                      setSelectedProjectId(project.clientId);
-                      onOpenProject?.(project.clientId);
-                    }}
-                    className="w-full rounded-xl border p-4 text-left transition-colors"
+                    onClick={() => onOpenProject?.(project.clientId)}
+                    className="group w-full rounded-xl border p-4 text-left transition-colors hover:border-blue-400"
                     style={{
-                      background: isSelected ? "rgba(96,165,250,0.12)" : soft,
-                      borderColor: isSelected ? "#60A5FA" : border,
+                      background: soft,
+                      borderColor: border,
                     }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-[11px] font-medium uppercase tracking-[0.12em]" style={{ color: muted }}>{project.clientId}</div>
-                        <div className="mt-2 text-base font-semibold">{project.clientName}</div>
+                        <div className="mt-2 text-base font-semibold group-hover:text-blue-600">{project.clientName}</div>
                       </div>
                       <span className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: statusTone.bg, color: statusTone.text }}>
                         {projectStatus}
@@ -436,71 +488,62 @@ export default function ProfilePage({ dark, user, onOpenProject }: ProfilePagePr
 
         <section className="rounded-2xl border p-5" style={{ background: panel, borderColor: border }}>
           <div className="mb-4 flex items-center gap-2">
-            <ListTodo className="h-4 w-4" style={{ color: "#1E40AF" }} />
-            <h3 className="text-lg font-semibold">My tasks</h3>
+            <Lock className="h-4 w-4" style={{ color: "#1E40AF" }} />
+            <h3 className="text-lg font-semibold">Reset password</h3>
           </div>
-
-          <div className="mb-4 grid gap-2 rounded-xl border p-3" style={{ borderColor, background: dark ? "#0F172A" : "#F8FAFC" }}>
-            <input
-              value={taskText}
-              onChange={(event) => setTaskText(event.target.value)}
-              placeholder="Add a personal task"
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-              style={{ borderColor, background: bg, color: text }}
-            />
-            <div className="flex items-center gap-2">
+          <form onSubmit={handlePasswordChange} className="grid gap-3">
+            <label className="grid gap-1 text-xs font-medium" style={{ color: muted }}>
+              Current password
               <input
-                type="date"
-                value={taskDate}
-                onChange={(event) => setTaskDate(event.target.value)}
-                className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
-                style={{ borderColor, background: bg, color: text, colorScheme: dark ? "dark" : "light" }}
+                type="password"
+                autoComplete="current-password"
+                required
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                className="rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{ borderColor, background: soft, color: text }}
               />
-              <button
-                type="button"
-                onClick={addTask}
-                className="rounded-lg px-3 py-2 text-xs font-semibold text-white"
-                style={{ background: "#1E40AF" }}
-              >
-                Add
-              </button>
-            </div>
-          </div>
-
-          <div className="grid gap-3">
-            {todos.length === 0 ? (
-              <div className="rounded-xl border border-dashed p-4 text-sm" style={{ borderColor, color: muted }}>
-                No personal tasks yet. Add your next action item.
-              </div>
-            ) : (
-              todos.map((task) => (
-                <div key={task.id} className="flex items-start gap-3 rounded-xl border p-3" style={{ borderColor, background: task.done ? dark ? "#0F172A" : "#F8FAFC" : bg }}>
-                  <input
-                    type="checkbox"
-                    checked={task.done}
-                    onChange={() => toggleTask(task.id)}
-                    aria-label={task.text}
-                    className="mt-1 h-4 w-4"
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold" style={{ textDecoration: task.done ? "line-through" : "none", color: task.done ? muted : text }}>
-                      {task.text}
-                    </div>
-                    <div className="mt-1 flex items-center gap-1 text-[11px]" style={{ color: muted }}>
-                      <CalendarClock className="h-3 w-3" />
-                      {task.dueDate}
-                    </div>
-                  </div>
-
-                  <div className="text-[10px] font-medium" style={{ color: muted }}>
-                    Personal
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+            </label>
+            <label className="grid gap-1 text-xs font-medium" style={{ color: muted }}>
+              New password
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                className="rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{ borderColor, background: soft, color: text }}
+              />
+            </label>
+            <label className="grid gap-1 text-xs font-medium" style={{ color: muted }}>
+              Confirm new password
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className="rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{ borderColor, background: soft, color: text }}
+              />
+            </label>
+            <p className="text-xs" style={{ color: muted }}>Use at least 8 characters for your new password.</p>
+            {passwordError && <p role="alert" className="text-sm text-red-500">{passwordError}</p>}
+            {passwordMessage && <p role="status" className="text-sm text-green-600">{passwordMessage}</p>}
+            <button
+              type="submit"
+              disabled={passwordSubmitting}
+              className="justify-self-start rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ background: "#1E40AF" }}
+            >
+              {passwordSubmitting ? "Updating…" : "Update password"}
+            </button>
+          </form>
         </section>
+
       </div>
     </div>
   );

@@ -41,7 +41,11 @@ const getStoredUser = (): AuthUser | null => {
   }
 };
 
+const hasViewerOnlyAccess = (authUser: AuthUser | null): boolean =>
+  Boolean(authUser?.roles.includes("Viewer") && !authUser.roles.includes("Admin"));
+
 const getInitialPage = (): Page => {
+  if (hasViewerOnlyAccess(getStoredUser())) return "servicecatalogue";
   const hash = window.location.hash.replace(/^#/, "") as Page;
   const validPages: Page[] = ["dashboard", "clients", "projectframework", "reports", "excel", "audit", "admin", "help", "project", "documents", "repository", "servicecatalogue", "profile", "risks", "rfp"];
   return validPages.includes(hash) ? hash : "dashboard";
@@ -71,16 +75,22 @@ export default function App() {
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
       const nextPage = (event.state?.page || window.location.hash.replace(/^#/, "")) as Page | undefined;
-      if (nextPage) setPage(nextPage);
-      else setPage("dashboard");
+      const accessiblePage = hasViewerOnlyAccess(getStoredUser())
+        ? "servicecatalogue"
+        : nextPage || "dashboard";
+      setPage(accessiblePage);
+      if (accessiblePage !== nextPage) {
+        window.history.replaceState({ page: accessiblePage }, "", `#${accessiblePage}`);
+      }
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   const navigateTo = (nextPage: Page) => {
-    setPage(nextPage);
-    window.history.pushState({ page: nextPage }, "", nextPage === "dashboard" ? "/" : `#${nextPage}`);
+    const accessiblePage = hasViewerOnlyAccess(user) ? "servicecatalogue" : nextPage;
+    setPage(accessiblePage);
+    window.history.pushState({ page: accessiblePage }, "", accessiblePage === "dashboard" ? "/" : `#${accessiblePage}`);
   };
 
   const openProject = (id: string, destination: Page = "project") => {
@@ -99,6 +109,7 @@ export default function App() {
 
   const handleGlobalSearch = (query: string) => {
     setGlobalSearch(query);
+    if (hasViewerOnlyAccess(user)) return;
     if (query && page !== "clients") {
       setPage("clients");
       window.history.replaceState({ page: "clients" }, "", "#clients");
@@ -118,6 +129,8 @@ export default function App() {
     localStorage.setItem("clmp-user", JSON.stringify(authUser));
     localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
     setUser(authUser);
+    setPage("servicecatalogue");
+    window.history.replaceState({ page: "servicecatalogue" }, "", "#servicecatalogue");
     setLoggedIn(true);
   };
 
@@ -198,7 +211,8 @@ export default function App() {
   }
 
   const renderPage = () => {
-    switch (page) {
+    const accessiblePage = hasViewerOnlyAccess(user) ? "servicecatalogue" : page;
+    switch (accessiblePage) {
       case "dashboard":   return <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
       case "clients":     return <Clients dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
       case "project":     return projectId ? <ProjectPage dark={dark} clientId={projectId} user={user} onBack={() => navigateTo("clients")} onOpenDocuments={() => navigateTo("documents")} onEditProject={() => { setRequestedEditProjectId(projectId); navigateTo("clients"); }} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
