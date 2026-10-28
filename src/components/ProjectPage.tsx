@@ -59,6 +59,11 @@ type Project = {
   project_billing_code?: string | null;
   year?: number | null;
   revenue?: number | string | null;
+  currency_code?: string | null;
+  project_overview?: string | null;
+  in_scope?: string | null;
+  out_of_scope?: string | null;
+  assumption?: string | null;
   isow?: string | null;
   estimated_start_date?: string | null;
   estimated_end_date?: string | null;
@@ -1094,7 +1099,11 @@ export default function ProjectPage({
                 ["Project Billing Code", project.project_billing_code || "-"],
                 ["ISOW", project.isow || "-"],
                 ["Year", project.year || "-"],
-                ["Revenue", project.revenue == null ? "-" : `$${Number(project.revenue).toLocaleString()}`],
+                ["Revenue", project.revenue == null ? "-" : new Intl.NumberFormat("en-IN", {
+                  style: "currency",
+                  currency: project.currency_code?.trim().toUpperCase() || "INR",
+                  maximumFractionDigits: 0,
+                }).format(Number(project.revenue))],
                 ["Completion", `${Number(project.completion || 0)}%`],
                 ["Volumetric", project.voumetric ?? "-"],
                 ["Estimated Start", project.estimated_start_date || "-"],
@@ -1105,6 +1114,10 @@ export default function ProjectPage({
                 ["Contract End", project.contract_end_date || "-"],
                 ["Resources", project.resources?.map((resource) => resource.resourceName).filter(Boolean).join(", ") || "-"],
                 ["Project Brief", project.project_brief || "-"],
+                ["Project Overview", project.project_overview || ""],
+                ["In Scope", project.in_scope || ""],
+                ["Out of Scope", project.out_of_scope || ""],
+                ["Assumptions", project.assumption || ""],
                 ["Notes", project.remarks || "-"],
               ].map(([label, value]) => (
                 <tr
@@ -1463,6 +1476,22 @@ export default function ProjectPage({
           </div>
         </div>
       </div>
+      <section className="mb-4">
+        <h2 className="mb-3 text-sm font-semibold">RFP Overview & Scope</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {([
+            ["Overview", project.project_overview],
+            ["In Scope", project.in_scope],
+            ["Out of Scope", project.out_of_scope],
+            ["Assumptions", project.assumption],
+          ] as const).map(([title, content]) => (
+            <article key={title} className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
+              <h3 className="mb-2 text-xs font-semibold">{title}</h3>
+              <p className="whitespace-pre-wrap text-xs leading-5" style={{ color: muted }}>{content || ""}</p>
+            </article>
+          ))}
+        </div>
+      </section>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div
           className="lg:col-span-2 rounded-xl border p-5"

@@ -101,6 +101,7 @@ export type RfpProjectPrefill = {
   rfpId: number;
   accountName: string;
   revenue: number;
+  currency: string;
   projectType: string;
   projectStatus: string;
   requestFromBy: string;
@@ -136,6 +137,7 @@ const CURRENCIES = [
   "USD",
 ];
 const FX_CURRENCIES = CURRENCIES.filter((currency) => currency !== "INR");
+const WORKING_DAYS_PER_MONTH = 19.67;
 const fmt = (value: number, currency = "INR") =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -173,7 +175,7 @@ const emptyEstimate = (): Estimate => {
     durationMonths: 3,
     durationDays: 0,
     allowancePercent: 0,
-    workingDaysPerMonth: 22,
+    workingDaysPerMonth: WORKING_DAYS_PER_MONTH,
     status: "Draft",
     resources: [blankResource("monthly"), blankResource("daily")],
   };
@@ -267,7 +269,7 @@ const restoreEstimateDraft = (value: unknown): Estimate => {
     durationMonths,
     durationDays,
     allowancePercent: Number(stored.allowancePercent || 0),
-    workingDaysPerMonth: Number(stored.workingDaysPerMonth) || 22,
+    workingDaysPerMonth: WORKING_DAYS_PER_MONTH,
     status: String(stored.status || "Draft"),
     resources,
   } as Estimate;
@@ -316,6 +318,8 @@ export default function RfpEstimation({
       out_of_scope: string | null;
       in_scope: string | null;
       grand_total_inr: number;
+      selected_currency_total: number;
+      currency_code: string;
       updated_at: string;
     }>
   >([]);
@@ -792,7 +796,7 @@ export default function RfpEstimation({
         durationMonths: Number(project.duration_months || 0),
         durationDays: Number(project.duration_days || 0),
         allowancePercent: Number(project.allowance_percent || 0),
-        workingDaysPerMonth: Number(project.working_days_per_month),
+        workingDaysPerMonth: WORKING_DAYS_PER_MONTH,
         status: project.status,
         resources: result.resources.map((row: ResourceRow) => ({
           ...row,
@@ -1461,7 +1465,7 @@ export default function RfpEstimation({
                     <label className="text-xs font-semibold" style={labelStyle}>Number of Months<input type="number" min="0" max="120" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.durationMonths} onChange={(event) => patchEstimate({ durationMonths: Number(event.target.value) })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Number of Days<input type="number" min="0" max="365" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.durationDays} onChange={(event) => patchEstimate({ durationDays: Number(event.target.value) })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Allowance %<input type="number" min="0" max="100" step="0.1" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.allowancePercent} onChange={(event) => patchEstimate({ allowancePercent: Number(event.target.value) })} /></label>
-                    <label className="text-xs font-semibold" style={labelStyle}>Working Days / Month<input type="number" min="1" max="31" step="0.5" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.workingDaysPerMonth} onChange={(event) => patchEstimate({ workingDaysPerMonth: Number(event.target.value) })} /></label>
+                    <label className="text-xs font-semibold" style={labelStyle}>Working Days / Month<input type="number" className={`${inputClass} mt-1`} style={inputStyle} value={WORKING_DAYS_PER_MONTH} readOnly aria-readonly="true" /></label>
                     {([
                       ["Project Overview", "projectOverview"],
                       ["In Scope", "inScope"],
@@ -1910,7 +1914,8 @@ export default function RfpEstimation({
                                       onClick={() => onMoveToProject({
                                         rfpId: item.id,
                                         accountName: item.project_name,
-                                        revenue: Number(item.grand_total_inr || 0),
+                                        revenue: Number(item.selected_currency_total || 0),
+                                        currency: item.currency_code || "INR",
                                         projectType: item.project_type || "Std",
                                         projectStatus: item.project_status,
                                         requestFromBy: item.request_from_by || "",

@@ -1,13 +1,14 @@
 import express from 'express';
-import ExcelJS from 'exceljs';
 import { createNotification, getPool } from '../db.js';
 import { protectRoute, requireRole } from '../middleware/auth.js';
 import { buildPeriods, periodAllocationKey } from '../lib/rfp-periods.js';
+import { buildRfpWorkbook } from '../lib/rfp-export.js';
 import { normalizeProjectName } from '../../shared/project-name.js';
 
 const router = express.Router();
 const resourceTypes = ['Long Term', 'Standard', 'Moderate', 'Experts'];
 const currencies = ['INR', 'AED', 'AUD', 'CAD', 'CHF', 'DKK', 'EUR', 'GBP', 'NOK', 'SEK', 'SGD', 'USD'];
+const WORKING_DAYS_PER_MONTH = 19.67;
 
 router.use(protectRoute);
 
@@ -69,7 +70,7 @@ function validateProject(body, requireCompleteEffort = true) {
   const outOfScope = String(body?.outOfScope || '').trim();
   const inScope = String(body?.inScope || '').trim();
   const allowance = Number(body?.allowancePercent ?? 0);
-  const workingDays = Number(body?.workingDaysPerMonth ?? 22);
+  const workingDays = WORKING_DAYS_PER_MONTH;
   const resources = Array.isArray(body?.resources)
     ? body.resources.flatMap((resource) => {
         const allocations = resource?.allocations || {};
@@ -115,7 +116,6 @@ function validateProject(body, requireCompleteEffort = true) {
   if (requestorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requestorEmail)) return { error: 'Enter a valid requestor email address.' };
   if (cloud && !['aws', 'azure', 'gcp', 'multi cloud'].includes(cloud)) return { error: 'Select AWS, Azure, GCP, or Multi Cloud.' };
   if (!Number.isFinite(allowance) || allowance < 0 || allowance > 100) return { error: 'Allowance must be between 0 and 100 percent.' };
-  if (!Number.isFinite(workingDays) || workingDays <= 0 || workingDays > 31) return { error: 'Working days per month must be greater than 0 and no more than 31.' };
   if (!resources.length) return { error: 'Add at least one resource row.' };
 
   for (const resource of resources) {
@@ -333,7 +333,7 @@ router.get('/projects', async (req, res, next) => {
   const pool = requireDatabase(res);
   if (!pool) return;
   try {
-    const result = await pool.query('SELECT p.id, p.project_name, p.client_name, p.[year], p.currency_code, p.status, p.project_status, p.initiated_at, p.requested_date, p.region, p.project_type, p.cloud, p.request_from_by, p.requestor_email, p.duration_months, p.duration_days, p.project_overview, p.assumption, p.out_of_scope, p.in_scope, p.updated_at, s.grand_total_inr FROM rfp_projects p LEFT JOIN rfp_cost_summary s ON s.project_id = p.id ORDER BY p.updated_at DESC');
+    const result = await pool.query('SELECT p.id, p.project_name, p.client_name, p.[year], p.currency_code, p.status, p.project_status, p.initiated_at, p.requested_date, p.region, p.project_type, p.cloud, p.request_from_by, p.requestor_email, p.duration_months, p.duration_days, p.project_overview, p.assumption, p.out_of_scope, p.in_scope, p.updated_at, s.grand_total_inr, s.selected_currency_total FROM rfp_projects p LEFT JOIN rfp_cost_summary s ON s.project_id = p.id ORDER BY p.updated_at DESC');
     return res.json({ projects: result.rows });
   } catch (error) { return next(error); }
 });
@@ -529,8 +529,8 @@ async function persistProject(pool, userId, data, status, existingId = null, exc
     }
   }
   sql.push(`MERGE rfp_cost_summary AS target USING (SELECT ${projectRef} AS project_id) AS source ON target.project_id = source.project_id WHEN MATCHED THEN UPDATE SET base_cost_inr = $${allocationParameters}, allowance_cost_inr = $${allocationParameters + 1}, grand_total_inr = $${allocationParameters + 2}, selected_currency_total = $${allocationParameters + 3}, exchange_rate = $${allocationParameters + 4}, updated_at = SYSUTCDATETIME() WHEN NOT MATCHED THEN INSERT (project_id, base_cost_inr, allowance_cost_inr, grand_total_inr, selected_currency_total, exchange_rate) VALUES (source.project_id, $${allocationParameters}, $${allocationParameters + 1}, $${allocationParameters + 2}, $${allocationParameters + 3}, $${allocationParameters + 4});`);
-  sql.push(`UPDATE clients SET revenue = $${allocationParameters + 2}, updated_at = SYSUTCDATETIME() WHERE rfp_project_id = ${projectRef};`);
-  values.push(baseCost, allowanceCost, grandTotal, currencyTotal, exchangeRate);
+  sql.push(`UPDATE clients SET revenue = $${allocationParameters + 3}, currency_code = $${allocationParameters + 5}, project_overview = $${allocationParameters + 6}, assumption = $${allocationParameters + 7}, out_of_scope = $${allocationParameters + 8}, in_scope = $${allocationParameters + 9}, updated_at = SYSUTCDATETIME() WHERE rfp_project_id = ${projectRef};`);
+  values.push(baseCost, allowanceCost, grandTotal, currencyTotal, exchangeRate, data.currency, data.projectOverview || null, data.assumption || null, data.outOfScope || null, data.inScope || null);
   sql.push(existingId ? 'SELECT $27 AS id;' : 'SELECT @newProjectId AS id;');
   const batch = `BEGIN TRY BEGIN TRANSACTION; ${sql.join('\n')} COMMIT TRANSACTION; END TRY BEGIN CATCH IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION; THROW; END CATCH;`;
   const result = await pool.query(batch, values);
@@ -615,7 +615,7 @@ router.post('/projects/:id/duplicate', async (req, res, next) => {
       durationMonths,
       durationDays,
       allowancePercent: source.allowance_percent,
-      workingDaysPerMonth: source.working_days_per_month,
+      workingDaysPerMonth: WORKING_DAYS_PER_MONTH,
       resources: mappedResources,
     };
     req.body = body;
@@ -640,45 +640,17 @@ router.get('/projects/:id/export.xlsx', async (req, res, next) => {
       if (key) item[key] = Number(row.fte);
       allocations.set(row.resource_id, item);
     });
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('RFP Estimate', { views: [{ state: 'frozen', xSplit: 4, ySplit: 1 }] });
-    sheet.addRow(['Account Name', project.project_name]);
-    sheet.addRow(['Request From/By', project.request_from_by || '']);
-    sheet.addRow(['Year', project.year, 'Currency', project.currency_code]);
-    sheet.addRow(['Project Status', project.project_status, 'Requested Date', new Date(project.requested_date).toISOString().slice(0, 10)]);
-    sheet.addRow([]);
     const monthlyPeriods = Number(project.duration_months || 0) > 0
       ? periods.filter((period) => period.key.startsWith('month-'))
       : [];
-    sheet.addRow(['Resource Plan', 'Resource Name', 'Grade', 'Resource Type', ...monthlyPeriods.map((period) => period.label), ...(Number(project.duration_days || 0) > 0 ? ['Man Days', 'FTE Effort', 'Total Daily Effort (Man Days)'] : []), 'Total Cost (INR)']);
-    let baseCost = 0;
-    const totalFte = Object.fromEntries(monthlyPeriods.map((period) => [period.key, 0]));
-    let totalDailyEffort = 0;
-    for (const resource of resourcesResponse.rows) {
-      const rowAllocations = allocations.get(resource.id) || {};
-      const isDaily = String(resource.resource_plan_type || 'Monthly').toLowerCase() === 'daily';
-      const monthlyCosts = isDaily ? [] : monthlyPeriods.map((period) => Number(resource.daily_rate || 0) * Number(project.working_days_per_month) * Number(rowAllocations[period.key] || 0));
-      const dailyEffort = isDaily ? Number(resource.daily_man_days || 0) * Number(rowAllocations.days || 0) : 0;
-      const rowCost = monthlyCosts.reduce((sum, cost) => sum + cost, 0) + Number(resource.daily_rate || 0) * dailyEffort;
-      baseCost += rowCost;
-      if (!isDaily) monthlyPeriods.forEach((period) => { totalFte[period.key] += Number(rowAllocations[period.key] || 0); });
-      totalDailyEffort += dailyEffort;
-      sheet.addRow([isDaily ? 'Daily' : 'Monthly', resource.resource_name, resource.grade, resource.resource_type, ...monthlyPeriods.map((period) => isDaily ? 0 : rowAllocations[period.key] || 0), ...(Number(project.duration_days || 0) > 0 ? [isDaily ? Number(resource.daily_man_days || 0) : 0, isDaily ? Number(rowAllocations.days || 0) : 0, dailyEffort] : []), rowCost]);
-    }
-    const allowanceCost = baseCost * Number(project.allowance_percent) / 100;
-    const grandTotal = baseCost + allowanceCost;
-    const fteRow = sheet.addRow(['Total FTE', '', '', '', ...monthlyPeriods.map((period) => totalFte[period.key]), ...(Number(project.duration_days || 0) > 0 ? ['', '', totalDailyEffort] : []), grandTotal]);
-    fteRow.font = { bold: true };
     const exportExchange = project.currency_code === 'INR' ? 1 : Number((await pool.query('SELECT r.rate_to_inr FROM currency_exchange_rates r JOIN currency_exchange_rate_versions v ON v.id = r.version_id WHERE v.[year] = $1 AND r.currency_pair = $2', [project.year, `${project.currency_code}/INR`])).rows[0]?.rate_to_inr || 0);
-    sheet.addRow([]);
-    sheet.addRow(['Base Resource Cost (INR)', baseCost]);
-    sheet.addRow([`Allowance (${project.allowance_percent}%) (INR)`, allowanceCost]);
-    sheet.addRow(['Grand Total (INR)', grandTotal]);
-    sheet.addRow([`${project.currency_code} Total`, exportExchange ? grandTotal / exportExchange : 'Exchange rate not configured']);
-    sheet.columns.forEach((column, index) => { column.width = index < 4 ? 22 : 14; });
-    sheet.getRow(6).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    sheet.getRow(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF173F35' } };
-    const buffer = await workbook.xlsx.writeBuffer();
+    const buffer = await buildRfpWorkbook({
+      project,
+      resources: resourcesResponse.rows,
+      monthlyPeriods,
+      allocations,
+      exchangeRate: exportExchange,
+    });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="rfp-estimate-${project.id}.xlsx"`);
     return res.send(buffer);

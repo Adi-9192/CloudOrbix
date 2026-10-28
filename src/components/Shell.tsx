@@ -109,6 +109,7 @@ export default function Shell({
   const [clearingNotifications, setClearingNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+  const isAdmin = user?.roles.includes("Admin") ?? false;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -138,8 +139,9 @@ export default function Shell({
   const textMuted = dark ? "#94A3B8" : "#64748B";
   const textBody = dark ? "#E2E8F0" : "#0F172A";
   const pageBg = dark ? "#0F172A" : "#F1F5F9";
-  const viewerOnly = Boolean(
-    user?.roles.includes("Viewer") && !user.roles.includes("Admin"),
+  const portfolioOnly = Boolean(
+    user?.roles.some((role) => role === "Reader" || role === "Viewer") &&
+      !user.roles.includes("Admin"),
   );
   const roleLabel =
     user?.roles?.[0] === "Admin"
@@ -154,7 +156,7 @@ export default function Shell({
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   useEffect(() => {
-    if (viewerOnly) return;
+    if (portfolioOnly) return;
     const token = localStorage.getItem("clmp-token");
     if (!token) return;
     fetch("/api/users/notifications", {
@@ -180,7 +182,7 @@ export default function Shell({
         setNotifications(alerts);
       })
       .catch(() => setNotifications([]));
-  }, [user, notifOpen, viewerOnly]);
+  }, [user, notifOpen, portfolioOnly]);
 
   const clearNotifications = async () => {
     const token = localStorage.getItem("clmp-token");
@@ -339,8 +341,8 @@ export default function Shell({
         </button>
         <button
           className="flex items-center gap-2 flex-shrink-0"
-          onClick={() => onPageChange(viewerOnly ? "servicecatalogue" : "dashboard")}
-          aria-label={viewerOnly ? "Go to Portfolio" : "Go to dashboard"}
+          onClick={() => onPageChange(portfolioOnly ? "servicecatalogue" : "dashboard")}
+          aria-label={portfolioOnly ? "Go to Portfolio" : "Go to dashboard"}
         >
           <img
             src="/CloudOrbix.png"
@@ -358,7 +360,7 @@ export default function Shell({
         </button>
 
         {/* Search */}
-        {!viewerOnly && <div className="flex-1 max-w-md relative hidden sm:block">
+        {!portfolioOnly && <div className="flex-1 max-w-md relative hidden sm:block">
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5"
             style={{ color: textMuted }}
@@ -390,7 +392,7 @@ export default function Shell({
           </button>
 
           {/* Notifications */}
-          {!viewerOnly && <div className="relative" ref={notifRef}>
+          {!portfolioOnly && <div className="relative" ref={notifRef}>
             <button
               onClick={() => setNotifOpen(!notifOpen)}
               className="relative p-2 rounded-lg hover:bg-slate-100 transition-colors"
@@ -537,30 +539,28 @@ export default function Shell({
                     {roleLabel}
                   </div>
                 </div>
-                {!viewerOnly && (
-                  <>
-                    <button
-                      onClick={() => {
-                        onPageChange("profile");
-                        setProfileOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
-                      style={{ color: textBody }}
-                    >
-                      <UserCircle2 className="w-3.5 h-3.5" /> My Profile
-                    </button>
-                    <button
-                      onClick={() => {
-                        onPageChange("admin");
-                        setProfileOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
-                      style={{ color: textBody }}
-                    >
-                      <Settings className="w-3.5 h-3.5" /> Settings
-                    </button>
-                  </>
-                )}
+                {!portfolioOnly && <>
+                  <button
+                  onClick={() => {
+                    onPageChange("profile");
+                    setProfileOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
+                  style={{ color: textBody }}
+                >
+                  <UserCircle2 className="w-3.5 h-3.5" /> My Profile
+                  </button>
+                </>}
+                {isAdmin && <button
+                  onClick={() => {
+                    onPageChange("admin");
+                    setProfileOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2"
+                  style={{ color: textBody }}
+                >
+                  <Settings className="w-3.5 h-3.5" /> Settings
+                </button>}
                 <button
                   onClick={onLogout}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 flex items-center gap-2 text-red-600"
@@ -581,7 +581,7 @@ export default function Shell({
         >
           <div className="flex-1 py-3 overflow-y-auto">
             {navItems
-              .filter(({ id }) => id === "servicecatalogue" || (!viewerOnly && id === "dashboard"))
+              .filter(({ id }) => portfolioOnly ? id === "servicecatalogue" : id === "dashboard")
               .map(({ id, label, icon: Icon }) => {
                 const active = page === id;
                 return (
@@ -610,7 +610,7 @@ export default function Shell({
                   </button>
                 );
               })}
-            {!viewerOnly && <div className="mb-1">
+            {!portfolioOnly && <div className="mb-1">
               <button
                 onClick={() => setProjectManagementOpen(!projectManagementOpen)}
                 aria-expanded={projectManagementOpen}
@@ -661,13 +661,13 @@ export default function Shell({
             {navItems
               .filter(
                 ({ id }) =>
-                  !viewerOnly &&
+                  !portfolioOnly &&
                   id !== "dashboard" &&
                   id !== "servicecatalogue" &&
                   (!(["admin", "excel", "audit", ] as Page[]).includes(
                     id,
                   ) ||
-                    user?.roles.includes("Admin")),
+                    isAdmin)
               )
               .map(({ id, label, icon: Icon }) => {
                 const active = page === id;

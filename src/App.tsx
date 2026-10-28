@@ -42,7 +42,10 @@ const getStoredUser = (): AuthUser | null => {
 };
 
 const hasViewerOnlyAccess = (authUser: AuthUser | null): boolean =>
-  Boolean(authUser?.roles.includes("Viewer") && !authUser.roles.includes("Admin"));
+  Boolean(
+    authUser?.roles.some((role) => role === "Viewer" || role === "Reader") &&
+      !authUser.roles.includes("Admin"),
+  );
 
 const getInitialPage = (): Page => {
   if (hasViewerOnlyAccess(getStoredUser())) return "servicecatalogue";
@@ -210,9 +213,9 @@ export default function App() {
     return <Login onLogin={handleLogin} />;
   }
 
+  const visiblePage: Page = hasViewerOnlyAccess(user) ? "servicecatalogue" : page;
   const renderPage = () => {
-    const accessiblePage = hasViewerOnlyAccess(user) ? "servicecatalogue" : page;
-    switch (accessiblePage) {
+    switch (visiblePage) {
       case "dashboard":   return <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
       case "clients":     return <Clients dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
       case "project":     return projectId ? <ProjectPage dark={dark} clientId={projectId} user={user} onBack={() => navigateTo("clients")} onOpenDocuments={() => navigateTo("documents")} onEditProject={() => { setRequestedEditProjectId(projectId); navigateTo("clients"); }} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
@@ -234,7 +237,7 @@ export default function App() {
 
   return (
     <Shell
-      page={page}
+      page={visiblePage}
       onPageChange={navigateTo}
       onLogout={handleLogout}
       dark={dark}

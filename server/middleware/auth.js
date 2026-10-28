@@ -45,6 +45,10 @@ export async function protectRoute(req, res, next) {
       roles: user.roles,
       isActive: user.isActive,
     };
+    const readerOnly = user.roles.includes('Reader') && !user.roles.includes('Admin');
+    if (readerOnly && !(req.method === 'GET' && req.baseUrl === '/api/services')) {
+      return res.status(403).json({ message: 'Reader access is limited to the Portfolio page.' });
+    }
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Invalid or expired token.' });
