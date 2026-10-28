@@ -62,17 +62,19 @@ FROM dbo.rfp_cost_summary cost_summary
 JOIN dbo.rfp_projects project ON project.id = cost_summary.project_id
 JOIN calculated_costs costs ON costs.project_id = project.id;
 
-UPDATE client
-SET
-    client.revenue = summary.selected_currency_total,
-    client.currency_code = project.currency_code,
-    client.project_overview = project.project_overview,
-    client.in_scope = project.in_scope,
-    client.out_of_scope = project.out_of_scope,
-    client.assumption = project.assumption
-FROM dbo.clients client
-JOIN dbo.rfp_projects project ON project.id = client.rfp_project_id
-JOIN dbo.rfp_cost_summary summary ON summary.project_id = project.id;
+EXEC sys.sp_executesql N'
+    UPDATE client
+    SET
+        client.revenue = summary.selected_currency_total,
+        client.currency_code = project.currency_code,
+        client.project_overview = project.project_overview,
+        client.in_scope = project.in_scope,
+        client.out_of_scope = project.out_of_scope,
+        client.assumption = project.assumption
+    FROM dbo.clients client
+    JOIN dbo.rfp_projects project ON project.id = client.rfp_project_id
+    JOIN dbo.rfp_cost_summary summary ON summary.project_id = project.id;
+';
 
 IF NOT EXISTS (
     SELECT 1
