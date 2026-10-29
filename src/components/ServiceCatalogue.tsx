@@ -10,32 +10,49 @@ export interface Service {
   image: string;
 }
 
-
 export const DEFAULT_SERVICES: Service[] = [
   {
     index: "01",
-    title: "Cloud Infrastructure Architecture and Management",
-    tagline: "Turning business ambition into scalable technology foundations.",
-    creating: "Design, assessment, modernization and automated deployment aligned with governance, policy, tagging, reporting, SLA and naming standards.",
+    title: "Cloud Infrastructure Architecture and Modernization",
+    tagline: "Secure, scalable, and policy aligned multi-cloud foundations",
+    creating: "End-to-end design, assessment, modernization, and implementation of cloud platforms aligned with enterprise governance, security, compliance, and target operating model requirements.",
     capabilities: [
-    "Cloud Foundation - Design secure and governed Azure Landing Zones, Sovereign Landing Zones (SLZ), AWS Control Tower, GCP, and OCI core landing zones.",
-    "Enterprise Landing Zones - Deploy enterprise-scale landing zones aligned with the Microsoft Cloud Adoption Framework (CAF).",
-    "Custom Landing Zones - Design and implement single-region and multi-region cloud landing zones.",
-    "Capacity Management - Assess resource utilization and forecast future capacity based on regional availability.",
-    "Vendor Engagement - Coordinate cloud region enablement and large-scale capacity provisioning.",
-    "Network Architecture - Design and implement VNet peering, route tables, and firewall strategies.",
-    "Hybrid Connectivity - Build Hub-and-Spoke, multi-region, and hybrid-cloud network architectures.",
-    "Multi-Cloud Integration - Develop integrated Azure, AWS, GCP, OCI, and hybrid-cloud architectures.",
-    "AI Platform Architecture - Architect secure AIOps environments using Microsoft Foundry, Amazon Bedrock, and Google Vertex AI.",
-    "Disaster Recovery - Design multi-region high-availability and disaster recovery solutions across cloud platforms.",
-    "DevOps Platform Build - Implement CI/CD, security scanning, repository, and artifact management platforms.",
-    "Azure Virtual Desktop - Design and deploy secure AVD environments with Entra ID, FSLogix, autoscaling, and application delivery.",
-    "Azure File Sync Services - Implement hybrid file storage, synchronization, cloud tiering, and DFS modernization using Azure File Sync and Azure Files."
+    "Cloud Foundation - Design secure, policy-aligned landing zone architectures across Azure Landing Zones and Sovereign Landing Zones (SLZ), AWS Control Tower, GCP, and OCI environments.",
+    "Deployment of enterprise-scale landing zones aligned with the Microsoft Cloud Adoption Framework (CAF).",
+    "Custom Landing Zone design and implementation for single-region and multi-region cloud environments.",
+    "Capacity planning and optimization assessments, including resource utilization analysis and future demand forecasting based on vendor-specific regional availability.",
+    "Strategic vendor engagement for cloud region enablement, expansion planning, and large-scale transformation initiatives.",
+    "Design and implementation of Virtual Network (VNet) peering, route tables, and firewall strategies.",
+    "Design and implementation of Hub-and-Spoke, multi-region, and hybrid-cloud network connectivity architectures.",
+    "Multi-Cloud Integration - Design and implement integrated Azure, AWS, GCP, OCI, and hybrid-cloud architectures.",
+    "AI Platform Architecture - Design and implement enterprise AI platform architectures using Azure AI Foundry, Amazon Bedrock, and Google Vertex AI, enabling secure and scalable AI adoption.",
+    "Disaster Recovery Architecture - Design multi-region high-availability and disaster recovery architectures across Azure, AWS, GCP, and OCI environments.",
+    "DevOps Platform Build - Design and implement CI/CD, repository, and artifact management platforms across multi-cloud environments.",
+    "Azure Virtual Desktop (AVD) - Design and deploy secure virtual desktop infrastructure with Entra ID, FSLogix, autoscaling, application delivery, and hybrid workforce enablement.",
+    "File Services Modernization - Design and implement hybrid file storage, synchronization, cloud tiering, and DFS modernization using Azure File Sync and Azure Files."
 ],
     image: "/portfolio/1.png",
   },
   {
     index: "02",
+    title: "DevOps, Platform Engineering & Infrastructure as Code",
+    tagline: "Standardize, secure, and accelerate cloud adoption through DevOps, platform engineering, and Infrastructure as Code.",
+    creating: "Enable scalable, policy-aligned, and automated cloud platforms through modern DevOps practices, Infrastructure as Code (IaC), and platform engineering frameworks.",
+    capabilities: [
+    "Cloud Foundation Automation - Design and automate deployment of Azure Landing Zones, AWS Control Tower, and Google Cloud foundations using Infrastructure as Code.",
+    "Infrastructure as Code (IaC) - Implement Terraform, Azure Bicep, CloudFormation and cloud-native IaC frameworks using reusable, standardized and version-controlled templates.",
+    "CI/CD Platform Engineering - Design and implement enterprise-grade CI/CD platforms using Azure DevOps, GitHub Actions, GitLab, AWS CodePipeline, and Google Cloud Build.",
+    "Platform Engineering Automation - Implement self-service platforms, standardized delivery frameworks and reusable engineering patterns.",
+    "Build & Release Automation - Design and implement automated provisioning, environment promotion, deployment orchestration, and release management frameworks across multi-cloud environments.",
+    "IaC Validation & Testing Framework - Implement automated validation, security, compliance and deployment testing for Infrastructure as Code templates and cloud platforms.",
+    "Cloud Platform Automation - Design and implement automation frameworks for infrastructure provisioning, platform lifecycle management, operational resilience, and self-healing cloud capabilities across multi-cloud environments.",
+    "AIOps & Observability Engineering - Design and implement AIOps and observability frameworks leveraging intelligent analytics, event correlation, automation, and predictive insights to enhance platform reliability and operational resilience.",
+    "Governance & Compliance Automation - Design and implement Policy as Code frameworks, automated governance controls, compliance validation mechanisms, and audit-ready cloud platforms aligned with enterprise security and regulatory requirements."
+],
+    image: "/portfolio/2.png",
+  },
+  {
+    index: "03",
     title: "Consultancy & Transformation Services",
     tagline: "Strategy, modernization and operating-model transformation",
     creating: "Strategic consulting that optimizes technology investment, strengthens governance and accelerates business outcomes.",
@@ -47,89 +64,55 @@ export const DEFAULT_SERVICES: Service[] = [
   "Technology Due Diligence: Assess technology landscapes for mergers, acquisitions, and investment decisions.",
   "Platform Engineering Transformation: Design and implement self-service developer platforms."
 ],
-    image: "/portfolio/2.png",
-  },
-  {
-    index: "03",
-    title: "DevOps, Automation & Operations",
-    tagline: "Standardize, secure and accelerate cloud delivery through DevOps and Infrastructure as Code",
-    creating: "Enable automated, governed and scalable cloud platforms through modern DevOps practices, Infrastructure as Code and platform engineering.",
-    capabilities: [
-    "Cloud Foundation Automation : Automate deployment and lifecycle management of Azure Landing Zones, AWS Control Tower and GCP using Infrastructure as Code.",
-    "Infrastructure as Code (IaC) : Implement Terraform, Azure Bicep, CloudFormation and cloud-native IaC frameworks using reusable, standardized and version-controlled templates.",
-    "CI/CD Platform Engineering : Build enterprise-grade Azure DevOps, GitHub Actions, GitLab and AWS CodePipeline and Google Cloud Build pipelines for continuous integration and delivery.",
-    "DevSecOps Enablement : Embed security scanning, secrets management and infrastructure security controls into Infrastructure as Code and deployment pipelines.",
-    "Platform Engineering Automation : Implement self-service platforms, standardized delivery frameworks and reusable engineering patterns.",
-    "Build & Release Automation : Automate infrastructure provisioning, configuration updates, environment promotion and deployment orchestration across cloud platforms.",
-    "IaC Validation & Testing Framework : Implement automated validation, security, compliance and deployment testing for Infrastructure as Code templates and cloud platforms.",
-    "Cloud Operations Automation : Automate provisioning, patching, backup, monitoring, remediation and operational activities across cloud environments.",
-    "AIOps & Incident Automation : Leverage intelligent monitoring, alert correlation and automated remediation to improve platform reliability and operational efficiency.",
-    "Compliance Automation : Enforce governance standards through Policy as Code, continuous compliance monitoring and automated audit readiness."
-],
     image: "/portfolio/3.png",
   },
   {
     index: "04",
     title: "Cloud-Native Observability Solutions",
     tagline: "• Azure Monitor • Amazon CloudWatch • Google Cloud Monitoring",
-    creating: "Cloud-native observability design and deployment using Infrastructure as Code with Terraform.",
+    creating: "Design and implementation of cloud-native observability architectures using Infrastructure as Code (Terraform), enabling end-to-end visibility, resilience, reliability, and data-driven operations across cloud, hybrid, and enterprise environments.",
     capabilities:  [
-  "IaaS Monitoring: Monitor VM performance, infrastructure services, and Virtual Machine Scale Sets.",
-  "PaaS Monitoring: Track databases, storage, snapshots, applications, and platform resources.",
-  "Azure Local Monitoring: Monitor Resource Bridge, Azure Local virtual machines, and clusters.",
-  "Enterprise Application Monitoring: Monitor Active Directory, DNS, DHCP, MABS, SQL Server, SAP, and Windows clusters.",
-  "Azure Virtual Desktop Monitoring: Monitor AVD session hosts, user experience, and platform health.",
-  "Entra ID Monitoring: Monitor enterprise applications, app registrations, service principals, certificates, and secrets.",
-  "Alert Management: Configure threshold tuning, alert auto-resolution, and ITSM integrations.",
-  "Operational Visibility: Deliver dashboards, SLA reporting, and proactive alerting."
+    "Infrastructure Observability - Design monitoring architectures for virtual machines, infrastructure services, and VM Scale Sets.",
+    "Platform Observability - Design observability frameworks for databases, storage platforms, snapshots, application services, and cloud-native resources.",
+    "Hybrid & Edge Observability - Implement observability architectures for Azure Local, Resource Bridge, and hybrid infrastructure environments.",
+    "Enterprise Application Observability - Design monitoring and telemetry strategies for Active Directory, DNS, DHCP, MABS, SQL Server, SAP, and Windows clusters.",
+    "Digital Workspace Observability - Design observability solutions for Azure Virtual Desktop environments and end-user experience monitoring.",
+    "Identity & Access Observability - Design and implement identity observability frameworks for Entra ID enterprise applications, application registrations, certificates, and service principals.",
+    "Observability Engineering - Design alerting frameworks, telemetry standards, dashboard architectures, and event correlation models aligned with enterprise operating requirements.",
+    "Platform Integration - Design and implement integrations between observability, ITSM, and automation platforms to enhance visibility, governance, and service reliability.",
+    "Service Reliability Analytics - Design executive dashboards, service health metrics, and reliability reporting frameworks that support data-driven operational decision-making."
 ],
     image: "/portfolio/4.png",
   },
   {
     index: "05",
-    title: "Vulnerability Management for IaaS Platforms",
-    tagline: "Cloud-native patch management and audit readiness",
-    creating: "Azure Update Manager, AWS Systems Manager Patch Manager and Google Cloud OS Patch Management.",
-    capabilities: [
-  "Dynamic Patch Targeting: Use resource tags and policy-based targeting to define patch scope.",
-  "Environment-Based Scheduling: Configure patch schedules aligned with Development, Test, UAT, and Production environments.",
-  "Patch Compliance Strategy: Maintain N and N-1 patch compliance across infrastructure workloads.",
-  "Automated Patch Deployment: Execute automated patch deployment, validation, and post-update verification.",
-  "Compliance Reporting: Deliver comprehensive compliance reporting and audit-readiness support."
-
-
-    ],
-    image: "/portfolio/5.png",
-  },
-  {
-    index: "06",
-    title: "Middleware Capabilities",
-    tagline: " • Web delivery • Application runtime • Enterprise integration",
-    creating: "Architecture, deployment and management across IaaS, PaaS and hybrid services, including VMs, App Services, AKS, EKS and GKE.",
+    title: "Middleware, Integration & Application Modernization Services",
+    tagline: " • Integration Architecture • Application modernization • Enterprise connectivity",
+    creating: "Design, modernization, and implementation of enterprise middleware, application runtime, and integration platforms across cloud, hybrid, and on-premises environments, enabling application modernization, seamless data exchange, and business process transformation.",
     capabilities: [
     ],
     capabilityGroups: [
       {
-        title: "Web Servers",
+        title: "Web & Application Platform Architecture",
         items: [
-    "Front-end entry for client requests and HTTP/HTTPS delivery",
-    "Load balancing, SSL/TLS termination and reverse proxy",
-    "Availability, performance and security improvements",
-    "Apache HTTP Server, NGINX, IIS, IBM HTTP Server and Oracle HTTP Server"
+    "Design and modernize web and application platform architectures for cloud, hybrid, and containerized environments.",
+    "Architect application delivery, traffic management, reverse proxy, and security frameworks.",
+    "Design scalable, resilient, and highly available application hosting platforms.",
+    "Reference Technologies: Apache HTTP Server, NGINX, IIS, IBM HTTP Server, Tomcat, JBoss EAP, WildFly, WebLogic, and WebSphere."
 ],
       },
       {
-        title: "Application Servers",
+        title: "Application Modernization",
         items: [
-    "Enterprise application and API hosting",
-    "Java, .NET and business-application runtimes",
-    "Lifecycle, session management and clustering",
-    "Scalability, high availability and workload distribution",
-    "Tomcat, JBoss EAP, WildFly, WebLogic and WebSphere"
+    "Assess Java, .NET, and enterprise application runtime environments.",
+    "Define target-state architectures and modernization roadmaps.",
+    "Modernise workloads across virtual machines, managed application services and containers.",
+    "Enable scalability, resilience, portability, and platform engineering automation.",
+    "Reference Platforms: Azure App Service, AKS, Amazon EKS and Google Kubernetes Engine."
 ],
       },
       {
-        title: "EAI, ETL & MFT",
+        title: "Enterprise Integration, Data Transformation & Automation",
         items: [
     "Application and system integration across hybrid estates",
     "Data transformation, ETL and batch workflow automation",
@@ -140,65 +123,110 @@ export const DEFAULT_SERVICES: Service[] = [
       },
     ],
 
-    image: "/portfolio/6.png",
+    image: "/portfolio/5.png",
   },
   {
-    index: "07",
-    title: "Database Capabilities",
-    tagline: " • SQL Server • MySQL • PostgreSQL • Oracle Database",
-    creating: "Multi-cloud database architecture, migration, implementation and managed services across Azure, AWS, GCP and hybrid environments.",
+    index: "06",
+    title: "Database Transformation & Architecture Services",
+    tagline: " • Database Modernization • Data Platform Architecture • Cloud Database Transformation",
+    creating: "Design, modernization, and transformation of enterprise database platforms across Microsoft SQL Server, Azure SQL Database, Azure SQL Managed Instance, MySQL, PostgreSQL, Maria DB, Oracle Database, Amazon RDS, and hybrid cloud environments, enabling scalable, secure, and resilient data platforms.",
     capabilities: [
-    "Provisioning, connectivity and high availability",
-    "Operational dashboards, SLA tracking and compliance reporting",
-    "Performance monitoring, health assessment and incident support",
-    "Database upgrades, patch deployment and security remediation",
-    "Consolidation, migration and platform modernization",
-    "Query tuning, resource optimization and cloud cost management",
-    "Access control, encryption, compliance and vulnerability remediation"
+    "Database Strategy & Advisory - Define database strategies, target-state architectures, and transformation roadmaps aligned with business and technology objectives.",
+    "Database Modernization - Assess and modernize SQL Server, Oracle, MySQL, and legacy database estates through cloud adoption and platform transformation initiatives.",
+    "Database Architecture & Platform Design - Design scalable, resilient, and highly available database architectures across cloud, hybrid, and multi-cloud environments.",
+    "Database Migration & Consolidation - Design and execute database migration, consolidation, and modernization programs across on-premises and cloud platforms.",
+    "Cloud Database Transformation - Modernize database workloads using Azure SQL Database, Azure SQL Managed Instance, Amazon RDS, and cloud-native database services.",
+    "High Availability & Disaster Recovery Architecture - Design database resilience, high availability, backup, and disaster recovery architectures aligned with business continuity objectives.",
+    "Database Performance & Optimization - Assess database performance, workload patterns, resource utilization, and optimization opportunities to improve scalability and efficiency.",
+    "Security & Compliance Architecture - Design database security architectures encompassing encryption, identity integration, privileged access controls, compliance, and governance frameworks.",
+    "Database Automation & Platform Engineering - Design automated database provisioning, deployment, patch governance, configuration management, and Infrastructure-as-Code frameworks.",
+    "Database Observability & Reliability Engineering - Design database observability, telemetry, monitoring, and reliability frameworks that support proactive performance management and operational resilience.",
+    "Database Cost Optimization - Assess database consumption, licensing, storage, and infrastructure utilization to optimize cloud and platform investment.",
+    "Database Technology Assessment & Rationalization - Assess SQL Server, Oracle, MySQL, Azure SQL, Azure SQL Managed Instance, and Amazon RDS estates to establish future-state architectures and platform rationalization strategies."
 ],
-    image: "/portfolio/7.png",
+    image: "/portfolio/6.png",
   },
 {
-    index: "08",
-    title: "Backup Capabilities",
-    tagline: " • Azure Backup • AWS Backup • Google Cloud Backup and DR",
-    creating: "Multi-cloud and third-party backup architecture, implementation and governance using Rubrik, Veeam and Commvault.",
+    index: "07",
+    title: "Backup, Recovery & Resilience Transformation Services",
+    tagline: " • Data Protection • Disaster Recovery",
+    creating: "Design, modernization, and transformation of enterprise backup, recovery, and cyber resilience capabilities across cloud, hybrid, and on-premises environments",
     capabilities: [
-    "Backup policies, retention schedules and recovery strategies",
-    "Reporting and automated success/failure alerting",
-    "Hybrid backup across on-premises and cloud environments",
-    "Third-party backup deployment, integration and management",
-    "Recovery validation, testing and compliance reporting"
+    "Data Protection Strategy & Advisory - Define enterprise backup, retention, archival, and recovery strategies aligned with business and regulatory requirements.",
+    "Backup Platform Modernization - Assess, rationalize, and modernize backup platforms across cloud, hybrid, and on-premises environments.",
+    "Disaster Recovery Architecture - Design recovery architectures, failover strategies, and resilience frameworks aligned with RTO and RPO objectives.",
+    "Cloud Backup Transformation - Design cloud-native data protection architectures across Azure, AWS, and Google Cloud environments.",
+    "Hybrid Data Protection - Design integrated backup and recovery architectures spanning on-premises, hybrid, and multi-cloud estates.",
+    "Recovery Readiness & Resilience - Establish recovery testing, validation, and resilience assessment frameworks to improve recovery confidence.",
+    "Backup Governance & Compliance - Define backup governance models, retention policies, compliance controls, and audit-ready frameworks.",
+    "Backup Automation & Platform Engineering - Design automated backup, recovery, and policy management frameworks using platform engineering principles.",
+    "Technology Assessment & Rationalization - Assess and optimize NetWorker, Commvault, Rubrik, Veeam, and other backup platforms to establish future-state architectures.",
+    "Business Continuity Integration - Align backup and recovery capabilities with enterprise business continuity and operational resilience strategies.",
+    "Backup Migration & Consolidation - Design and execute migrations, consolidations, and modernization initiatives across backup platforms.",
+    "Cost Optimization & Licensing Advisory - Assess backup consumption, licensing models, and infrastructure dependencies to optimize cost and efficiency.",
+    "Recovery Vault & Air-Gapped Architecture - Design secure recovery vaults, isolated recovery environments, and air-gapped data protection architectures."
 ],
-    image: "/portfolio/8.png",
+    image: "/portfolio/7.png",
 },
 {
-    index: "09",
-    title: "Azure Arc Capabilities",
-    tagline: "Unified hybrid and multi-cloud management",
-    creating: "Centralized management, security, compliance, monitoring and automation across on-premises, Azure, AWS, GCP and edge.",
+    index: "08",
+    title: "Azure Arc Architecture & Transformation Services",
+    tagline: "Hybrid and multi-cloud governance, automation, and platform modernization",
+    creating: "Design and implementation of Azure Arc-enabled architectures that unify governance, security, automation, observability, and compliance across on-premises, Azure, AWS, Google Cloud, and edge environments.",
     capabilities: [
-    "Central inventory, governance and lifecycle management",
-    "Windows and Linux server onboarding and administration",
-    "Kubernetes governance, monitoring, policy and GitOps for AKS, EKS, GKE, OpenShift and on-premises",
-    "Arc-enabled SQL inventory, licensing, assessment and security recommendations",
-    "Arc-enabled VMware vSphere discovery, governance and lifecycle operations",
-    "Azure Policy, compliance tracking, tagging and configuration enforcement",
-    "Microsoft Defender for Cloud posture, vulnerability and threat protection",
-    "Azure Monitor, Log Analytics and Managed Grafana observability",
-    "Update Manager, Change Tracking, DSC and automation runbooks",
-    "Central patch orchestration and compliance reporting"
+    "Hybrid & Multi-Cloud Architecture - Design Azure Arc architectures that provide a consistent operating model across cloud, on-premises, and edge platforms.",
+    "Governance & Operating Model Design - Establish governance frameworks, resource management standards, lifecycle policies, and enterprise operating models.",
+    "Kubernetes Platform Enablement - Design and implement governance, GitOps, policy management, and platform engineering frameworks for AKS, EKS, GKE, OpenShift, and on-premises Kubernetes environments.",
+    "SQL Platform Modernization - Assess and modernize SQL Server estates through Azure Arc-enabled inventory, dependency analysis, licensing optimization, security assessments, and migration planning.",
+    "VMware Modernization & Hybrid Enablement - Design Azure Arc-enabled architectures for VMware environments to support hybrid-cloud transformation, platform modernization, and operational consistency.",
+    "Governance & Policy Automation - Design and implement tagging, policy-as-code, compliance, and configuration governance frameworks aligned with enterprise requirements.",
+    "Security & Compliance Architecture - Design security posture management, vulnerability assessment, and cloud security governance frameworks using Microsoft Defender for Cloud.",
+    "Observability Architecture - Design and implement monitoring, telemetry, logging, and observability architectures using Azure Monitor, Log Analytics, and Managed Grafana.",
+    "Automation & Platform Engineering - Design automation frameworks leveraging GitOps, Desired State Configuration, change automation, and infrastructure lifecycle orchestration.",
+    "Operational Resilience & Compliance - Design patch governance, compliance validation, and platform resilience frameworks that support enterprise security and regulatory objectives."
 ],
-    image: "/portfolio/9.png",
+    image: "/portfolio/8.png",
 
 },
 ];
+
+const portfolioAtAGlance = [
+  {
+    title: "Cloud Infrastructure Architecture",
+    description: "Expertise in designing, modernizing, and automating secure multi-cloud platforms across Azure, AWS, Google Cloud, and OCI, encompassing landing zones, hybrid connectivity, capacity planning, AI platforms (Azure AI Foundry, Amazon Bedrock, Google Vertex AI), DevOps, Azure Virtual Desktop, and hybrid file services.",
+  },
+  {
+    title: "Consultancy & Transformation Services",
+    description: "Expertise in cloud strategies, target architectures, transformation roadmaps, modernized infrastructure, platform operating models, governance frameworks, technology due diligence for mergers and acquisitions, and self-service developer platforms.",
+  },
+  {
+    title: "Cloud-Native Observability Solutions",
+    description: "Expertise in designing and implementing cloud-native observability platforms through Infrastructure as Code using Terraform, enabling end-to-end visibility across infrastructure, databases, storage, application services, Azure Local resources, and enterprise applications. Capabilities include observability architecture, monitoring strategy, dashboard design, alerting frameworks, service reliability models, and ITSM integration across cloud and hybrid environments.",
+  },
+  {
+    title: "Middleware & Integration Services",
+    description: "Expertise in defining middleware strategies, designing integration architectures, and modernizing enterprise integration platforms across cloud, hybrid, and on-premises environments. Capabilities include API and integration architecture, application modernization, event-driven and microservices enablement, data transformation, ETL modernization, workflow automation, secure data exchange, and hybrid enterprise integration using technologies such as webMethods, TIBCO, IBM InfoSphere DataStage, and Serv-U SFTP.",
+  },
+  {
+    title: "Database Capabilities - Database Transformation & Architecture Services",
+    description: "Expertise in advising, designing, and transforming enterprise database platforms across SQL Server, MySQL, PostgreSQL, and Oracle Database environments. Services encompass database strategy, architecture assessments, cloud adoption planning, modernization and consolidation initiatives, performance and cost optimization, and governance framework design, and technology transformation roadmaps that enable scalable, resilient, and future-ready data platforms.",
+  },
+  {
+    title: "Backup, Recovery & Resilience Transformation Services",
+    description: "Expertise in advising, architecting, and modernizing enterprise data protection and recovery capabilities across cloud, hybrid, and third-party platforms. Services include data protection strategy, recovery architecture, disaster recovery planning, business continuity enablement, backup modernization, governance framework design, and resilience assessments to support secure and reliable technology transformation.",
+  },
+  {
+    title: "Azure Arc Architecture & Transformation Services",
+    description: "Expertise in advising, architecting, and implementing Azure Arc solutions to unify governance, automation, and operations across hybrid, multi-cloud, and edge environments. Services include platform assessments, target-state architecture design, governance framework implementation, GitOps and automation strategies, observability architecture, and modernization roadmaps that enable scalable and resilient enterprise platforms.",
+  },
+] as const;
+
+const portfolioAtAGlanceIntro = "Cloud and enterprise technology services are presented across architecture, transformation, observability, security, middleware, databases, backup, and hybrid-cloud management. The portfolio emphasizes governed, automated, secure, and highly available environments spanning Azure, AWS, Google Cloud Platform, Oracle Cloud Infrastructure, on-premises systems, and edge infrastructure.";
 
 export interface ServiceCatalogueProps {
   dark?: boolean;
   services?: Service[];
   heading?: string;
-  intro?: string;
   hideHeader?: boolean;
   hideFooter?: boolean;
   className?: string;
@@ -208,7 +236,6 @@ export default function ServiceCatalogue({
   dark = false,
   services = DEFAULT_SERVICES,
   heading = "CIS Professional Services - Portfolio",
-  intro = "Cloud and enterprise technology services are presented across architecture, transformation, observability, security, middleware, databases, backup, and hybrid-cloud management. The portfolio emphasizes governed, automated, secure, and highly available environments spanning Azure, AWS, Google Cloud Platform, Oracle Cloud Infrastructure, on-premises systems, and edge infrastructure.",
   hideHeader = false,
   hideFooter = false,
   className = "",
@@ -233,11 +260,48 @@ export default function ServiceCatalogue({
         </header>
       )}
 
-      <div className="px-8 md:px-16 py-10 grid border-b border-[var(--catalogue-border)] bg-[var(--catalogue-card)]">
-        <p style={{ textAlign: "justify", fontWeight: 400, fontSize: "clamp(0.95rem, 1.3vw, 1.1rem)", lineHeight: 1.75, color: "var(--catalogue-muted)" }}>
-          {intro}
-        </p>
-      </div>
+      <section
+        aria-labelledby="portfolio-at-a-glance-heading"
+        className="relative overflow-hidden border-b border-[var(--catalogue-border)] bg-[var(--catalogue-card)] px-4 py-12 md:px-8 md:py-16 lg:px-16 lg:py-20"
+      >
+        <div className="pointer-events-none absolute -right-32 -top-40 h-96 w-96 rounded-full bg-[var(--catalogue-primary-light)] opacity-60 blur-3xl" />
+        <div className="pointer-events-none absolute -left-32 bottom-0 h-72 w-72 rounded-full bg-[var(--catalogue-primary-light)] opacity-30 blur-3xl" />
+
+        <div className="relative mx-auto max-w-7xl">
+          <div className="max-w-5xl">
+            <h2
+              id="portfolio-at-a-glance-heading"
+              className="text-2xl font-bold tracking-[-0.03em] text-[var(--catalogue-ink)]"
+            >
+              <em className="font-semibold">Portfolio</em> at Glance
+            </h2>
+            <p className="mt-6 max-w-5xl text-base font-semibold leading-7 text-[var(--catalogue-body)] md:text-lg md:leading-8">
+              {portfolioAtAGlanceIntro}
+            </p>
+          </div>
+
+          <div className="mt-10 overflow-hidden rounded-2xl border border-[var(--catalogue-border)] bg-[var(--catalogue-border)] shadow-[0_24px_80px_-40px_rgba(15,23,42,0.45)]">
+            <div className="h-1.5 bg-[var(--catalogue-accent)]" />
+            <div className="grid gap-px bg-[var(--catalogue-border)] lg:grid-cols-2">
+              {portfolioAtAGlance.map((item, index) => (
+                <article
+                  key={item.title}
+                  className={`group relative bg-[var(--catalogue-card)] px-6 py-7 transition-colors duration-300 hover:bg-[var(--catalogue-panel)] md:px-8 md:py-9 ${index === portfolioAtAGlance.length - 1 ? "lg:col-span-2" : ""}`}
+                >
+                  <div className="absolute bottom-0 left-0 top-0 w-1 origin-y scale-y-0 bg-[var(--catalogue-accent)] transition-transform duration-300 group-hover:scale-y-100" />
+                  <h3 className="text-base font-bold leading-6 text-[var(--catalogue-ink)] md:text-lg">
+                    {item.title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-6 text-[var(--catalogue-body)] md:leading-7">
+                    {item.description}
+                  </p>
+                </article>
+              ))}
+            </div>
+            <div className="h-1.5 bg-[var(--catalogue-accent)]" />
+          </div>
+        </div>
+      </section>
 
       <div className="bg-[var(--catalogue-card)] mt-4 mx-4 md:mx-8 rounded-xl border border-[var(--catalogue-border)] overflow-hidden shadow-sm">
         <ul className="divide-y divide-[var(--catalogue-border)]">
@@ -337,7 +401,7 @@ function ServiceRow({
           <div className="px-6 md:px-10 py-8 grid md:grid-cols-5 gap-8 items-start">
 
             {/* Left — image */}
-            <div className={"md:col-span-2 " + (index % 2 !== 0 ? "md:order-2" : "md:order-1") + " overflow-hidden rounded-lg border border-[var(--catalogue-border)]"} style={{ aspectRatio: "3/4", background: "#E5E7EB" }}>
+            <div className="md:order-1 md:col-span-2 overflow-hidden rounded-lg border border-[var(--catalogue-border)]" style={{ aspectRatio: "3/4", background: "#E5E7EB" }}>
               <img
                 src={service.image}
                 alt={service.title}
@@ -351,7 +415,7 @@ function ServiceRow({
             </div>
 
             {/* Right — content */}
-            <div className={"md:col-span-3 " + (index % 2 !== 0 ? "md:order-1" : "md:order-2") + " flex flex-col gap-6"}>
+            <div className="md:order-2 md:col-span-3 flex flex-col gap-6">
 
               {/* Creating paragraph */}
               <div>
