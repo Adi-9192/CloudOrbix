@@ -33,9 +33,7 @@ export async function buildRfpWorkbook({
       : []),
     "Total Cost (INR)",
   ];
-  const worksheet = workbook.addWorksheet("RFP Estimate", {
-    views: [{ state: "frozen", xSplit: 4, ySplit: 17 }],
-  });
+  const worksheet = workbook.addWorksheet("RFP Estimate");
   const lastColumn = Math.max(columns.length, 6);
 
   worksheet.mergeCells(1, 1, 1, lastColumn);

@@ -56,5 +56,5 @@ test("exports an RFP workbook with explicit month labels and scope sections", as
   assert.equal(worksheet.getRow(18).getCell(6).value, 0.5);
   assert.equal(worksheet.getCell("B28").value, 19.67);
   assert.match(worksheet.getCell("B27").numFmt, /€/);
-  assert.equal(worksheet.views[0].ySplit, 17);
+  assert.equal(worksheet.views, null);
 });
