@@ -401,7 +401,7 @@ const formatRevenue = (value: number, currency: string) =>
     maximumFractionDigits: value >= 1_000_000 ? 1 : 0,
   }).format(value)
 
-export default function Clients({
+export default function Projects({
   dark,
 
   user,
@@ -1094,7 +1094,7 @@ export default function Clients({
       const body = await response.json()
 
       if (!response.ok) {
-        throw new Error(body.message || "Unable to create client.")
+        throw new Error(body.message || "Unable to create project.")
       }
 
       if (body.pending) {

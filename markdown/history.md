@@ -47,7 +47,7 @@
 ## 2026-10-07
 
 ### Status list update
-- Updated the project status options to the requested list in `src/components/Clients.tsx`:
+- Updated the project status options to the requested list in `src/components/Projects.tsx`:
   - `On-track`
   - `ON Hold`
   - `Delayed`

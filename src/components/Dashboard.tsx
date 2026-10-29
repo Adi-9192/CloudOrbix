@@ -226,7 +226,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
   ], [summary]); */
 
   const kpiCards = useMemo(() => [
-    { title: "Total Projects", value: String(summary.totalClients), subtitle: "Approved project records", accent: "#1E40AF", icon: Users, action: () => onNavigate("clients") },
+    { title: "Total Projects", value: String(summary.totalClients), subtitle: "Approved project records", accent: "#1E40AF", icon: Users, action: () => onNavigate("projects") },
     { title: "Active Projects", value: String(summary.activeProjects), subtitle: "Approved projects", accent: "#1E40AF", icon: FolderKanban },
     { title: "Delayed (External)", value: String(summary.delayedProjectsExternal), subtitle: "Externally delayed projects", accent: "#C2410C", icon: AlertTriangle },
     { title: "Delayed (Internal)", value: String(summary.delayedProjectsInternal), subtitle: "Internally delayed projects", accent: "#BE185D", icon: Clock },

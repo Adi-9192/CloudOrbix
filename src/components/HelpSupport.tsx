@@ -147,6 +147,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Projects navigation",
+    detail:
+      "Renamed the Projects page route so project navigation and global search use #projects. Older saved links continue to redirect to Projects.",
+  },
+  {
     title: "Document and spreadsheet downloads",
     detail:
       "Removed the Admin document library and spreadsheet downloads. Existing files in Azure storage were not deleted.",

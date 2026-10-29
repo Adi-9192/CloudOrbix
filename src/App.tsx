@@ -5,7 +5,7 @@ import LoadingScreen from "./components/LoadingScreen";
 import type { RfpProjectPrefill } from "./components/RfpEstimation";
 
 const Dashboard = lazy(() => import("./components/Dashboard"));
-const Clients = lazy(() => import("./components/Clients"));
+const Projects = lazy(() => import("./components/Projects"));
 const ExcelImport = lazy(() => import("./components/ExcelImport"));
 const Reports = lazy(() => import("./components/Reports"));
 const AuditLogs = lazy(() => import("./components/AuditLogs"));
@@ -32,7 +32,12 @@ type AuthUser = {
 
 const IDLE_LOGOUT_MS = 2 * 60 * 60 * 1000;
 const LAST_ACTIVITY_KEY = "clmp-last-activity";
-const LEGACY_PORTFOLIO_PAGE = "servicecatalogue";
+const legacyPages: Record<string, Page> = {
+  clients: "projects",
+  servicecatalogue: "portfolio",
+};
+
+const normalizePage = (page: string): string => legacyPages[page] || page;
 
 const getStoredUser = (): AuthUser | null => {
   try {
@@ -52,8 +57,8 @@ const hasViewerOnlyAccess = (authUser: AuthUser | null): boolean =>
 const getInitialPage = (): Page => {
   if (hasViewerOnlyAccess(getStoredUser())) return "portfolio";
   const rawHash = window.location.hash.replace(/^#/, "");
-  const hash = (rawHash === LEGACY_PORTFOLIO_PAGE ? "portfolio" : rawHash) as Page;
-  const validPages: Page[] = ["dashboard", "clients", "projectframework", "reports", "excel", "audit", "admin", "help", "project", "documents", "repository", "portfolio", "profile", "risks", "rfp"];
+  const hash = normalizePage(rawHash) as Page;
+  const validPages: Page[] = ["dashboard", "projects", "projectframework", "reports", "excel", "audit", "admin", "help", "project", "documents", "repository", "portfolio", "profile", "risks", "rfp"];
   return validPages.includes(hash) ? hash : "dashboard";
 };
 
@@ -70,8 +75,10 @@ export default function App() {
   const [rfpProjectSeed, setRfpProjectSeed] = useState<RfpProjectPrefill | null>(null);
 
   useEffect(() => {
-    if (window.location.hash === `#${LEGACY_PORTFOLIO_PAGE}`) {
-      window.history.replaceState({ page: "portfolio" }, "", "#portfolio");
+    const currentPage = window.location.hash.replace(/^#/, "");
+    const normalizedPage = normalizePage(currentPage);
+    if (normalizedPage !== currentPage) {
+      window.history.replaceState({ page: normalizedPage }, "", `#${normalizedPage}`);
     }
   }, []);
 
@@ -88,8 +95,7 @@ export default function App() {
     const onPopState = (event: PopStateEvent) => {
       const requestedPage =
         event.state?.page || window.location.hash.replace(/^#/, "");
-      const normalizedPage =
-        requestedPage === LEGACY_PORTFOLIO_PAGE ? "portfolio" : requestedPage;
+      const normalizedPage = normalizePage(requestedPage);
       const accessiblePage = hasViewerOnlyAccess(getStoredUser())
         ? "portfolio"
         : normalizedPage || "dashboard";
@@ -119,15 +125,15 @@ export default function App() {
 
   const openRfpProject = (seed: RfpProjectPrefill) => {
     setRfpProjectSeed(seed);
-    navigateTo("clients");
+    navigateTo("projects");
   };
 
   const handleGlobalSearch = (query: string) => {
     setGlobalSearch(query);
     if (hasViewerOnlyAccess(user)) return;
-    if (query && page !== "clients") {
-      setPage("clients");
-      window.history.replaceState({ page: "clients" }, "", "#clients");
+    if (query && page !== "projects") {
+      setPage("projects");
+      window.history.replaceState({ page: "projects" }, "", "#projects");
     }
   };
 
@@ -229,13 +235,13 @@ export default function App() {
   const renderPage = () => {
     switch (visiblePage) {
       case "dashboard":   return <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
-      case "clients":     return <Clients dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
-      case "project":     return projectId ? <ProjectPage dark={dark} clientId={projectId} user={user} onBack={() => navigateTo("clients")} onOpenDocuments={() => navigateTo("documents")} onEditProject={() => { setRequestedEditProjectId(projectId); navigateTo("clients"); }} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
-      case "documents":  return projectId ? <DocumentsPage dark={dark} clientId={projectId} readOnly={repositoryDocuments} onBack={() => navigateTo(repositoryDocuments ? "repository" : "project")} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
+      case "projects":   return <Projects dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
+      case "project":     return projectId ? <ProjectPage dark={dark} clientId={projectId} user={user} onBack={() => navigateTo("projects")} onOpenDocuments={() => navigateTo("documents")} onEditProject={() => { setRequestedEditProjectId(projectId); navigateTo("projects"); }} /> : <Projects dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
+      case "documents":  return projectId ? <DocumentsPage dark={dark} clientId={projectId} readOnly={repositoryDocuments} onBack={() => navigateTo(repositoryDocuments ? "repository" : "project")} /> : <Projects dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
       case "repository": return <ProjectRepository dark={dark} onOpenProject={(id) => openProject(id, "documents")} />;
       case "projectframework": return <ProjectFramework dark={dark} />;
       case "portfolio": return <Portfolio dark={dark} />;
-      case "excel":       return user.roles.includes("Admin") ? <ExcelImport dark={dark} /> : <Clients dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
+      case "excel":       return user.roles.includes("Admin") ? <ExcelImport dark={dark} /> : <Projects dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
       case "reports":     return <Reports dark={dark} />;
       case "audit":       return user.roles.includes("Admin") ? <AuditLogs dark={dark} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
       case "admin":       return user.roles.includes("Admin") ? <Admin dark={dark} user={user} onOpenProject={(id) => openProject(id)} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;

@@ -272,7 +272,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
     const token = localStorage.getItem("clmp-token");
     const response = await fetch(`/api/clients/${clientId}/${action}`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
     if (response.ok) setPendingClients(current => current.filter(client => client.clientId !== clientId));
-    else showCloudOrbixAlert(`Unable to ${action} client approval.`, "error");
+    else showCloudOrbixAlert(`Unable to ${action} project approval.`, "error");
   };
 
   const reviewAccessRequest = async (requestId: number, decision: "approve" | "reject") => {

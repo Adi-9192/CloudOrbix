@@ -27,7 +27,7 @@ import { showCloudOrbixAlert, type CloudOrbixAlert } from "../alert";
 
 export type Page =
   | "dashboard"
-  | "clients"
+  | "projects"
   | "projectframework"
   | "reports"
   | "excel"
@@ -54,7 +54,7 @@ const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
 ];
 const projectManagementItems: { id: Page; label: string }[] = [
   { id: "projectframework", label: "Project Framework" },
-  { id: "clients", label: "Projects" },
+  { id: "projects", label: "Projects" },
   { id: "repository", label: "Project Repository" },
   { id: "excel", label: "Excel Import" },
 ];
