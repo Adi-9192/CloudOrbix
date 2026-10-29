@@ -26,7 +26,7 @@ type ProjectPageProps = {
   onBack: () => void;
   onOpenDocuments: () => void;
   onEditProject: () => void;
-  user: { firstName: string; lastName: string; email: string };
+  user: { firstName: string; lastName: string; email: string; roles: string[] };
 };
 
 type Task = {
@@ -221,6 +221,9 @@ export default function ProjectPage({
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
 
   const [message, setMessage] = useState("");
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [accessRequestSent, setAccessRequestSent] = useState(false);
+  const [sendingAccessRequest, setSendingAccessRequest] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     message: string;
     onConfirm: () => void;
@@ -344,9 +347,16 @@ export default function ProjectPage({
 
     const body = await response.json();
 
+    if (response.status === 403) {
+      setAccessDenied(true);
+      setMessage(body.message || "Project access denied.");
+      return;
+    }
+
     if (!response.ok)
       throw new Error(body.message || "Unable to load project.");
 
+    setAccessDenied(false);
     setProject(body.project);
 
     setTasks(body.tasks || []);
@@ -371,11 +381,42 @@ export default function ProjectPage({
   };
 
   useEffect(() => {
+    setProject(null);
+    setAccessDenied(false);
+    setAccessRequestSent(false);
+    setMessage("");
     void load().catch((error) => {
       setMessage(error.message);
       showCloudOrbixAlert(error.message, "error");
     });
   }, [clientId]);
+
+  const requestProjectAccess = async () => {
+    setSendingAccessRequest(true);
+    try {
+      const response = await fetch(`/api/clients/${clientId}/access-request`, {
+        method: "POST",
+        headers,
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.message || "Unable to request project access.");
+      }
+
+      setAccessRequestSent(true);
+      showCloudOrbixAlert(
+        "Your access request was sent to all administrators.",
+        "success",
+      );
+    } catch (error) {
+      showCloudOrbixAlert(
+        error instanceof Error ? error.message : "Unable to request project access.",
+        "error",
+      );
+    } finally {
+      setSendingAccessRequest(false);
+    }
+  };
 
   const saveTask = async () => {
     setMessage("");
@@ -743,6 +784,37 @@ export default function ProjectPage({
       />
     </label>
   );
+
+  if (!project && accessDenied)
+    return (
+      <div className="p-6" style={{ color: text }}>
+        <div
+          className="max-w-2xl rounded-xl border p-6"
+          style={{ background: bg, borderColor: border }}
+        >
+          <p className="text-sm" style={{ color: muted }}>
+            {message === "Project access denied."
+              ? "Project access denied. Only the assigned project manager or an administrator can access this project."
+              : message || "Project access denied."}
+          </p>
+          {user.roles.includes("Manager") && (
+            <button
+              type="button"
+              onClick={() => void requestProjectAccess()}
+              disabled={sendingAccessRequest || accessRequestSent}
+              className="mt-5 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ background: "#1E40AF" }}
+            >
+              {accessRequestSent
+                ? "Access request sent"
+                : sendingAccessRequest
+                  ? "Sending request..."
+                  : "Request access"}
+            </button>
+          )}
+        </div>
+      </div>
+    );
 
   if (!project)
     return (

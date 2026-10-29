@@ -106,37 +106,37 @@ body {
 }
 
 
-.service-catalogue {
-  --catalogue-bg: var(--color-bg);
-  --catalogue-card: var(--color-card);
-  --catalogue-panel: var(--color-subtle);
-  --catalogue-border: var(--color-border);
-  --catalogue-ink: #0F172A;
-  --catalogue-primary: var(--color-primary);
-  --catalogue-accent: var(--color-accent);
-  --catalogue-muted: var(--color-muted);
-  --catalogue-faint: #CBD5E1;
-  --catalogue-body: #475569;
-  --catalogue-detail: #334155;
-  --catalogue-primary-light: var(--color-primary-light);
-  --catalogue-warning: var(--color-warning);
-  --catalogue-warning-bg: #FFFBEB;
+.portfolio-page {
+  --portfolio-bg: var(--color-bg);
+  --portfolio-card: var(--color-card);
+  --portfolio-panel: var(--color-subtle);
+  --portfolio-border: var(--color-border);
+  --portfolio-ink: #0F172A;
+  --portfolio-primary: var(--color-primary);
+  --portfolio-accent: var(--color-accent);
+  --portfolio-muted: var(--color-muted);
+  --portfolio-faint: #CBD5E1;
+  --portfolio-body: #475569;
+  --portfolio-detail: #334155;
+  --portfolio-primary-light: var(--color-primary-light);
+  --portfolio-warning: var(--color-warning);
+  --portfolio-warning-bg: #FFFBEB;
 }
 
-:is(.dark, [data-theme='dark']) .service-catalogue,
-.service-catalogue:is(.dark, [data-theme='dark']) {
-  --catalogue-bg: #0B1220;
-  --catalogue-card: #111C2E;
-  --catalogue-panel: #18263B;
-  --catalogue-border: #334155;
-  --catalogue-ink: #F1F5F9;
-  --catalogue-primary: #93C5FD;
-  --catalogue-accent: #60A5FA;
-  --catalogue-muted: #94A3B8;
-  --catalogue-faint: #64748B;
-  --catalogue-body: #CBD5E1;
-  --catalogue-detail: #E2E8F0;
-  --catalogue-primary-light: #1E3A5F;
-  --catalogue-warning: #FBBF24;
-  --catalogue-warning-bg: #292717;
+:is(.dark, [data-theme='dark']) .portfolio-page,
+.portfolio-page:is(.dark, [data-theme='dark']) {
+  --portfolio-bg: #0B1220;
+  --portfolio-card: #111C2E;
+  --portfolio-panel: #18263B;
+  --portfolio-border: #334155;
+  --portfolio-ink: #F1F5F9;
+  --portfolio-primary: #93C5FD;
+  --portfolio-accent: #60A5FA;
+  --portfolio-muted: #94A3B8;
+  --portfolio-faint: #64748B;
+  --portfolio-body: #CBD5E1;
+  --portfolio-detail: #E2E8F0;
+  --portfolio-primary-light: #1E3A5F;
+  --portfolio-warning: #FBBF24;
+  --portfolio-warning-bg: #292717;
 }
