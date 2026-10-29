@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 export interface Service {
   index: string;
@@ -241,6 +241,26 @@ export default function ServiceCatalogue({
   className = "",
 }: ServiceCatalogueProps) {
   const [active, setActive] = useState<number | null>(null);
+  const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (selectedPortfolioItem === null) return;
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedPortfolioItem(null);
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+      previouslyFocused?.focus();
+    };
+  }, [selectedPortfolioItem]);
 
   return (
     <div data-theme={dark ? "dark" : undefined} className={`service-catalogue min-h-screen w-full bg-[var(--catalogue-bg)] text-[var(--catalogue-ink)] ${className}`} style={{ fontFamily: "var(--font-sans, 'Inter', system-ui, sans-serif)" }}>
@@ -262,46 +282,99 @@ export default function ServiceCatalogue({
 
       <section
         aria-labelledby="portfolio-at-a-glance-heading"
-        className="relative overflow-hidden border-b border-[var(--catalogue-border)] bg-[var(--catalogue-card)] px-4 py-12 md:px-8 md:py-16 lg:px-16 lg:py-20"
+        className="relative overflow-hidden border-b border-[var(--catalogue-border)] bg-[var(--catalogue-card)] px-4 py-9 md:px-8 md:py-12 lg:px-16 lg:py-14"
       >
         <div className="pointer-events-none absolute -right-32 -top-40 h-96 w-96 rounded-full bg-[var(--catalogue-primary-light)] opacity-60 blur-3xl" />
         <div className="pointer-events-none absolute -left-32 bottom-0 h-72 w-72 rounded-full bg-[var(--catalogue-primary-light)] opacity-30 blur-3xl" />
 
         <div className="relative mx-auto max-w-7xl">
-          <div className="max-w-5xl">
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(14rem,0.7fr)_minmax(0,1.8fr)] lg:gap-12">
             <h2
               id="portfolio-at-a-glance-heading"
-              className="text-2xl font-bold tracking-[-0.03em] text-[var(--catalogue-ink)]"
+              className="text-2xl font-bold tracking-[-0.03em] text-[var(--catalogue-ink)] md:text-3xl"
             >
               <em className="font-semibold">Portfolio</em> at Glance
             </h2>
-            <p className="mt-6 max-w-5xl text-base font-semibold leading-7 text-[var(--catalogue-body)] md:text-lg md:leading-8">
+            <p className="max-w-4xl text-sm font-medium leading-6 text-[var(--catalogue-body)] md:text-base md:leading-7">
               {portfolioAtAGlanceIntro}
             </p>
           </div>
 
-          <div className="mt-10 overflow-hidden rounded-2xl border border-[var(--catalogue-border)] bg-[var(--catalogue-border)] shadow-[0_24px_80px_-40px_rgba(15,23,42,0.45)]">
-            <div className="h-1.5 bg-[var(--catalogue-accent)]" />
-            <div className="grid gap-px bg-[var(--catalogue-border)] lg:grid-cols-2">
+          <div className="mt-7 overflow-hidden rounded-2xl border border-[var(--catalogue-border)] bg-[var(--catalogue-border)] shadow-lg">
+            <div className="h-1 bg-[var(--catalogue-accent)]" />
+            <div className="grid gap-px bg-[var(--catalogue-border)] md:grid-cols-2 lg:grid-cols-3">
               {portfolioAtAGlance.map((item, index) => (
                 <article
                   key={item.title}
-                  className={`group relative bg-[var(--catalogue-card)] px-6 py-7 transition-colors duration-300 hover:bg-[var(--catalogue-panel)] md:px-8 md:py-9 ${index === portfolioAtAGlance.length - 1 ? "lg:col-span-2" : ""}`}
+                  className={`group relative bg-[var(--catalogue-card)] transition-colors duration-300 hover:bg-[var(--catalogue-panel)] ${index === portfolioAtAGlance.length - 1 ? "md:col-span-2 lg:col-span-3" : ""}`}
                 >
-                  <div className="absolute bottom-0 left-0 top-0 w-1 origin-y scale-y-0 bg-[var(--catalogue-accent)] transition-transform duration-300 group-hover:scale-y-100" />
-                  <h3 className="text-base font-bold leading-6 text-[var(--catalogue-ink)] md:text-lg">
-                    {item.title}
+                  <div className="absolute bottom-0 left-0 top-0 w-1 origin-y scale-y-0 bg-[var(--catalogue-accent)] transition-transform duration-300 group-hover:scale-y-100 group-focus-within:scale-y-100" />
+                  <h3>
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      onClick={() => setSelectedPortfolioItem(index)}
+                      className="grid min-h-24 w-full cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 px-5 py-5 text-left text-sm font-bold leading-5 text-[var(--catalogue-ink)] outline-none transition-colors duration-300 hover:text-[var(--catalogue-primary)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--catalogue-accent)] md:px-6 md:text-base md:leading-6"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="h-2 w-2 rounded-full bg-[var(--catalogue-accent)] shadow-[0_0_0_5px_var(--catalogue-primary-light)]"
+                      />
+                      <span>{item.title}</span>
+                      <span
+                        aria-hidden="true"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--catalogue-border)] text-xl font-normal text-[var(--catalogue-muted)] transition-[transform,border-color,color] duration-300 group-hover:translate-x-0.5 group-hover:border-[var(--catalogue-accent)] group-hover:text-[var(--catalogue-primary)]"
+                      >
+                        ›
+                      </span>
+                    </button>
                   </h3>
-                  <p className="mt-3 text-sm leading-6 text-[var(--catalogue-body)] md:leading-7">
-                    {item.description}
-                  </p>
                 </article>
               ))}
             </div>
-            <div className="h-1.5 bg-[var(--catalogue-accent)]" />
           </div>
         </div>
       </section>
+
+      {selectedPortfolioItem !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedPortfolioItem(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="portfolio-dialog-title"
+            aria-describedby="portfolio-dialog-description"
+            className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--catalogue-border)] bg-[var(--catalogue-card)] p-6 shadow-2xl md:p-10"
+          >
+            <button
+              type="button"
+              autoFocus
+              aria-label="Close"
+              onClick={() => setSelectedPortfolioItem(null)}
+              className="absolute right-4 top-4 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-[var(--catalogue-border)] bg-[var(--catalogue-panel)] text-2xl leading-none text-[var(--catalogue-muted)] transition-colors hover:border-[var(--catalogue-accent)] hover:text-[var(--catalogue-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--catalogue-accent)]"
+            >
+              ×
+            </button>
+            <div className="h-1 w-14 rounded-full bg-[var(--catalogue-accent)]" />
+            <h2
+              id="portfolio-dialog-title"
+              className="mt-6 max-w-xl pr-10 text-2xl font-extrabold leading-tight tracking-tight text-[var(--catalogue-ink)] md:text-3xl"
+            >
+              {portfolioAtAGlance[selectedPortfolioItem].title}
+            </h2>
+            <p
+              id="portfolio-dialog-description"
+              className="mt-5 text-base leading-8 text-[var(--catalogue-body)]"
+            >
+              {portfolioAtAGlance[selectedPortfolioItem].description}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-[var(--catalogue-card)] mt-4 mx-4 md:mx-8 rounded-xl border border-[var(--catalogue-border)] overflow-hidden shadow-sm">
         <ul className="divide-y divide-[var(--catalogue-border)]">
@@ -339,6 +412,23 @@ function ServiceRow({
   isActive: boolean;
   onToggle: () => void;
 }) {
+  const definitionRef = useRef<HTMLDivElement>(null);
+  const [definitionHeight, setDefinitionHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const definition = definitionRef.current;
+    if (!isActive || !definition) return;
+
+    const updateHeight = () => {
+      setDefinitionHeight(definition.getBoundingClientRect().height);
+    };
+    updateHeight();
+
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(definition);
+    return () => observer.disconnect();
+  }, [isActive, service.creating]);
+
   return (
     <li>
       <button className="w-full text-left group cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--catalogue-accent)]" onClick={onToggle} aria-expanded={isActive} aria-controls={`service-panel-${service.index}`}>
@@ -398,26 +488,31 @@ function ServiceRow({
         inert={!isActive}
       >
         <div className="min-h-0 overflow-hidden border-t border-[var(--catalogue-border)] bg-[var(--catalogue-panel)]">
-          <div className="px-6 md:px-10 py-8 grid md:grid-cols-5 gap-8 items-start">
+          <div
+            className="grid items-start gap-6 px-6 py-8 md:grid-cols-[var(--definition-height)_minmax(0,1fr)] md:px-10"
+            style={{
+              "--definition-height": definitionHeight
+                ? `${definitionHeight}px`
+                : "10rem",
+            } as CSSProperties}
+          >
 
             {/* Left — image */}
-            <div className="md:order-1 md:col-span-2 overflow-hidden rounded-lg border border-[var(--catalogue-border)]" style={{ aspectRatio: "3/4", background: "#E5E7EB" }}>
-              <img
-                src={service.image}
-                alt={service.title}
-                onError={(event) => {
-                  const fallback = FALLBACK_IMAGES[index % FALLBACK_IMAGES.length];
-                  if (event.currentTarget.src !== fallback) event.currentTarget.src = fallback;
-                }}
-                className="w-full h-full object-cover"
-                style={{ transition: "transform 0.7s cubic-bezier(0.4,0,0.2,1)", transform: isActive ? "scale(1)" : "scale(1.06)" }}
-              />
+            <div className="aspect-video overflow-hidden rounded-lg border border-[var(--catalogue-border)] md:aspect-square md:h-[var(--definition-height)] md:w-[var(--definition-height)]" style={{ background: "#E5E7EB" }}>
+                <img
+                  src={service.image}
+                  alt={service.title}
+                  onError={(event) => {
+                    const fallback = FALLBACK_IMAGES[index % FALLBACK_IMAGES.length];
+                    if (event.currentTarget.src !== fallback) event.currentTarget.src = fallback;
+                  }}
+                  className="w-full h-full object-cover"
+                  style={{ transition: "transform 0.7s cubic-bezier(0.4,0,0.2,1)", transform: isActive ? "scale(1)" : "scale(1.06)" }}
+                />
             </div>
 
-            {/* Right — content */}
-            <div className="md:order-2 md:col-span-3 flex flex-col gap-6">
-
-              {/* Creating paragraph */}
+            {/* Definition */}
+            <div ref={definitionRef} className="min-w-0">
               <div>
                 <span className="mono" style={{ fontSize: "10px", letterSpacing: "0.16em", color: "var(--catalogue-accent)", textTransform: "uppercase", fontWeight: 500 }}>
                   Definition
@@ -426,12 +521,11 @@ function ServiceRow({
                   {service.creating}
                 </p>
               </div>
+            </div>
 
-              {/* Divider */}
-              {(service.capabilities.length > 0 || (service.capabilityGroups?.length ?? 0) > 0) && <div className="h-px bg-[var(--catalogue-border)]" />}
-
-              {/* Core Capabilities */}
-              {(service.capabilities.length > 0 || (service.capabilityGroups?.length ?? 0) > 0) && <div>
+            {/* Core Capabilities */}
+            {(service.capabilities.length > 0 || (service.capabilityGroups?.length ?? 0) > 0) && (
+              <div className="md:col-span-2 border-t border-[var(--catalogue-border)] pt-6">
                 <span className="mono" style={{ fontSize: "10px", letterSpacing: "0.16em", color: "var(--catalogue-muted)", textTransform: "uppercase", fontWeight: 500 }}>
                   Core Capabilities
                 </span>
@@ -468,9 +562,8 @@ function ServiceRow({
                     ))}
                   </ul>
                 )}
-              </div>}
-
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

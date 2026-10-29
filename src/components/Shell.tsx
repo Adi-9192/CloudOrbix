@@ -18,10 +18,10 @@ import {
   Shield,
   Menu,
   X,
-  BookOpen,
   FolderKanban,
   UserCircle2,
   Calculator,
+  Home,
 } from "lucide-react";
 import { showCloudOrbixAlert, type CloudOrbixAlert } from "../alert";
 
@@ -43,7 +43,7 @@ export type Page =
   | "rfp";
 
 const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "servicecatalogue", label: "Portfolio", icon: BookOpen },
+  { id: "servicecatalogue", label: "Home", icon: Home },
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   // { id: "reports", label: "Reports", icon: FileText },
 
@@ -581,7 +581,11 @@ export default function Shell({
         >
           <div className="flex-1 py-3 overflow-y-auto">
             {navItems
-              .filter(({ id }) => portfolioOnly ? id === "servicecatalogue" : id === "dashboard")
+              .filter(({ id }) =>
+                portfolioOnly
+                  ? id === "servicecatalogue"
+                  : id === "servicecatalogue" || id === "dashboard",
+              )
               .map(({ id, label, icon: Icon }) => {
                 const active = page === id;
                 return (
