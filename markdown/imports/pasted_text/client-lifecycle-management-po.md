@@ -148,12 +148,6 @@ Excel import dashboard should display:
 
 Create visual import result cards and charts.
 
-Provide downloadable Excel templates for:
-- New Client Import
-- Client Updates
-- Service Mapping
-- Revenue Reports
-
 Create reporting and export capabilities:
 - Export Client Data to Excel
 - Export Reports to PDF

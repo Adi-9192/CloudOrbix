@@ -61,7 +61,7 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
       title: "Administration and audit",
       steps: [
         "Admin → Users manages accounts, roles, active status, and password reset actions.",
-        "Use Roles and Permissions to review access, Approvals to process project and RFP requests, and Templates to manage available project templates.",
+        "Use Roles and Permissions to review access and Approvals to process project and RFP requests.",
         "Audit Logs provides a record of tracked system activity. Use the filters and search controls to narrow the results.",
       ],
     },
@@ -146,6 +146,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 };
 
 const releaseNotes = [
+  {
+    title: "Document and spreadsheet downloads",
+    detail:
+      "Removed the Admin document library and spreadsheet downloads. Existing files in Azure storage were not deleted.",
+  },
   {
     title: "Help Center improvements",
     detail:

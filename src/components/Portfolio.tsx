@@ -40,11 +40,11 @@ export const DEFAULT_SERVICES: Service[] = [
     creating: "Enable scalable, policy-aligned, and automated cloud platforms through modern DevOps practices, Infrastructure as Code (IaC), and platform engineering frameworks.",
     capabilities: [
     "Cloud Foundation Automation - Design and automate deployment of Azure Landing Zones, AWS Control Tower, and Google Cloud foundations using Infrastructure as Code.",
-    "Infrastructure as Code (IaC) - Implement Terraform, Azure Bicep, CloudFormation and cloud-native IaC frameworks using reusable, standardized and version-controlled templates.",
+    "Infrastructure as Code (IaC) - Implement Terraform, Azure Bicep, CloudFormation and cloud-native IaC frameworks using reusable modules and version-controlled configurations.",
     "CI/CD Platform Engineering - Design and implement enterprise-grade CI/CD platforms using Azure DevOps, GitHub Actions, GitLab, AWS CodePipeline, and Google Cloud Build.",
     "Platform Engineering Automation - Implement self-service platforms, standardized delivery frameworks and reusable engineering patterns.",
     "Build & Release Automation - Design and implement automated provisioning, environment promotion, deployment orchestration, and release management frameworks across multi-cloud environments.",
-    "IaC Validation & Testing Framework - Implement automated validation, security, compliance and deployment testing for Infrastructure as Code templates and cloud platforms.",
+    "IaC Validation & Testing Framework - Implement automated validation, security, compliance and deployment testing for Infrastructure as Code configurations and cloud platforms.",
     "Cloud Platform Automation - Design and implement automation frameworks for infrastructure provisioning, platform lifecycle management, operational resilience, and self-healing cloud capabilities across multi-cloud environments.",
     "AIOps & Observability Engineering - Design and implement AIOps and observability frameworks leveraging intelligent analytics, event correlation, automation, and predictive insights to enhance platform reliability and operational resilience.",
     "Governance & Compliance Automation - Design and implement Policy as Code frameworks, automated governance controls, compliance validation mechanisms, and audit-ready cloud platforms aligned with enterprise security and regulatory requirements."

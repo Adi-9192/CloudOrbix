@@ -65,33 +65,6 @@ const previewColumns: { key: keyof ImportPreviewRow; label: string }[] = [
   { key: "actualEnd", label: "Actual End Date" },
 ];
 
-const TEMPLATES = [
-  {
-    name: "New Project Import",
-    desc: "Template for importing new project records",
-    rows: "Includes all required fields",
-    icon: "👤",
-  },
-  {
-    name: "Project Updates",
-    desc: "Template for bulk updating existing records",
-    rows: "ID-based delta updates",
-    icon: "✏️",
-  },
-  {
-    name: "Service Mapping",
-    desc: "Map services to existing projects in bulk",
-    rows: "Project ID + service columns",
-    icon: "🔗",
-  },
-  {
-    name: "Revenue Reports",
-    desc: "Import monthly revenue figures per project",
-    rows: "Project ID + revenue + period",
-    icon: "💰",
-  },
-];
-
 export default function ExcelImport({ dark }: ExcelImportProps) {
   const [stage, setStage] = useState<"idle" | "preview" | "done">("idle");
   const [dragging, setDragging] = useState(false);
@@ -121,34 +94,6 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
   const text = dark ? "#E2E8F0" : "#0F172A";
   const muted = dark ? "#94A3B8" : "#64748B";
   const subtle = dark ? "#0F172A" : "#F8FAFC";
-
-  const downloadProjectTemplate = async () => {
-    try {
-      const response = await fetch("/api/excel/template", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("clmp-token")}`,
-        },
-      });
-      if (!response.ok) {
-        const payload = await response.json();
-        throw new Error(payload.message || "Unable to download the template.");
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "cloudorbix-project-template.xlsx";
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (downloadError) {
-      showCloudOrbixAlert(
-        downloadError instanceof Error
-          ? downloadError.message
-          : "Unable to download the template.",
-        "error",
-      );
-    }
-  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -328,7 +273,7 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
         <div>
           <h1 className="text-xl font-bold">Excel Import & Export</h1>
           <p className="text-xs mt-0.5" style={{ color: muted }}>
-            Bulk import project data · Download templates · Export reports
+            Bulk import project data · Export reports
           </p>
         </div>
         {stage !== "idle" && (
@@ -356,9 +301,9 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 gap-5">
         {/* Main Upload Panel */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className="space-y-5">
           {stage === "idle" && (
             <div
               className="rounded-xl border p-6"
@@ -828,116 +773,6 @@ export default function ExcelImport({ dark }: ExcelImportProps) {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Right sidebar: Templates */}
-        <div className="space-y-4">
-          <div
-            className="rounded-xl border p-5"
-            style={{ background: bg, borderColor: border }}
-          >
-            <h3 className="font-semibold text-sm mb-4" style={{ color: text }}>
-              Download Templates
-            </h3>
-            <div className="space-y-2">
-              {TEMPLATES.map((t) => (
-                <button
-                  key={t.name}
-                  onClick={
-                    t.name === "New Project Import"
-                      ? () => void downloadProjectTemplate()
-                      : undefined
-                  }
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border text-left hover:border-blue-300 transition-colors group"
-                  style={{ borderColor: border, background: subtle }}
-                >
-                  <span className="text-xl">{t.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div
-                      className="text-xs font-semibold"
-                      style={{ color: text }}
-                    >
-                      {t.name}
-                    </div>
-                    <div
-                      className="text-[10px] truncate"
-                      style={{ color: muted }}
-                    >
-                      {t.rows}
-                    </div>
-                  </div>
-                  <Download
-                    className="w-3.5 h-3.5 flex-shrink-0 group-hover:text-blue-600 transition-colors"
-                    style={{ color: muted }}
-                  />
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* <div
-            className="rounded-xl border p-5"
-            style={{ background: bg, borderColor: border }}
-          >
-            <h3 className="font-semibold text-sm mb-3" style={{ color: text }}>
-              Import History
-            </h3>
-            <div className="space-y-2.5">
-              {[
-                {
-                  name: "bulk_clients_aug.xlsx",
-                  date: "Aug 13",
-                  count: 14,
-                  status: "success",
-                },
-                {
-                  name: "updates_q3.xlsx",
-                  date: "Aug 5",
-                  count: 8,
-                  status: "success",
-                },
-                {
-                  name: "new_clients_jul.xlsx",
-                  date: "Jul 28",
-                  count: 11,
-                  status: "partial",
-                },
-                {
-                  name: "revenue_q2.xlsx",
-                  date: "Jul 1",
-                  count: 104,
-                  status: "success",
-                },
-              ].map((h) => (
-                <div
-                  key={h.name}
-                  className="flex items-center gap-2 p-2 rounded-lg"
-                  style={{ background: subtle }}
-                >
-                  <FileSpreadsheet
-                    className="w-4 h-4 flex-shrink-0"
-                    style={{ color: "#16A34A" }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div
-                      className="text-xs font-medium truncate"
-                      style={{ color: text }}
-                    >
-                      {h.name}
-                    </div>
-                    <div className="text-[10px]" style={{ color: muted }}>
-                      {h.date} · {h.count} records
-                    </div>
-                  </div>
-                  <span
-                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${h.status === "success" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}
-                  >
-                    {h.status === "success" ? "✓" : "~"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div> */}
         </div>
       </div>
     </div>

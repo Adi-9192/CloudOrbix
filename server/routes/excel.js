@@ -49,44 +49,6 @@ const required = [
   "ISOW",
 ]
 
-const templateColumns = [
-  "Project ID",
-
-  "Year",
-
-  "Customer Name",
-
-  "PM Name",
-
-  "Project Billing Code",
-
-  "Volumetric",
-
-  "Region",
-
-  "Current Status",
-
-  "Revenue",
-
-  "% Completion",
-
-  "Hyperscaler",
-
-  "Project Type",
-
-  "Brief about the Project",
-
-  "ISOW",
-
-  "Estimated Project Start date",
-
-  "Estimated Project End Date",
-
-  "Actual Project Start date",
-
-  "Actual Project End Date",
-]
-
 const clientIdFor = (record) =>
   String(value(record, "Project ID", "Client ID", "Customer ID")).trim()
 
@@ -118,38 +80,6 @@ const managerName = (record) =>
     value(record, "PM Name", "Manager", "Project Manager", "Account Manager") ||
       "Unassigned",
   ).trim()
-
-router.get(
-  "/template",
-
-  protectRoute,
-
-  requireRole("Admin", "Operations Team"),
-
-  async (req, res) => {
-    const workbook = new ExcelJS.Workbook()
-
-    const worksheet = workbook.addWorksheet("Projects")
-
-    worksheet.addRow(templateColumns)
-
-    const buffer = await workbook.xlsx.writeBuffer()
-
-    res.setHeader(
-      "Content-Type",
-
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-    res.setHeader(
-      "Content-Disposition",
-
-      'attachment; filename="cloudorbix-project-template.xlsx"',
-    )
-
-    return res.send(buffer)
-  },
-)
 
 router.post(
   "/upload",
