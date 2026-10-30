@@ -18,6 +18,11 @@ import {
 } from "lucide-react"
 
 import { showCloudOrbixAlert } from "../alert"
+import {
+  calculateRevenueRecovery,
+  isValidRevenueRecoveryPercentage,
+} from "../../shared/revenue-recovery.js"
+import { convertCurrencyAmount } from "../../shared/currency-conversion.js"
 
 import { createProjectIdAllocator } from "../../shared/project-id.js"
 import {
@@ -72,6 +77,7 @@ interface ApiClient {
   actualOffboardDate?: string | null
 
   revenue?: number | string | null
+  revenueRecoveryPercentage?: number | string | null
   currencyCode?: string | null
 
   services?: string[]
@@ -187,6 +193,7 @@ interface ClientRow {
   notes: string
 
   revenue: number
+  revenueRecoveryPercentage: number
   currencyCode: string
   projectOverview: string
   inScope: string
@@ -331,6 +338,8 @@ const EMPTY_FORM = {
 
   revenue: "",
 
+  revenueRecoveryPercentage: "0",
+
   currencyCode: "INR",
 
   projectOverview: "",
@@ -400,7 +409,12 @@ const formatRevenue = (value: number, currency: string) =>
     notation: value >= 1_000_000 ? "compact" : "standard",
     maximumFractionDigits: value >= 1_000_000 ? 1 : 0,
   }).format(value)
-
+const formatRevenueAmount = (value: number, currency: string) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: CURRENCIES.includes(currency) ? currency : "INR",
+    maximumFractionDigits: 2,
+  }).format(value)
 export default function Projects({
   dark,
 
@@ -442,6 +456,7 @@ export default function Projects({
   const [step, setStep] = useState(0)
 
   const [form, setForm] = useState(EMPTY_FORM)
+  const [isConvertingCurrency, setIsConvertingCurrency] = useState(false)
 
   const [confirmDialog, setConfirmDialog] = useState<{
     message: string
@@ -536,6 +551,8 @@ export default function Projects({
         notes: client.remarks || "",
 
         revenue: Number(client.revenue || 0),
+
+        revenueRecoveryPercentage: Number(client.revenueRecoveryPercentage || 0),
 
         currencyCode: client.currencyCode || "INR",
 
@@ -835,6 +852,8 @@ export default function Projects({
 
       revenue: String(client.revenue || ""),
 
+      revenueRecoveryPercentage: String(client.revenueRecoveryPercentage || 0),
+
       currencyCode: client.currencyCode || "INR",
 
       projectOverview: client.projectOverview || "",
@@ -945,6 +964,64 @@ export default function Projects({
     }
   }
 
+  const changeProjectCurrency = async (currencyCode: string) => {
+    const sourceCurrency = form.currencyCode
+    if (!editingClientId || sourceCurrency === currencyCode) {
+      setForm((current) => ({ ...current, currencyCode }))
+      return
+    }
+
+    setIsConvertingCurrency(true)
+    try {
+      const token = localStorage.getItem("clmp-token")
+      if (!token) {
+        throw new Error("Your session has expired. Please sign in again.")
+      }
+
+      const response = await fetch(
+        `/api/rfp/rates/currency/${form.year}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      const body = await response.json()
+      if (!response.ok) {
+        throw new Error(body.message || "Unable to load saved RFP currency rates.")
+      }
+
+      const rates = new Map<string, number>()
+      for (const rate of body.rates || []) {
+        rates.set(rate.currency, Number(rate.rateToInr))
+      }
+      const sourceRate = rates.get(sourceCurrency)
+      const targetRate = rates.get(currencyCode)
+      if (!sourceRate || !targetRate) {
+        throw new Error(
+          `A saved ${form.year} RFP exchange rate is required for ${!sourceRate ? sourceCurrency : currencyCode}.`,
+        )
+      }
+
+      const revenue = form.revenue.trim() ? Number(form.revenue) : 0
+      const convertedRevenue = convertCurrencyAmount(
+        revenue,
+        sourceRate,
+        targetRate,
+      )
+      setForm((current) => ({
+        ...current,
+        currencyCode,
+        revenue: convertedRevenue.toFixed(2),
+      }))
+    } catch (error) {
+      showCloudOrbixAlert(
+        error instanceof Error
+          ? error.message
+          : "Unable to convert project revenue using the saved RFP rates.",
+        "error",
+      )
+    } finally {
+      setIsConvertingCurrency(false)
+    }
+  }
+
   const submitClient = async () => {
     if (!form.name.trim()) {
       setStep(0)
@@ -980,6 +1057,13 @@ export default function Projects({
       return
     }
 
+    const revenueRecoveryPercentage = Number(form.revenueRecoveryPercentage)
+    if (!isValidRevenueRecoveryPercentage(revenueRecoveryPercentage)) {
+      setStep(0)
+      showCloudOrbixAlert("Revenue Recovery Percentage must be between 0 and 100.", "warning")
+      return
+    }
+
     const token = localStorage.getItem("clmp-token")
 
     if (!token) {
@@ -1000,6 +1084,8 @@ export default function Projects({
       industry: form.industry || "Technology",
 
       revenue: Number(form.revenue) || 0,
+
+      revenueRecoveryPercentage,
 
       currencyCode: form.currencyCode,
 
@@ -1157,6 +1243,12 @@ export default function Projects({
 
         revenue: Number(serverClient?.revenue || payload.revenue || 0),
 
+        revenueRecoveryPercentage: Number(
+          serverClient?.revenueRecoveryPercentage ??
+            payload.revenueRecoveryPercentage ??
+            0,
+        ),
+
         currencyCode: serverClient?.currencyCode || payload.currencyCode,
 
         projectOverview: serverClient?.projectOverview || payload.projectOverview || "",
@@ -1284,6 +1376,11 @@ export default function Projects({
         )}
       </span>
     </th>
+  )
+
+  const formRecoveryAmounts = calculateRevenueRecovery(
+    Number(form.revenue) || 0,
+    Number(form.revenueRecoveryPercentage) || 0,
   )
 
   return (
@@ -1465,6 +1562,13 @@ export default function Projects({
                 <Th col="region" label="Region" />
                 <Th col="status" label="Status" />
                 <Th col="revenue" label="Revenue" />
+                <Th col="revenueRecoveryPercentage" label="Revenue Recovery %" />
+                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: muted }}>
+                  Recovered Revenue
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: muted }}>
+                  Pending Revenue
+                </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-semibold"
                   style={{ color: muted }}
@@ -1529,6 +1633,10 @@ export default function Projects({
             </thead>
             <tbody>
               {paged.map((c) => {
+                const recoveryAmounts = calculateRevenueRecovery(
+                  c.revenue,
+                  c.revenueRecoveryPercentage,
+                )
                 const sc = STATUS_COLORS[normalizeProjectStatus(c.status)] || {
                   bg: dark ? "#334155" : "#F1F5F9",
                   text: dark ? "#E2E8F0" : "#475569",
@@ -1624,6 +1732,15 @@ export default function Projects({
                       {c.revenue > 0
                         ? formatRevenue(c.revenue, c.currencyCode)
                         : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-xs" style={{ color: text }}>
+                      {c.revenueRecoveryPercentage}%
+                    </td>
+                    <td className="px-4 py-3 text-xs font-semibold" style={{ color: text }}>
+                      {formatRevenueAmount(recoveryAmounts.recoveredRevenue, c.currencyCode)}
+                    </td>
+                    <td className="px-4 py-3 text-xs font-semibold" style={{ color: text }}>
+                      {formatRevenueAmount(recoveryAmounts.pendingRevenue, c.currencyCode)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="relative w-10 h-10 mx-auto">
@@ -1884,6 +2001,38 @@ export default function Projects({
                       key: "revenue",
 
                       placeholder: "e.g. 1200000",
+
+                      type: "number",
+                    },
+
+                    {
+                      label: "Revenue Recovery Percentage (%)",
+
+                      key: "revenueRecoveryPercentage",
+
+                      placeholder: "0-100",
+
+                      type: "number",
+                    },
+
+                    {
+                      label: "Recovered Revenue",
+
+                      key: "recoveredRevenue",
+
+                      placeholder: "",
+
+                      readOnly: true,
+                    },
+
+                    {
+                      label: "Pending Revenue",
+
+                      key: "pendingRevenue",
+
+                      placeholder: "",
+
+                      readOnly: true,
                     },
 
                     {
@@ -2040,13 +2189,17 @@ export default function Projects({
                           <select
                             value={(form as any)[f.key]}
                             required={f.required}
-                            onChange={(e) =>
-                              setForm((fm) => ({
-                                ...fm,
-
-                                [f.key]: e.target.value,
-                              }))
-                            }
+                            disabled={f.key === "currencyCode" && isConvertingCurrency}
+                            onChange={(e) => {
+                              if (f.key === "currencyCode") {
+                                void changeProjectCurrency(e.target.value)
+                              } else {
+                                setForm((fm) => ({
+                                  ...fm,
+                                  [f.key]: e.target.value,
+                                }))
+                              }
+                            }}
                             className="w-full px-3 py-2 rounded-lg border text-xs outline-none"
                             style={{
                               background: inputBg,
@@ -2098,10 +2251,19 @@ export default function Projects({
                       ) : (
                         <input
                           type={f.type === "number" ? "number" : "text"}
-                          min={f.key === "voumetric" ? 0 : undefined}
+                          disabled={f.key === "revenue" && isConvertingCurrency}
+                          min={f.key === "voumetric" || f.key === "revenueRecoveryPercentage" ? 0 : undefined}
+                          max={f.key === "revenueRecoveryPercentage" ? 100 : undefined}
+                          step={f.key === "revenueRecoveryPercentage" ? "0.01" : undefined}
                           readOnly={f.readOnly}
                           required={f.required}
-                          value={(form as any)[f.key]}
+                          value={
+                            f.key === "recoveredRevenue"
+                              ? formatRevenueAmount(formRecoveryAmounts.recoveredRevenue, form.currencyCode)
+                              : f.key === "pendingRevenue"
+                                ? formatRevenueAmount(formRecoveryAmounts.pendingRevenue, form.currencyCode)
+                                : (form as any)[f.key] ?? ""
+                          }
                           onChange={(e) =>
                             setForm((fm) => ({
                               ...fm,

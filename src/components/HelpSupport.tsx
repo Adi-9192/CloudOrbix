@@ -169,7 +169,7 @@ const releaseNotes = [
   {
     title: "Portfolio experience",
     detail:
-      "Expanded the Portfolio page with a full-width overview, reduced the main title size, and reordered service cards and detail popups consistently.",
+      "Expanded the Portfolio page with a full-width overview, reduced the title sizes, reordered service cards and detail popups, and removed service card taglines.",
   },
   {
     title: "Dashboard updates",
@@ -184,7 +184,7 @@ const releaseNotes = [
   {
     title: "Project and profile workflows",
     detail:
-      "Improved project access and approval flows, project navigation from profiles, and project administration tools.",
+      "Improved project access and approval flows, added revenue recovery percentage tracking with calculated recovered and pending amounts, and enhanced project navigation and administration.",
   },
 ];
 

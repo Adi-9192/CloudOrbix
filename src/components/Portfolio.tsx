@@ -476,24 +476,10 @@ function ServiceRow({
 
           <h2
             className="flex-1 transition-colors duration-300 group-hover:text-[var(--portfolio-primary)]"
-            style={{ fontSize: "clamp(1.3rem, 2.5vw, 2rem)", fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.1, color: isActive ? "var(--portfolio-primary)" : "var(--portfolio-ink)" }}
+            style={{ fontSize: "clamp(0.975rem, 1.875vw, 1.5rem)", fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.1, color: isActive ? "var(--portfolio-primary)" : "var(--portfolio-ink)" }}
           >
             {service.title}
           </h2>
-
-          {service.tagline.includes("•") ? (
-            <span className="hidden max-w-sm flex-wrap justify-end gap-1.5 text-right font-normal transition-colors duration-300 lg:flex" style={{ fontSize: "0.82rem", color: isActive ? "var(--portfolio-muted)" : "var(--portfolio-faint)" }}>
-              {service.tagline.split("•").map((tag) => tag.trim()).filter(Boolean).map((tag) => (
-                <span key={tag} className="rounded-md border border-current/30 bg-[var(--portfolio-panel)] px-2 py-1">
-                  {tag}
-                </span>
-              ))}
-            </span>
-          ) : (
-            <span className="hidden lg:block shrink-0" style={{ fontSize: "0.82rem", color: isActive ? "var(--portfolio-muted)" : "var(--portfolio-faint)", maxWidth: "200px", textAlign: "right", transition: "color 0.3s", fontWeight: 400 }}>
-              {service.tagline}
-            </span>
-          )}
 
           <span
             className="ml-2 shrink-0 flex items-center justify-center"
