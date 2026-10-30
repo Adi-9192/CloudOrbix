@@ -19,6 +19,7 @@ import {
   normalizeProjectStatus,
   PROJECT_STATUSES,
 } from "../../shared/project-status.js";
+import { calculateRevenueRecovery } from "../../shared/revenue-recovery.js";
 
 type ProjectPageProps = {
   dark: boolean;
@@ -59,6 +60,7 @@ type Project = {
   project_billing_code?: string | null;
   year?: number | null;
   revenue?: number | string | null;
+  revenue_recovery_percentage?: number | string | null;
   currency_code?: string | null;
   project_overview?: string | null;
   in_scope?: string | null;
@@ -823,6 +825,21 @@ export default function ProjectPage({
       </div>
     );
 
+  const revenue = Number(project.revenue || 0);
+  const revenueRecoveryPercentage = Number(
+    project.revenue_recovery_percentage || 0,
+  );
+  const recoveryAmounts = calculateRevenueRecovery(
+    revenue,
+    revenueRecoveryPercentage,
+  );
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: project.currency_code?.trim().toUpperCase() || "INR",
+      maximumFractionDigits: 2,
+    }).format(amount);
+
   return (
     <div
       className="project-page p-6 space-y-5 flex flex-col"
@@ -1176,6 +1193,9 @@ export default function ProjectPage({
                   currency: project.currency_code?.trim().toUpperCase() || "INR",
                   maximumFractionDigits: 0,
                 }).format(Number(project.revenue))],
+                ["Revenue Recovery Percentage", `${revenueRecoveryPercentage}%`],
+                ["Recovered Revenue", formatCurrency(recoveryAmounts.recoveredRevenue)],
+                ["Pending Revenue", formatCurrency(recoveryAmounts.pendingRevenue)],
                 ["Completion", `${Number(project.completion || 0)}%`],
                 ["Volumetric", project.voumetric ?? "-"],
                 ["Estimated Start", project.estimated_start_date || "-"],

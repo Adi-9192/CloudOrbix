@@ -184,7 +184,7 @@ const releaseNotes = [
   {
     title: "Project and profile workflows",
     detail:
-      "Improved project access and approval flows, project navigation from profiles, and project administration tools.",
+      "Improved project access and approval flows, added revenue recovery percentage tracking with calculated recovered and pending amounts, and enhanced project navigation and administration.",
   },
 ];
 
