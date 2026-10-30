@@ -169,7 +169,7 @@ const releaseNotes = [
   {
     title: "Portfolio experience",
     detail:
-      "Expanded the Portfolio page with a full-width overview, reduced the main title size, and reordered service cards and detail popups consistently.",
+      "Expanded the Portfolio page with a full-width overview, reduced the title sizes, reordered service cards and detail popups, and removed service card taglines.",
   },
   {
     title: "Dashboard updates",
