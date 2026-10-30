@@ -43,7 +43,7 @@ export type Page =
   | "rfp";
 
 const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "portfolio", label: "Portfolio", icon: Home },
+  { id: "portfolio", label: "Home", icon: Home },
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   // { id: "reports", label: "Reports", icon: FileText },
 
