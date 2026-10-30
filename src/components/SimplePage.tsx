@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { UserPlus, UserMinus, Server, HelpCircle, CalendarDays, AlertCircle, RefreshCw } from "lucide-react";
+import { UserPlus, UserMinus, Server, CalendarDays, AlertCircle, RefreshCw } from "lucide-react";
 
 interface SimplePageProps { page: string; dark: boolean; }
 
@@ -11,7 +11,6 @@ export default function SimplePage({ page, dark }: SimplePageProps) {
   const border = dark ? "#334155" : "#E2E8F0";
   const text = dark ? "#E2E8F0" : "#0F172A";
   const muted = dark ? "#94A3B8" : "#64748B";
-  const subtle = dark ? "#0F172A" : "#F8FAFC";
 
   useEffect(() => {
     if (page !== "onboarding" && page !== "offboarding" && page !== "services") return;
@@ -138,47 +137,6 @@ export default function SimplePage({ page, dark }: SimplePageProps) {
           ))}
         </div>
         {selectedService && <div className="rounded-xl border overflow-hidden" style={{ background: bg, borderColor: border }}><div className="px-5 py-4 border-b font-semibold text-sm" style={{ borderColor: border }}>Projects using {selectedService}</div>{(serviceCounts.find((item) => item.name === selectedService)?.projects || []).map((project: any) => <div key={project.clientId} className="flex items-center justify-between px-5 py-3 border-b text-xs" style={{ borderColor: border }}><span>{project.clientName}</span><span style={{ color: muted }}>{project.status} · {project.completion || 0}%</span></div>)}</div>}
-      </div>
-    );
-  }
-
-  if (page === "help") {
-    const faqs = [
-      { q: "How do I onboard a new project?", a: "Go to Projects → Add Project and follow the 4-step wizard." },
-      { q: "How do I import projects via Excel?", a: "Go to Excel Import, download the template, fill it in, and drag-drop the file to upload." },
-      { q: "Who can access the Admin panel?", a: "Only users with the Admin role can access Admin settings." },
-      { q: "How do I schedule a recurring report?", a: "Go to Reports → Scheduled Reports and click Add." },
-      { q: "How do I export project data?", a: "From the Projects page click Export, or use Reports → Quick Export." },
-    ];
-    return (
-      <div className="p-6 space-y-5" style={{ color: text }}>
-        <div>
-          <h1 className="text-xl font-bold">Help & Support</h1>
-          <p className="text-xs mt-0.5" style={{ color: muted }}>Documentation, FAQs, and contact information</p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-          {[{ label: "IT Support", icon: "🛠", desc: "it-support@enterprise.com" },
-            { label: "User Guide", icon: "📖", desc: "Full documentation portal" },
-            { label: "Release Notes", icon: "📋", desc: "v2.4.1 — Aug 2025" }
-          ].map(c => (
-            <div key={c.label} className="rounded-xl border p-5 text-center" style={{ background: bg, borderColor: border }}>
-              <div className="text-3xl mb-2">{c.icon}</div>
-              <div className="text-xs font-semibold mb-1" style={{ color: text }}>{c.label}</div>
-              <div className="text-[10px]" style={{ color: muted }}>{c.desc}</div>
-            </div>
-          ))}
-        </div>
-        <div className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
-          <h3 className="font-semibold text-sm mb-4" style={{ color: text }}>Frequently Asked Questions</h3>
-          <div className="space-y-4">
-            {faqs.map(f => (
-              <div key={f.q} className="p-4 rounded-xl" style={{ background: subtle }}>
-                <div className="text-xs font-semibold mb-1" style={{ color: text }}>Q: {f.q}</div>
-                <div className="text-xs" style={{ color: muted }}>A: {f.a}</div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     );
   }

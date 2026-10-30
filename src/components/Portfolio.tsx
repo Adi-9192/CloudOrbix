@@ -40,11 +40,11 @@ export const DEFAULT_SERVICES: Service[] = [
     creating: "Enable scalable, policy-aligned, and automated cloud platforms through modern DevOps practices, Infrastructure as Code (IaC), and platform engineering frameworks.",
     capabilities: [
     "Cloud Foundation Automation - Design and automate deployment of Azure Landing Zones, AWS Control Tower, and Google Cloud foundations using Infrastructure as Code.",
-    "Infrastructure as Code (IaC) - Implement Terraform, Azure Bicep, CloudFormation and cloud-native IaC frameworks using reusable, standardized and version-controlled templates.",
+    "Infrastructure as Code (IaC) - Implement Terraform, Azure Bicep, CloudFormation and cloud-native IaC frameworks using reusable modules and version-controlled configurations.",
     "CI/CD Platform Engineering - Design and implement enterprise-grade CI/CD platforms using Azure DevOps, GitHub Actions, GitLab, AWS CodePipeline, and Google Cloud Build.",
     "Platform Engineering Automation - Implement self-service platforms, standardized delivery frameworks and reusable engineering patterns.",
     "Build & Release Automation - Design and implement automated provisioning, environment promotion, deployment orchestration, and release management frameworks across multi-cloud environments.",
-    "IaC Validation & Testing Framework - Implement automated validation, security, compliance and deployment testing for Infrastructure as Code templates and cloud platforms.",
+    "IaC Validation & Testing Framework - Implement automated validation, security, compliance and deployment testing for Infrastructure as Code configurations and cloud platforms.",
     "Cloud Platform Automation - Design and implement automation frameworks for infrastructure provisioning, platform lifecycle management, operational resilience, and self-healing cloud capabilities across multi-cloud environments.",
     "AIOps & Observability Engineering - Design and implement AIOps and observability frameworks leveraging intelligent analytics, event correlation, automation, and predictive insights to enhance platform reliability and operational resilience.",
     "Governance & Compliance Automation - Design and implement Policy as Code frameworks, automated governance controls, compliance validation mechanisms, and audit-ready cloud platforms aligned with enterprise security and regulatory requirements."
@@ -219,11 +219,15 @@ const portfolioAtAGlance = [
     title: "Azure Arc Architecture & Transformation Services",
     description: "Expertise in advising, architecting, and implementing Azure Arc solutions to unify governance, automation, and operations across hybrid, multi-cloud, and edge environments. Services include platform assessments, target-state architecture design, governance framework implementation, GitOps and automation strategies, observability architecture, and modernization roadmaps that enable scalable and resilient enterprise platforms.",
   },
+  {
+    title: "DevOps, Platform Engineering & Infrastructure as Code Transformations",
+    description: "Expertise in designing and transforming enterprise DevOps and platform engineering capabilities through automated CI/CD, Infrastructure as Code, GitOps, and Internal Developer Platforms, enabling standardized cloud provisioning, policy-driven governance, secure software delivery, developer self-service, and scalable operations across multi-cloud and hybrid environments." ,
+  },
 ] as const;
 
 const portfolioAtAGlanceIntro = "Cloud and enterprise technology services are presented across architecture, transformation, observability, security, middleware, databases, backup, and hybrid-cloud management. The portfolio emphasizes governed, automated, secure, and highly available environments spanning Azure, AWS, Google Cloud Platform, Oracle Cloud Infrastructure, on-premises systems, and edge infrastructure.";
 
-export interface ServiceCatalogueProps {
+export interface PortfolioProps {
   dark?: boolean;
   services?: Service[];
   heading?: string;
@@ -232,14 +236,14 @@ export interface ServiceCatalogueProps {
   className?: string;
 }
 
-export default function ServiceCatalogue({
+export default function Portfolio({
   dark = false,
   services = DEFAULT_SERVICES,
   heading = "CIS Professional Services - Portfolio",
   hideHeader = false,
   hideFooter = false,
   className = "",
-}: ServiceCatalogueProps) {
+}: PortfolioProps) {
   const [active, setActive] = useState<number | null>(null);
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<number | null>(null);
 
@@ -263,17 +267,17 @@ export default function ServiceCatalogue({
   }, [selectedPortfolioItem]);
 
   return (
-    <div data-theme={dark ? "dark" : undefined} className={`service-catalogue min-h-screen w-full bg-[var(--catalogue-bg)] text-[var(--catalogue-ink)] ${className}`} style={{ fontFamily: "var(--font-sans, 'Inter', system-ui, sans-serif)" }}>
+    <div data-theme={dark ? "dark" : undefined} className={`portfolio-page min-h-screen w-full bg-[var(--portfolio-bg)] text-[var(--portfolio-ink)] ${className}`} style={{ fontFamily: "var(--font-sans, 'Inter', system-ui, sans-serif)" }}>
 
       {!hideHeader && (
-        <header className="px-8 md:px-16 pt-12 pb-8 flex items-start justify-between border-b border-[var(--catalogue-border)] bg-[var(--catalogue-card)]">
+        <header className="px-8 md:px-16 pt-12 pb-8 flex items-start justify-between border-b border-[var(--portfolio-border)] bg-[var(--portfolio-card)]">
           <div>
-            <span className="mono" style={{ fontSize: "20px", letterSpacing: "0.18em", color: "var(--catalogue-accent)", textTransform: "uppercase" }}>
+            <span className="mono" style={{ fontSize: "20px", letterSpacing: "0.18em", color: "var(--portfolio-accent)", textTransform: "uppercase" }}>
               PORTFOLIO
             </span>
-            <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4rem)", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.03em", color: "var(--catalogue-ink)", marginTop: "0.4rem" }}>
+            <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4rem)", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.03em", color: "var(--portfolio-ink)", marginTop: "0.4rem" }}>
               {heading === "CIS Professional Services - Portfolio" ? (
-                <>CIS{" "}<span className="text-[var(--catalogue-primary)]">Professional Services</span></>
+                <>CIS{" "}<span className="text-[var(--portfolio-primary)]">Professional Services</span></>
               ) : heading}
             </h1>
           </div>
@@ -282,48 +286,48 @@ export default function ServiceCatalogue({
 
       <section
         aria-labelledby="portfolio-at-a-glance-heading"
-        className="relative overflow-hidden border-b border-[var(--catalogue-border)] bg-[var(--catalogue-card)] px-4 py-9 md:px-8 md:py-12 lg:px-16 lg:py-14"
+        className="relative overflow-hidden border-b border-[var(--portfolio-border)] bg-[var(--portfolio-card)] px-4 py-9 md:px-8 md:py-12 lg:px-16 lg:py-14"
       >
-        <div className="pointer-events-none absolute -right-32 -top-40 h-96 w-96 rounded-full bg-[var(--catalogue-primary-light)] opacity-60 blur-3xl" />
-        <div className="pointer-events-none absolute -left-32 bottom-0 h-72 w-72 rounded-full bg-[var(--catalogue-primary-light)] opacity-30 blur-3xl" />
+        <div className="pointer-events-none absolute -right-32 -top-40 h-96 w-96 rounded-full bg-[var(--portfolio-primary-light)] opacity-60 blur-3xl" />
+        <div className="pointer-events-none absolute -left-32 bottom-0 h-72 w-72 rounded-full bg-[var(--portfolio-primary-light)] opacity-30 blur-3xl" />
 
         <div className="relative mx-auto max-w-7xl">
           <div className="grid items-start gap-4 lg:grid-cols-[minmax(14rem,0.7fr)_minmax(0,1.8fr)] lg:gap-12">
             <h2
               id="portfolio-at-a-glance-heading"
-              className="text-2xl font-bold tracking-[-0.03em] text-[var(--catalogue-ink)] md:text-3xl"
+              className="text-2xl font-bold tracking-[-0.03em] text-[var(--portfolio-ink)] md:text-3xl"
             >
               <em className="font-semibold">Portfolio</em> at Glance
             </h2>
-            <p className="max-w-4xl text-sm font-medium leading-6 text-[var(--catalogue-body)] md:text-base md:leading-7">
+            <p className="max-w-4xl text-sm font-medium leading-6 text-[var(--portfolio-body)] md:text-base md:leading-7">
               {portfolioAtAGlanceIntro}
             </p>
           </div>
 
-          <div className="mt-7 overflow-hidden rounded-2xl border border-[var(--catalogue-border)] bg-[var(--catalogue-border)] shadow-lg">
-            <div className="h-1 bg-[var(--catalogue-accent)]" />
-            <div className="grid gap-px bg-[var(--catalogue-border)] md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-7 overflow-hidden rounded-2xl border border-[var(--portfolio-border)] bg-[var(--portfolio-border)] shadow-lg">
+            <div className="h-1 bg-[var(--portfolio-accent)]" />
+            <div className="grid gap-px bg-[var(--portfolio-border)] md:grid-cols-2 lg:grid-cols-6">
               {portfolioAtAGlance.map((item, index) => (
                 <article
                   key={item.title}
-                  className={`group relative bg-[var(--catalogue-card)] transition-colors duration-300 hover:bg-[var(--catalogue-panel)] ${index === portfolioAtAGlance.length - 1 ? "md:col-span-2 lg:col-span-3" : ""}`}
+                  className={`group relative bg-[var(--portfolio-card)] transition-colors duration-300 hover:bg-[var(--portfolio-panel)] md:col-span-1 ${index >= portfolioAtAGlance.length - 2 ? "lg:col-span-3" : "lg:col-span-2"}`}
                 >
-                  <div className="absolute bottom-0 left-0 top-0 w-1 origin-y scale-y-0 bg-[var(--catalogue-accent)] transition-transform duration-300 group-hover:scale-y-100 group-focus-within:scale-y-100" />
+                  <div className="absolute bottom-0 left-0 top-0 w-1 origin-y scale-y-0 bg-[var(--portfolio-accent)] transition-transform duration-300 group-hover:scale-y-100 group-focus-within:scale-y-100" />
                   <h3>
                     <button
                       type="button"
                       aria-haspopup="dialog"
                       onClick={() => setSelectedPortfolioItem(index)}
-                      className="grid min-h-24 w-full cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 px-5 py-5 text-left text-sm font-bold leading-5 text-[var(--catalogue-ink)] outline-none transition-colors duration-300 hover:text-[var(--catalogue-primary)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--catalogue-accent)] md:px-6 md:text-base md:leading-6"
+                      className="grid min-h-24 w-full cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 px-5 py-5 text-left text-sm font-bold leading-5 text-[var(--portfolio-ink)] outline-none transition-colors duration-300 hover:text-[var(--portfolio-primary)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--portfolio-accent)] md:px-6 md:text-base md:leading-6"
                     >
                       <span
                         aria-hidden="true"
-                        className="h-2 w-2 rounded-full bg-[var(--catalogue-accent)] shadow-[0_0_0_5px_var(--catalogue-primary-light)]"
+                        className="h-2 w-2 rounded-full bg-[var(--portfolio-accent)] shadow-[0_0_0_5px_var(--portfolio-primary-light)]"
                       />
                       <span>{item.title}</span>
                       <span
                         aria-hidden="true"
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--catalogue-border)] text-xl font-normal text-[var(--catalogue-muted)] transition-[transform,border-color,color] duration-300 group-hover:translate-x-0.5 group-hover:border-[var(--catalogue-accent)] group-hover:text-[var(--catalogue-primary)]"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--portfolio-border)] text-xl font-normal text-[var(--portfolio-muted)] transition-[transform,border-color,color] duration-300 group-hover:translate-x-0.5 group-hover:border-[var(--portfolio-accent)] group-hover:text-[var(--portfolio-primary)]"
                       >
                         ›
                       </span>
@@ -348,27 +352,27 @@ export default function ServiceCatalogue({
             aria-modal="true"
             aria-labelledby="portfolio-dialog-title"
             aria-describedby="portfolio-dialog-description"
-            className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--catalogue-border)] bg-[var(--catalogue-card)] p-6 shadow-2xl md:p-10"
+            className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--portfolio-border)] bg-[var(--portfolio-card)] p-6 shadow-2xl md:p-10"
           >
             <button
               type="button"
               autoFocus
               aria-label="Close"
               onClick={() => setSelectedPortfolioItem(null)}
-              className="absolute right-4 top-4 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-[var(--catalogue-border)] bg-[var(--catalogue-panel)] text-2xl leading-none text-[var(--catalogue-muted)] transition-colors hover:border-[var(--catalogue-accent)] hover:text-[var(--catalogue-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--catalogue-accent)]"
+              className="absolute right-4 top-4 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-[var(--portfolio-border)] bg-[var(--portfolio-panel)] text-2xl leading-none text-[var(--portfolio-muted)] transition-colors hover:border-[var(--portfolio-accent)] hover:text-[var(--portfolio-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--portfolio-accent)]"
             >
               ×
             </button>
-            <div className="h-1 w-14 rounded-full bg-[var(--catalogue-accent)]" />
+            <div className="h-1 w-14 rounded-full bg-[var(--portfolio-accent)]" />
             <h2
               id="portfolio-dialog-title"
-              className="mt-6 max-w-xl pr-10 text-2xl font-extrabold leading-tight tracking-tight text-[var(--catalogue-ink)] md:text-3xl"
+              className="mt-6 max-w-xl pr-10 text-2xl font-extrabold leading-tight tracking-tight text-[var(--portfolio-ink)] md:text-3xl"
             >
               {portfolioAtAGlance[selectedPortfolioItem].title}
             </h2>
             <p
               id="portfolio-dialog-description"
-              className="mt-5 text-base leading-8 text-[var(--catalogue-body)]"
+              className="mt-5 text-base leading-8 text-[var(--portfolio-body)]"
             >
               {portfolioAtAGlance[selectedPortfolioItem].description}
             </p>
@@ -376,8 +380,8 @@ export default function ServiceCatalogue({
         </div>
       )}
 
-      <div className="bg-[var(--catalogue-card)] mt-4 mx-4 md:mx-8 rounded-xl border border-[var(--catalogue-border)] overflow-hidden shadow-sm">
-        <ul className="divide-y divide-[var(--catalogue-border)]">
+      <div className="bg-[var(--portfolio-card)] mt-4 mx-4 md:mx-8 rounded-xl border border-[var(--portfolio-border)] overflow-hidden shadow-sm">
+        <ul className="divide-y divide-[var(--portfolio-border)]">
           {services.map((s, i) => (
             <ServiceRow
               key={s.index}
@@ -392,7 +396,7 @@ export default function ServiceCatalogue({
 
       {!hideFooter && (
         <footer className="px-8 md:px-16 py-8 mt-4 flex flex-col md:flex-row justify-between gap-4">
-          <span className="mono" style={{ fontSize: "11px", letterSpacing: "0.14em", color: "var(--catalogue-faint)" }}>
+          <span className="mono" style={{ fontSize: "11px", letterSpacing: "0.14em", color: "var(--portfolio-faint)" }}>
             © {new Date().getFullYear()} CIS Professional Services
           </span>
         </footer>
@@ -431,32 +435,32 @@ function ServiceRow({
 
   return (
     <li>
-      <button className="w-full text-left group cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--catalogue-accent)]" onClick={onToggle} aria-expanded={isActive} aria-controls={`service-panel-${service.index}`}>
+      <button className="w-full text-left group cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--portfolio-accent)]" onClick={onToggle} aria-expanded={isActive} aria-controls={`service-panel-${service.index}`}>
         <div
           className="px-6 md:px-10 py-6 flex items-center gap-5 md:gap-8 transition-all duration-300"
-          style={{ background: isActive ? "var(--catalogue-panel)" : "transparent" }}
+          style={{ background: isActive ? "var(--portfolio-panel)" : "transparent" }}
         >
-          <span className="mono shrink-0" style={{ fontSize: "11px", letterSpacing: "0.14em", color: isActive ? "var(--catalogue-accent)" : "var(--catalogue-faint)", minWidth: "2rem", transition: "color 0.3s" }}>
+          <span className="mono shrink-0" style={{ fontSize: "11px", letterSpacing: "0.14em", color: isActive ? "var(--portfolio-accent)" : "var(--portfolio-faint)", minWidth: "2rem", transition: "color 0.3s" }}>
             {service.index}
           </span>
 
           <h2
-            className="flex-1 transition-colors duration-300 group-hover:text-[var(--catalogue-primary)]"
-            style={{ fontSize: "clamp(1.3rem, 2.5vw, 2rem)", fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.1, color: isActive ? "var(--catalogue-primary)" : "var(--catalogue-ink)" }}
+            className="flex-1 transition-colors duration-300 group-hover:text-[var(--portfolio-primary)]"
+            style={{ fontSize: "clamp(1.3rem, 2.5vw, 2rem)", fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.1, color: isActive ? "var(--portfolio-primary)" : "var(--portfolio-ink)" }}
           >
             {service.title}
           </h2>
 
           {service.tagline.includes("•") ? (
-            <span className="hidden max-w-sm flex-wrap justify-end gap-1.5 text-right font-normal transition-colors duration-300 lg:flex" style={{ fontSize: "0.82rem", color: isActive ? "var(--catalogue-muted)" : "var(--catalogue-faint)" }}>
+            <span className="hidden max-w-sm flex-wrap justify-end gap-1.5 text-right font-normal transition-colors duration-300 lg:flex" style={{ fontSize: "0.82rem", color: isActive ? "var(--portfolio-muted)" : "var(--portfolio-faint)" }}>
               {service.tagline.split("•").map((tag) => tag.trim()).filter(Boolean).map((tag) => (
-                <span key={tag} className="rounded-md border border-current/30 bg-[var(--catalogue-panel)] px-2 py-1">
+                <span key={tag} className="rounded-md border border-current/30 bg-[var(--portfolio-panel)] px-2 py-1">
                   {tag}
                 </span>
               ))}
             </span>
           ) : (
-            <span className="hidden lg:block shrink-0" style={{ fontSize: "0.82rem", color: isActive ? "var(--catalogue-muted)" : "var(--catalogue-faint)", maxWidth: "200px", textAlign: "right", transition: "color 0.3s", fontWeight: 400 }}>
+            <span className="hidden lg:block shrink-0" style={{ fontSize: "0.82rem", color: isActive ? "var(--portfolio-muted)" : "var(--portfolio-faint)", maxWidth: "200px", textAlign: "right", transition: "color 0.3s", fontWeight: 400 }}>
               {service.tagline}
             </span>
           )}
@@ -466,13 +470,13 @@ function ServiceRow({
             style={{
               width: "28px",
               height: "28px",
-              border: `1.5px solid ${isActive ? "var(--catalogue-accent)" : "var(--catalogue-border)"}`,
+              border: `1.5px solid ${isActive ? "var(--portfolio-accent)" : "var(--portfolio-border)"}`,
               borderRadius: "50%",
-              color: isActive ? "var(--catalogue-accent)" : "var(--catalogue-faint)",
+              color: isActive ? "var(--portfolio-accent)" : "var(--portfolio-faint)",
               fontSize: "16px",
               lineHeight: 1,
               transition: "all 0.3s",
-              background: isActive ? "var(--catalogue-primary-light)" : "transparent",
+              background: isActive ? "var(--portfolio-primary-light)" : "transparent",
             }}
           >
             {isActive ? "−" : "+"}
@@ -487,7 +491,7 @@ function ServiceRow({
         style={{ gridTemplateRows: isActive ? "1fr" : "0fr", opacity: isActive ? 1 : 0 }}
         inert={!isActive}
       >
-        <div className="min-h-0 overflow-hidden border-t border-[var(--catalogue-border)] bg-[var(--catalogue-panel)]">
+        <div className="min-h-0 overflow-hidden border-t border-[var(--portfolio-border)] bg-[var(--portfolio-panel)]">
           <div
             className="grid items-start gap-6 px-6 py-8 md:grid-cols-[var(--definition-height)_minmax(0,1fr)] md:px-10"
             style={{
@@ -498,7 +502,7 @@ function ServiceRow({
           >
 
             {/* Left — image */}
-            <div className="aspect-video overflow-hidden rounded-lg border border-[var(--catalogue-border)] md:aspect-square md:h-[var(--definition-height)] md:w-[var(--definition-height)]" style={{ background: "#E5E7EB" }}>
+            <div className="aspect-video overflow-hidden rounded-lg border border-[var(--portfolio-border)] md:aspect-square md:h-[var(--definition-height)] md:w-[var(--definition-height)]" style={{ background: "#E5E7EB" }}>
                 <img
                   src={service.image}
                   alt={service.title}
@@ -514,10 +518,10 @@ function ServiceRow({
             {/* Definition */}
             <div ref={definitionRef} className="min-w-0">
               <div>
-                <span className="mono" style={{ fontSize: "10px", letterSpacing: "0.16em", color: "var(--catalogue-accent)", textTransform: "uppercase", fontWeight: 500 }}>
+                <span className="mono" style={{ fontSize: "10px", letterSpacing: "0.16em", color: "var(--portfolio-accent)", textTransform: "uppercase", fontWeight: 500 }}>
                   Definition
                 </span>
-                <p style={{ marginTop: "0.5rem", fontWeight: 400, fontSize: "0.975rem", lineHeight: 1.8, color: "var(--catalogue-body)" }}>
+                <p style={{ marginTop: "0.5rem", fontWeight: 400, fontSize: "0.975rem", lineHeight: 1.8, color: "var(--portfolio-body)" }}>
                   {service.creating}
                 </p>
               </div>
@@ -525,8 +529,8 @@ function ServiceRow({
 
             {/* Core Capabilities */}
             {(service.capabilities.length > 0 || (service.capabilityGroups?.length ?? 0) > 0) && (
-              <div className="md:col-span-2 border-t border-[var(--catalogue-border)] pt-6">
-                <span className="mono" style={{ fontSize: "10px", letterSpacing: "0.16em", color: "var(--catalogue-muted)", textTransform: "uppercase", fontWeight: 500 }}>
+              <div className="md:col-span-2 border-t border-[var(--portfolio-border)] pt-6">
+                <span className="mono" style={{ fontSize: "10px", letterSpacing: "0.16em", color: "var(--portfolio-muted)", textTransform: "uppercase", fontWeight: 500 }}>
                   Core Capabilities
                 </span>
                 {service.capabilities.length > 0 && <ul className="mt-3 flex flex-col gap-2">
@@ -540,12 +544,12 @@ function ServiceRow({
                           width: "6px",
                           height: "6px",
                           borderRadius: "50%",
-                          background: "var(--catalogue-accent)",
+                          background: "var(--portfolio-accent)",
                           display: "inline-block",
                         }}
                       />
-                      <span style={{ fontSize: "0.9rem", color: "var(--catalogue-detail)", lineHeight: 1.65, fontWeight: 400 }}>
-                        {labelled ? <><strong className="font-semibold text-[var(--catalogue-primary)]">{labelled[1]}{labelled[2]}</strong>{labelled[3]}</> : cap}
+                      <span style={{ fontSize: "0.9rem", color: "var(--portfolio-detail)", lineHeight: 1.65, fontWeight: 400 }}>
+                        {labelled ? <><strong className="font-semibold text-[var(--portfolio-primary)]">{labelled[1]}{labelled[2]}</strong>{labelled[3]}</> : cap}
                       </span>
                     </li>;
                   })}
@@ -553,9 +557,9 @@ function ServiceRow({
                 {service.capabilityGroups && service.capabilityGroups.length > 0 && (
                   <ul className="mt-4 grid gap-3">
                     {service.capabilityGroups.map((group) => (
-                      <li key={group.title} className="rounded-xl border-2 border-dotted border-[var(--catalogue-warning)] bg-[var(--catalogue-warning-bg)] p-4">
-                        <span className="font-semibold text-[var(--catalogue-primary)]">{group.title}</span>
-                        <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--catalogue-detail)] marker:text-[var(--catalogue-warning)]">
+                      <li key={group.title} className="rounded-xl border-2 border-dotted border-[var(--portfolio-warning)] bg-[var(--portfolio-warning-bg)] p-4">
+                        <span className="font-semibold text-[var(--portfolio-primary)]">{group.title}</span>
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--portfolio-detail)] marker:text-[var(--portfolio-warning)]">
                           {group.items.map((item) => <li key={item}>{item}</li>)}
                         </ul>
                       </li>

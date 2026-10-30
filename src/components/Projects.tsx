@@ -401,7 +401,7 @@ const formatRevenue = (value: number, currency: string) =>
     maximumFractionDigits: value >= 1_000_000 ? 1 : 0,
   }).format(value)
 
-export default function Clients({
+export default function Projects({
   dark,
 
   user,
@@ -1094,7 +1094,7 @@ export default function Clients({
       const body = await response.json()
 
       if (!response.ok) {
-        throw new Error(body.message || "Unable to create client.")
+        throw new Error(body.message || "Unable to create project.")
       }
 
       if (body.pending) {
@@ -1234,12 +1234,12 @@ export default function Clients({
       )
 
     if (response.ok)
-      showCloudOrbixAlert("Client deleted successfully.", "success")
+      showCloudOrbixAlert("Project deleted successfully.", "success")
   }
 
   const requestClientDeletion = (clientId: string) => {
     setConfirmDialog({
-      message: "This client is about to be deleted. Do you want to continue?",
+      message: "This project is about to be deleted. Do you want to continue?",
 
       onConfirm: () => {
         setConfirmDialog(null)
@@ -1295,7 +1295,7 @@ export default function Clients({
             style={{ borderColor: "#BFDBFE" }}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="delete-client-title"
+            aria-labelledby="delete-project-title"
           >
             <div className="h-1.5" style={{ background: "#1E40AF" }} />
             <div className="p-6">
@@ -1306,7 +1306,7 @@ export default function Clients({
                 CloudOrbix Alert
               </div>
               <h2
-                id="delete-client-title"
+                id="delete-project-title"
                 className="text-base font-bold"
                 style={{ color: "#0F172A" }}
               >
@@ -1710,7 +1710,7 @@ export default function Clients({
                             onClick={() => requestClientDeletion(c.id)}
                             className="p-1.5 rounded-md hover:bg-red-50 hover:text-red-500 transition-colors"
                             style={{ color: muted }}
-                            title="Delete client"
+                            title="Delete project"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -2175,7 +2175,7 @@ export default function Clients({
                     </label>
                   ))}
                   <p className="text-xs mb-4" style={{ color: muted }}>
-                    Select all services this client will use
+                    Select all services this project will use
                   </p>
                   <div className="grid grid-cols-3 gap-2">
                     {ALL_SERVICES.map((s) => {

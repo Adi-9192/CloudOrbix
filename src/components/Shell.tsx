@@ -27,7 +27,7 @@ import { showCloudOrbixAlert, type CloudOrbixAlert } from "../alert";
 
 export type Page =
   | "dashboard"
-  | "clients"
+  | "projects"
   | "projectframework"
   | "reports"
   | "excel"
@@ -37,13 +37,13 @@ export type Page =
   | "project"
   | "documents"
   | "repository"
-  | "servicecatalogue"
+  | "portfolio"
   | "profile"
   | "risks"
   | "rfp";
 
 const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "servicecatalogue", label: "Home", icon: Home },
+  { id: "portfolio", label: "Portfolio", icon: Home },
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   // { id: "reports", label: "Reports", icon: FileText },
 
@@ -54,7 +54,7 @@ const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
 ];
 const projectManagementItems: { id: Page; label: string }[] = [
   { id: "projectframework", label: "Project Framework" },
-  { id: "clients", label: "Projects" },
+  { id: "projects", label: "Projects" },
   { id: "repository", label: "Project Repository" },
   { id: "excel", label: "Excel Import" },
 ];
@@ -341,8 +341,8 @@ export default function Shell({
         </button>
         <button
           className="flex items-center gap-2 flex-shrink-0"
-          onClick={() => onPageChange(portfolioOnly ? "servicecatalogue" : "dashboard")}
-          aria-label={portfolioOnly ? "Go to Portfolio" : "Go to dashboard"}
+          onClick={() => onPageChange("portfolio")}
+          aria-label="Go to Portfolio"
         >
           <img
             src="/CloudOrbix.png"
@@ -583,8 +583,8 @@ export default function Shell({
             {navItems
               .filter(({ id }) =>
                 portfolioOnly
-                  ? id === "servicecatalogue"
-                  : id === "servicecatalogue" || id === "dashboard",
+                  ? id === "portfolio"
+                  : id === "portfolio" || id === "dashboard",
               )
               .map(({ id, label, icon: Icon }) => {
                 const active = page === id;
@@ -667,7 +667,7 @@ export default function Shell({
                 ({ id }) =>
                   !portfolioOnly &&
                   id !== "dashboard" &&
-                  id !== "servicecatalogue" &&
+                  id !== "portfolio" &&
                   (!(["admin", "excel", "audit", ] as Page[]).includes(
                     id,
                   ) ||

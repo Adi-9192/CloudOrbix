@@ -481,8 +481,8 @@ Verify the following in the browser:
 2. The dashboard loads database-backed KPIs and charts.
 3. The administrator can create another user with a supplied password.
 4. A non-admin cannot access Admin routes.
-5. Pending client changes require approval.
-6. Non-admin users cannot delete clients.
+5. Pending project changes require approval.
+6. Non-admin users cannot delete projects.
 7. Project tasks, risks, updates, and documents work.
 8. Reports export correctly.
 9. HTTPS is enforced.

@@ -226,7 +226,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
   ], [summary]); */
 
   const kpiCards = useMemo(() => [
-    { title: "Total Projects", value: String(summary.totalClients), subtitle: "Approved project records", accent: "#1E40AF", icon: Users, action: () => onNavigate("clients") },
+    { title: "Total Projects", value: String(summary.totalClients), subtitle: "Approved project records", accent: "#1E40AF", icon: Users, action: () => onNavigate("projects") },
     { title: "Active Projects", value: String(summary.activeProjects), subtitle: "Approved projects", accent: "#1E40AF", icon: FolderKanban },
     { title: "Delayed (External)", value: String(summary.delayedProjectsExternal), subtitle: "Externally delayed projects", accent: "#C2410C", icon: AlertTriangle },
     { title: "Delayed (Internal)", value: String(summary.delayedProjectsInternal), subtitle: "Internally delayed projects", accent: "#BE185D", icon: Clock },
@@ -578,7 +578,9 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
               <div key={service.name}>
                 <div className="flex justify-between text-xs mb-1">
                   <span className="font-medium" style={{ color: text }}>{service.name}</span>
-                  <span style={{ color: muted }}>{service.clients} clients</span>
+                  <span style={{ color: muted }}>
+                    {service.clients} {service.clients === 1 ? "project" : "projects"}
+                  </span>
                 </div>
                 <div className="h-2 rounded-full" style={{ background: dark ? "#334155" : "#F1F5F9" }}>
                   <div className="h-2 rounded-full transition-all" style={{ background: "#1E40AF", width: `${summary.totalClients > 0 ? (service.clients / summary.totalClients) * 100 : 0}%` }} />
@@ -636,7 +638,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
       {dashboardTab === "executive" && (
       <>
       <div className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
-        <h3 className="font-semibold text-sm mb-4">Regional Client Distribution</h3>
+        <h3 className="font-semibold text-sm mb-4">Regional Project Distribution</h3>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           {regionSeries.map((region) => (
             <div key={region.region} className="text-center">
@@ -656,7 +658,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
       </div>
 
       <div className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
-        <h3 className="font-semibold text-sm mb-4">Client Status Distribution</h3>
+        <h3 className="font-semibold text-sm mb-4">Project Status Distribution</h3>
         <div className="flex items-center gap-6">
           <ResponsiveContainer width="45%" height={180} minWidth={120}>
             <PieChart><Pie data={regionSeries} dataKey="clients" nameKey="region" cx="50%" cy="50%" outerRadius={70} innerRadius={38} labelLine={false}>{regionSeries.map((entry, index) => <Cell key={entry.region} fill={entry.color || ["#1E40AF", "#16A34A", "#D97706", "#DC2626"][index % 4]} />)}</Pie><Tooltip content={<CustomTooltip dark={dark} />} /></PieChart>

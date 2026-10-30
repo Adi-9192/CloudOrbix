@@ -19,7 +19,6 @@ import excelRoutes from './routes/excel.js';
 import auditRoutes from './routes/audit.js';
 import reportRoutes from './routes/reports.js';
 import projectRoutes from './routes/projects.js';
-import templateRoutes from './routes/templates.js';
 import serviceRoutes from './routes/services.js';
 import profileTasksRoutes from './routes/profile-tasks.js';
 import rfpRoutes from './routes/rfp.js';
@@ -300,11 +299,6 @@ app.use(
 app.use(
   '/api/projects',
   projectRoutes
-);
-
-app.use(
-  '/api/templates',
-  templateRoutes
 );
 
 app.use(

@@ -656,7 +656,7 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
 
       if (!existingClient) {
         return res.status(404).json({
-          message: 'Client not found.',
+          message: 'Project not found.',
         });
       }
     } else {
@@ -666,7 +666,7 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
 
       if (!existingClient) {
         return res.status(404).json({
-          message: 'Client not found.',
+          message: 'Project not found.',
         });
       }
     }
@@ -706,7 +706,7 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
     const canManage = canManageProject(req.user?.roles || []);
     if (!pool) {
       const index = appState.clients.findIndex((client) => client.clientId === req.params.clientId);
-      if (index < 0) return res.status(404).json({ message: 'Client not found.' });
+      if (index < 0) return res.status(404).json({ message: 'Project not found.' });
       if (canManage) {
         appState.clients[index] = {
           ...appState.clients[index],
@@ -827,7 +827,7 @@ router.put('/:clientId', protectRoute, requireRole('Admin', 'Manager', 'Operatio
 
     if (!result.rows[0]) {
       return res.status(404).json({
-        message: 'Client not found.',
+        message: 'Project not found.',
       });
     }
 
@@ -870,7 +870,7 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
     const pool = getPool();
     if (!pool) {
       const index = appState.clients.findIndex((client) => client.clientId === req.params.clientId);
-      if (index < 0) return res.status(404).json({ message: 'Pending client change not found.' });
+      if (index < 0) return res.status(404).json({ message: 'Pending project change not found.' });
       const client = appState.clients[index];
       if (!canApproveForProject(req.user, client)) {
         return res.status(403).json({ message: 'You are not authorized to approve this project change.' });
@@ -909,7 +909,7 @@ router.post('/:clientId/approve', protectRoute, async (req, res, next) => {
 
     const pending = await pool.query('SELECT id,client_id,pending_payload FROM clients WHERE client_id=$1 AND approval_status=$2', [req.params.clientId, 'pending']);
     const record = pending.rows[0];
-    if (!record) return res.status(404).json({ message: 'Pending client change not found.' });
+    if (!record) return res.status(404).json({ message: 'Pending project change not found.' });
 
     const currentClient = await findDbClient(req.params.clientId);
     if (!currentClient || !canApproveForProject(req.user, currentClient)) {
@@ -979,7 +979,7 @@ router.post('/:clientId/reject', protectRoute, async (req, res, next) => {
     const pool = getPool();
     if (!pool) {
       const index = appState.clients.findIndex((client) => client.clientId === req.params.clientId);
-      if (index < 0) return res.status(404).json({ message: 'Pending client change not found.' });
+      if (index < 0) return res.status(404).json({ message: 'Pending project change not found.' });
       const client = appState.clients[index];
       if (!canApproveForProject(req.user, client)) {
         return res.status(403).json({ message: 'You are not authorized to reject this project change.' });
@@ -998,7 +998,7 @@ router.post('/:clientId/reject', protectRoute, async (req, res, next) => {
 
     const pending = await getPool().query('SELECT id,pending_payload FROM clients WHERE client_id=$1 AND approval_status=$2', [req.params.clientId, 'pending']);
     const pendingRecord = pending.rows[0];
-    if (!pendingRecord) return res.status(404).json({ message: 'Pending client change not found.' });
+    if (!pendingRecord) return res.status(404).json({ message: 'Pending project change not found.' });
 
     const currentClient = await findDbClient(req.params.clientId);
     if (!currentClient || !canApproveForProject(req.user, currentClient)) {
@@ -1009,7 +1009,7 @@ router.post('/:clientId/reject', protectRoute, async (req, res, next) => {
     const result = await getPool().query(`DELETE FROM clients WHERE client_id=$1 AND approval_status='pending' AND pending_create=1 RETURNING client_id`, [req.params.clientId]);
     if (!result.rows[0]) {
       const update = await getPool().query(`UPDATE clients SET pending_payload=NULL,approval_status='approved',updated_at=CURRENT_TIMESTAMP WHERE client_id=$1 AND approval_status='pending' RETURNING client_id`, [req.params.clientId]);
-      if (!update.rows[0]) return res.status(404).json({ message: 'Pending client change not found.' });
+      if (!update.rows[0]) return res.status(404).json({ message: 'Pending project change not found.' });
     }
     await notifySubmitterOfDecision(pendingPayload, req.params.clientId, 'reject', req.user);
     await createAuditEntry(req.user.email, 'Client Change Rejected', 'pending', req.params.clientId);

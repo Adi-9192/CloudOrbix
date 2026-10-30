@@ -40,7 +40,7 @@ CORS_ORIGINS=http://localhost:8443
 JWT_SECRET=replace-with-a-long-random-secret
 ```
 
-Set `DATABASE_URL` to your Azure SQL connection string to enable persistent database access. Set `AZURE_STORAGE_CONNECTION_STRING` to enable document and template storage. Without these settings, the API can still start in development, but database-backed data and Azure file operations are unavailable. Keep secrets out of source control.
+Set `DATABASE_URL` to your Azure SQL connection string to enable persistent database access. Set `AZURE_STORAGE_CONNECTION_STRING` to enable document storage. Without these settings, the API can still start in development, but database-backed data and Azure file operations are unavailable. Keep secrets out of source control.
 
 For the one-time administrator setup, also provide:
 
