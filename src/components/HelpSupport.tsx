@@ -147,6 +147,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Home navigation",
+    detail:
+      "Renamed the Portfolio sidebar entry to Home for all roles; it continues to open the existing Portfolio page.",
+  },
+  {
     title: "Projects navigation",
     detail:
       "Renamed the Projects page route so project navigation and global search use #projects. Older saved links continue to redirect to Projects.",
@@ -164,7 +169,7 @@ const releaseNotes = [
   {
     title: "Portfolio experience",
     detail:
-      "Expanded the Portfolio page with a Portfolio at a Glance overview, interactive detail dialogs, and updated service capability cards.",
+      "Expanded the Portfolio page with a full-width overview, reduced the main title size, and reordered service cards and detail popups consistently.",
   },
   {
     title: "Dashboard updates",
