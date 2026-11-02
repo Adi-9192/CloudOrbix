@@ -147,6 +147,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Portfolio service popups",
+    detail:
+      "Portfolio at-a-glance popups show the matching service image and title, its definition as a subtitle, and all core capabilities, with a blue accent bar and reduced top padding. Removed the separate collapsible service list from the page.",
+  },
+  {
     title: "Home navigation",
     detail:
       "Renamed the Portfolio sidebar entry to Home for all roles; it continues to open the existing Portfolio page.",

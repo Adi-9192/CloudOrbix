@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 
 export interface Service {
   index: string;
@@ -191,38 +191,14 @@ export const DEFAULT_SERVICES: Service[] = [
 ];
 
 const portfolioAtAGlance = [
-  {
-    title: "Cloud Infrastructure Architecture",
-    description: "Expertise in designing, modernizing, and automating secure multi-cloud platforms across Azure, AWS, Google Cloud, and OCI, encompassing landing zones, hybrid connectivity, capacity planning, AI platforms (Azure AI Foundry, Amazon Bedrock, Google Vertex AI), DevOps, Azure Virtual Desktop, and hybrid file services.",
-  },
-  {
-    title: "Consultancy & Transformation Services",
-    description: "Expertise in cloud strategies, target architectures, transformation roadmaps, modernized infrastructure, platform operating models, governance frameworks, technology due diligence for mergers and acquisitions, and self-service developer platforms.",
-  },
-  {
-    title: "Cloud-Native Observability Solutions",
-    description: "Expertise in designing and implementing cloud-native observability platforms through Infrastructure as Code using Terraform, enabling end-to-end visibility across infrastructure, databases, storage, application services, Azure Local resources, and enterprise applications. Capabilities include observability architecture, monitoring strategy, dashboard design, alerting frameworks, service reliability models, and ITSM integration across cloud and hybrid environments.",
-  },
-  {
-    title: "Middleware & Integration Services",
-    description: "Expertise in defining middleware strategies, designing integration architectures, and modernizing enterprise integration platforms across cloud, hybrid, and on-premises environments. Capabilities include API and integration architecture, application modernization, event-driven and microservices enablement, data transformation, ETL modernization, workflow automation, secure data exchange, and hybrid enterprise integration using technologies such as webMethods, TIBCO, IBM InfoSphere DataStage, and Serv-U SFTP.",
-  },
-  {
-    title: "Database Capabilities - Database Transformation & Architecture Services",
-    description: "Expertise in advising, designing, and transforming enterprise database platforms across SQL Server, MySQL, PostgreSQL, and Oracle Database environments. Services encompass database strategy, architecture assessments, cloud adoption planning, modernization and consolidation initiatives, performance and cost optimization, and governance framework design, and technology transformation roadmaps that enable scalable, resilient, and future-ready data platforms.",
-  },
-  {
-    title: "Backup, Recovery & Resilience Transformation Services",
-    description: "Expertise in advising, architecting, and modernizing enterprise data protection and recovery capabilities across cloud, hybrid, and third-party platforms. Services include data protection strategy, recovery architecture, disaster recovery planning, business continuity enablement, backup modernization, governance framework design, and resilience assessments to support secure and reliable technology transformation.",
-  },
-  {
-    title: "Azure Arc Architecture & Transformation Services",
-    description: "Expertise in advising, architecting, and implementing Azure Arc solutions to unify governance, automation, and operations across hybrid, multi-cloud, and edge environments. Services include platform assessments, target-state architecture design, governance framework implementation, GitOps and automation strategies, observability architecture, and modernization roadmaps that enable scalable and resilient enterprise platforms.",
-  },
-  {
-    title: "DevOps, Platform Engineering & Infrastructure as Code Transformations",
-    description: "Expertise in designing and transforming enterprise DevOps and platform engineering capabilities through automated CI/CD, Infrastructure as Code, GitOps, and Internal Developer Platforms, enabling standardized cloud provisioning, policy-driven governance, secure software delivery, developer self-service, and scalable operations across multi-cloud and hybrid environments." ,
-  },
+  { title: "Cloud Infrastructure Architecture", serviceIndex: "01" },
+  { title: "Consultancy & Transformation Services", serviceIndex: "03" },
+  { title: "Cloud-Native Observability Solutions", serviceIndex: "04" },
+  { title: "Middleware & Integration Services", serviceIndex: "05" },
+  { title: "Database Capabilities - Database Transformation & Architecture Services", serviceIndex: "06" },
+  { title: "Backup, Recovery & Resilience Transformation Services", serviceIndex: "07" },
+  { title: "Azure Arc Architecture & Transformation Services", serviceIndex: "08" },
+  { title: "DevOps, Platform Engineering & Infrastructure as Code Transformations", serviceIndex: "02" },
 ] as const;
 
 const portfolioAtAGlanceOrder = new Map([
@@ -261,12 +237,11 @@ export interface PortfolioProps {
 export default function Portfolio({
   dark = false,
   services = DEFAULT_SERVICES,
-  heading = "CIS Professional Services - Portfolio",
+  heading = "Cloud Professional Services - Portfolio",
   hideHeader = false,
   hideFooter = false,
   className = "",
 }: PortfolioProps) {
-  const [active, setActive] = useState<number | null>(null);
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<number | null>(null);
   const orderedPortfolioAtAGlance = [...portfolioAtAGlance].sort(
     (a, b) =>
@@ -278,6 +253,11 @@ export default function Portfolio({
       (serviceOrder.get(a.index) ?? Number.MAX_SAFE_INTEGER) -
       (serviceOrder.get(b.index) ?? Number.MAX_SAFE_INTEGER),
   );
+  const selectedPortfolioEntry =
+    selectedPortfolioItem === null ? null : portfolioAtAGlance[selectedPortfolioItem];
+  const selectedService = selectedPortfolioEntry
+    ? orderedServices.find((service) => service.index === selectedPortfolioEntry.serviceIndex)
+    : undefined;
 
   useEffect(() => {
     if (selectedPortfolioItem === null) return;
@@ -302,14 +282,14 @@ export default function Portfolio({
     <div data-theme={dark ? "dark" : undefined} className={`portfolio-page min-h-screen w-full bg-[var(--portfolio-bg)] text-[var(--portfolio-ink)] ${className}`} style={{ fontFamily: "var(--font-sans, 'Inter', system-ui, sans-serif)" }}>
 
       {!hideHeader && (
-        <header className="px-8 md:px-16 pt-12 pb-8 flex items-start justify-between border-b border-[var(--portfolio-border)] bg-[var(--portfolio-card)]">
+        <header className="px-8 md:px-16 pt-12 pb-4 md:pb-6 flex items-start justify-between border-b border-[var(--portfolio-border)] bg-[var(--portfolio-card)]">
           <div>
             <span className="mono" style={{ fontSize: "20px", letterSpacing: "0.18em", color: "var(--portfolio-accent)", textTransform: "uppercase" }}>
               PORTFOLIO
             </span>
-            <h1 style={{ fontSize: "clamp(1.65rem, 3.75vw, 3rem)", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.03em", color: "var(--portfolio-ink)", marginTop: "0.4rem" }}>
-              {heading === "CIS Professional Services - Portfolio" ? (
-                <>CIS{" "}<span className="text-[var(--portfolio-primary)]">Professional Services</span></>
+            <h1 style={{ fontSize: "clamp(1.65rem, 3.75vw, 3rem)", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.03em", color: "var(--portfolio-ink)", marginTop: "0.25rem" }}>
+              {heading === "Cloud Professional Services - Portfolio" ? (
+                <>Cloud{" "}<span className="text-[var(--portfolio-primary)]">Professional Services</span></>
               ) : heading}
             </h1>
           </div>
@@ -318,7 +298,7 @@ export default function Portfolio({
 
       <section
         aria-label="Portfolio overview"
-        className="relative overflow-hidden border-b border-[var(--portfolio-border)] bg-[var(--portfolio-card)] px-4 py-9 md:px-8 md:py-12 lg:px-16 lg:py-14"
+        className="relative overflow-hidden border-b border-[var(--portfolio-border)] bg-[var(--portfolio-card)] px-4 py-4 md:px-8 md:py-6 lg:px-16 lg:py-8"
       >
         <div className="pointer-events-none absolute -right-32 -top-40 h-96 w-96 rounded-full bg-[var(--portfolio-primary-light)] opacity-60 blur-3xl" />
         <div className="pointer-events-none absolute -left-32 bottom-0 h-72 w-72 rounded-full bg-[var(--portfolio-primary-light)] opacity-30 blur-3xl" />
@@ -331,43 +311,45 @@ export default function Portfolio({
           <div className="mt-7 overflow-hidden rounded-2xl border border-[var(--portfolio-border)] bg-[var(--portfolio-border)] shadow-lg">
             <div className="h-1 bg-[var(--portfolio-accent)]" />
             <div className="grid gap-px bg-[var(--portfolio-border)] md:grid-cols-2">
-              {orderedPortfolioAtAGlance.map((item) => {
-                const itemIndex = portfolioAtAGlance.indexOf(item);
-                return (
-                  <article
-                    key={item.title}
-                    className="group relative bg-[var(--portfolio-card)] transition-colors duration-300 hover:bg-[var(--portfolio-panel)]"
-                  >
-                    <div className="absolute bottom-0 left-0 top-0 w-1 origin-y scale-y-0 bg-[var(--portfolio-accent)] transition-transform duration-300 group-hover:scale-y-100 group-focus-within:scale-y-100" />
-                    <h3>
-                      <button
-                        type="button"
-                        aria-haspopup="dialog"
-                        onClick={() => setSelectedPortfolioItem(itemIndex)}
-                        className="grid min-h-24 w-full cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 px-5 py-5 text-left text-sm font-bold leading-5 text-[var(--portfolio-ink)] outline-none transition-colors duration-300 hover:text-[var(--portfolio-primary)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--portfolio-accent)] md:px-6 md:text-base md:leading-6"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="h-2 w-2 rounded-full bg-[var(--portfolio-accent)] shadow-[0_0_0_5px_var(--portfolio-primary-light)]"
-                        />
-                        <span>{item.title}</span>
-                        <span
-                          aria-hidden="true"
-                          className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--portfolio-border)] text-xl font-normal text-[var(--portfolio-muted)] transition-[transform,border-color,color] duration-300 group-hover:translate-x-0.5 group-hover:border-[var(--portfolio-accent)] group-hover:text-[var(--portfolio-primary)]"
+              {orderedPortfolioAtAGlance
+                .filter((item) => orderedServices.some((service) => service.index === item.serviceIndex))
+                .map((item) => {
+                  const itemIndex = portfolioAtAGlance.indexOf(item);
+                  return (
+                    <article
+                      key={item.title}
+                      className="group relative bg-[var(--portfolio-card)] transition-colors duration-300 hover:bg-[var(--portfolio-panel)]"
+                    >
+                      <div className="absolute bottom-0 left-0 top-0 w-1 origin-y scale-y-0 bg-[var(--portfolio-accent)] transition-transform duration-300 group-hover:scale-y-100 group-focus-within:scale-y-100" />
+                      <h3>
+                        <button
+                          type="button"
+                          aria-haspopup="dialog"
+                          onClick={() => setSelectedPortfolioItem(itemIndex)}
+                          className="grid min-h-24 w-full cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 px-5 py-5 text-left text-sm font-bold leading-5 text-[var(--portfolio-ink)] outline-none transition-colors duration-300 hover:text-[var(--portfolio-primary)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--portfolio-accent)] md:px-6 md:text-base md:leading-6"
                         >
-                          ›
-                        </span>
-                      </button>
-                    </h3>
-                  </article>
-                );
-              })}
+                          <span
+                            aria-hidden="true"
+                            className="h-2 w-2 rounded-full bg-[var(--portfolio-accent)] shadow-[0_0_0_5px_var(--portfolio-primary-light)]"
+                          />
+                          <span>{item.title}</span>
+                          <span
+                            aria-hidden="true"
+                            className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--portfolio-border)] text-xl font-normal text-[var(--portfolio-muted)] transition-[transform,border-color,color] duration-300 group-hover:translate-x-0.5 group-hover:border-[var(--portfolio-accent)] group-hover:text-[var(--portfolio-primary)]"
+                          >
+                            ›
+                          </span>
+                        </button>
+                      </h3>
+                    </article>
+                  );
+                })}
             </div>
           </div>
         </div>
       </section>
 
-      {selectedPortfolioItem !== null && (
+      {selectedService && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
@@ -378,8 +360,7 @@ export default function Portfolio({
             role="dialog"
             aria-modal="true"
             aria-labelledby="portfolio-dialog-title"
-            aria-describedby="portfolio-dialog-description"
-            className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--portfolio-border)] bg-[var(--portfolio-card)] p-6 shadow-2xl md:p-10"
+            className="relative max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-xl border border-[var(--portfolio-border)] bg-[var(--portfolio-card)] p-4 shadow-2xl md:p-6"
           >
             <button
               type="button"
@@ -390,42 +371,38 @@ export default function Portfolio({
             >
               ×
             </button>
-            <div className="h-1 w-14 rounded-full bg-[var(--portfolio-accent)]" />
-            <h2
-              id="portfolio-dialog-title"
-              className="mt-6 max-w-xl pr-10 text-2xl font-extrabold leading-tight tracking-tight text-[var(--portfolio-ink)] md:text-3xl"
-            >
-              {portfolioAtAGlance[selectedPortfolioItem].title}
-            </h2>
-            <p
-              id="portfolio-dialog-description"
-              className="mt-5 text-base leading-8 text-[var(--portfolio-body)]"
-            >
-              {portfolioAtAGlance[selectedPortfolioItem].description}
-            </p>
+            <div className="px-2 pt-4 md:px-2">
+              <header className="flex items-center gap-4 border-b border-[var(--portfolio-border)] pb-6 pr-12 md:gap-6">
+                <img
+                  src={selectedService.image}
+                  alt=""
+                  className="h-16 w-16 shrink-0 rounded-xl border border-[var(--portfolio-border)] object-cover md:h-20 md:w-20"
+                />
+                <div className="min-w-0">
+                  <div aria-hidden="true" className="mb-4 h-1.5 w-20 rounded-full bg-[var(--portfolio-accent)]" />
+                  <h2
+                    id="portfolio-dialog-title"
+                    className="text-xl font-bold leading-tight tracking-tight text-[var(--portfolio-primary)] md:text-3xl"
+                  >
+                    {selectedService.title}
+                  </h2>
+                  <p className="mt-1 text-sm leading-6 text-[var(--portfolio-body)] md:text-base md:leading-7">
+                    {selectedService.creating}
+                  </p>
+                </div>
+              </header>
+              <div className="pt-6">
+                <ServiceCapabilities service={selectedService} />
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="bg-[var(--portfolio-card)] mt-4 mx-4 md:mx-8 rounded-xl border border-[var(--portfolio-border)] overflow-hidden shadow-sm">
-        <ul className="divide-y divide-[var(--portfolio-border)]">
-          {orderedServices.map((s, i) => (
-            <ServiceRow
-              key={s.index}
-              service={s}
-              index={i}
-              displayIndex={i + 1}
-              isActive={active === i}
-              onToggle={() => setActive(active === i ? null : i)}
-            />
-          ))}
-        </ul>
-      </div>
-
       {!hideFooter && (
         <footer className="px-8 md:px-16 py-8 mt-4 flex flex-col md:flex-row justify-between gap-4">
           <span className="mono" style={{ fontSize: "11px", letterSpacing: "0.14em", color: "var(--portfolio-faint)" }}>
-            © {new Date().getFullYear()} CIS Professional Services
+            © {new Date().getFullYear()} Cloud Professional Services
           </span>
         </footer>
       )}
@@ -433,160 +410,49 @@ export default function Portfolio({
   );
 }
 
-function ServiceRow({
-  service,
-  index,
-  displayIndex,
-  isActive,
-  onToggle,
-}: {
-  service: Service;
-  index: number;
-  displayIndex: number;
-  isActive: boolean;
-  onToggle: () => void;
-}) {
-  const definitionRef = useRef<HTMLDivElement>(null);
-  const [definitionHeight, setDefinitionHeight] = useState<number | null>(null);
-
-  useEffect(() => {
-    const definition = definitionRef.current;
-    if (!isActive || !definition) return;
-
-    const updateHeight = () => {
-      setDefinitionHeight(definition.getBoundingClientRect().height);
-    };
-    updateHeight();
-
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(definition);
-    return () => observer.disconnect();
-  }, [isActive, service.creating]);
-
+function ServiceCapabilities({ service }: { service: Service }) {
   return (
-    <li>
-      <button className="w-full text-left group cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--portfolio-accent)]" onClick={onToggle} aria-expanded={isActive} aria-controls={`service-panel-${service.index}`}>
-        <div
-          className="px-6 md:px-10 py-6 flex items-center gap-5 md:gap-8 transition-all duration-300"
-          style={{ background: isActive ? "var(--portfolio-panel)" : "transparent" }}
-        >
-          <span className="mono shrink-0" style={{ fontSize: "11px", letterSpacing: "0.14em", color: isActive ? "var(--portfolio-accent)" : "var(--portfolio-faint)", minWidth: "2rem", transition: "color 0.3s" }}>
-            {String(displayIndex).padStart(2, "0")}
-          </span>
-
-          <h2
-            className="flex-1 transition-colors duration-300 group-hover:text-[var(--portfolio-primary)]"
-            style={{ fontSize: "clamp(0.975rem, 1.875vw, 1.5rem)", fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.1, color: isActive ? "var(--portfolio-primary)" : "var(--portfolio-ink)" }}
-          >
-            {service.title}
-          </h2>
-
-          <span
-            className="ml-2 shrink-0 flex items-center justify-center"
-            style={{
-              width: "28px",
-              height: "28px",
-              border: `1.5px solid ${isActive ? "var(--portfolio-accent)" : "var(--portfolio-border)"}`,
-              borderRadius: "50%",
-              color: isActive ? "var(--portfolio-accent)" : "var(--portfolio-faint)",
-              fontSize: "16px",
-              lineHeight: 1,
-              transition: "all 0.3s",
-              background: isActive ? "var(--portfolio-primary-light)" : "transparent",
-            }}
-          >
-            {isActive ? "−" : "+"}
-          </span>
-        </div>
-      </button>
-
-      {/* Expanded panel */}
-      <div
-        id={`service-panel-${service.index}`}
-        className="grid transition-[grid-template-rows,opacity] duration-500 ease-in-out motion-reduce:transition-none"
-        style={{ gridTemplateRows: isActive ? "1fr" : "0fr", opacity: isActive ? 1 : 0 }}
-        inert={!isActive}
-      >
-        <div className="min-h-0 overflow-hidden border-t border-[var(--portfolio-border)] bg-[var(--portfolio-panel)]">
-          <div
-            className="grid items-start gap-6 px-6 py-8 md:grid-cols-[var(--definition-height)_minmax(0,1fr)] md:px-10"
-            style={{
-              "--definition-height": definitionHeight
-                ? `${definitionHeight}px`
-                : "10rem",
-            } as CSSProperties}
-          >
-
-            {/* Left — image */}
-            <div className="aspect-video overflow-hidden rounded-lg border border-[var(--portfolio-border)] md:aspect-square md:h-[var(--definition-height)] md:w-[var(--definition-height)]" style={{ background: "#E5E7EB" }}>
-                <img
-                  src={service.image}
-                  alt={service.title}
-                  onError={(event) => {
-                    const fallback = FALLBACK_IMAGES[index % FALLBACK_IMAGES.length];
-                    if (event.currentTarget.src !== fallback) event.currentTarget.src = fallback;
+    <>
+      <span className="mono" style={{ fontSize: "10px", letterSpacing: "0.16em", color: "var(--portfolio-muted)", textTransform: "uppercase", fontWeight: 500 }}>
+        Core Capabilities
+      </span>
+      {service.capabilities.length > 0 && (
+        <ul className="mt-3 flex flex-col gap-2">
+          {service.capabilities.map((cap, i) => {
+            const labelled = cap.match(/^(.+?)(\s+-\s+|:\s+)(.+)$/);
+            return (
+              <li key={i} className="flex items-start gap-3">
+                <span
+                  aria-hidden="true"
+                  className="mt-[6px] shrink-0"
+                  style={{
+                    width: "6px",
+                    height: "6px",
+                    borderRadius: "50%",
+                    background: "var(--portfolio-accent)",
+                    display: "inline-block",
                   }}
-                  className="w-full h-full object-cover"
-                  style={{ transition: "transform 0.7s cubic-bezier(0.4,0,0.2,1)", transform: isActive ? "scale(1)" : "scale(1.06)" }}
                 />
-            </div>
-
-            {/* Definition */}
-            <div ref={definitionRef} className="min-w-0">
-              <div>
-                <span className="mono" style={{ fontSize: "10px", letterSpacing: "0.16em", color: "var(--portfolio-accent)", textTransform: "uppercase", fontWeight: 500 }}>
-                  Definition
+                <span style={{ fontSize: "0.9rem", color: "var(--portfolio-detail)", lineHeight: 1.65, fontWeight: 400 }}>
+                  {labelled ? <><strong className="font-semibold text-[var(--portfolio-primary)]">{labelled[1]}{labelled[2]}</strong>{labelled[3]}</> : cap}
                 </span>
-                <p style={{ marginTop: "0.5rem", fontWeight: 400, fontSize: "0.975rem", lineHeight: 1.8, color: "var(--portfolio-body)" }}>
-                  {service.creating}
-                </p>
-              </div>
-            </div>
-
-            {/* Core Capabilities */}
-            {(service.capabilities.length > 0 || (service.capabilityGroups?.length ?? 0) > 0) && (
-              <div className="md:col-span-2 border-t border-[var(--portfolio-border)] pt-6">
-                <span className="mono" style={{ fontSize: "10px", letterSpacing: "0.16em", color: "var(--portfolio-muted)", textTransform: "uppercase", fontWeight: 500 }}>
-                  Core Capabilities
-                </span>
-                {service.capabilities.length > 0 && <ul className="mt-3 flex flex-col gap-2">
-                  {service.capabilities.map((cap, i) => {
-                    const labelled = cap.match(/^(.+?)(\s+-\s+|:\s+)(.+)$/);
-                    return <li key={i} className="flex items-start gap-3">
-                      {/* Bullet */}
-                      <span
-                        className="shrink-0 mt-[6px]"
-                        style={{
-                          width: "6px",
-                          height: "6px",
-                          borderRadius: "50%",
-                          background: "var(--portfolio-accent)",
-                          display: "inline-block",
-                        }}
-                      />
-                      <span style={{ fontSize: "0.9rem", color: "var(--portfolio-detail)", lineHeight: 1.65, fontWeight: 400 }}>
-                        {labelled ? <><strong className="font-semibold text-[var(--portfolio-primary)]">{labelled[1]}{labelled[2]}</strong>{labelled[3]}</> : cap}
-                      </span>
-                    </li>;
-                  })}
-                </ul>}
-                {service.capabilityGroups && service.capabilityGroups.length > 0 && (
-                  <ul className="mt-4 grid gap-3">
-                    {service.capabilityGroups.map((group) => (
-                      <li key={group.title} className="rounded-xl border-2 border-dotted border-[var(--portfolio-warning)] bg-[var(--portfolio-warning-bg)] p-4">
-                        <span className="font-semibold text-[var(--portfolio-primary)]">{group.title}</span>
-                        <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--portfolio-detail)] marker:text-[var(--portfolio-warning)]">
-                          {group.items.map((item) => <li key={item}>{item}</li>)}
-                        </ul>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </li>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {service.capabilityGroups && service.capabilityGroups.length > 0 && (
+        <ul className="mt-4 grid gap-3">
+          {service.capabilityGroups.map((group) => (
+            <li key={group.title} className="rounded-xl border-2 border-dotted border-[var(--portfolio-warning)] bg-[var(--portfolio-warning-bg)] p-4">
+              <span className="font-semibold text-[var(--portfolio-primary)]">{group.title}</span>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--portfolio-detail)] marker:text-[var(--portfolio-warning)]">
+                {group.items.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
