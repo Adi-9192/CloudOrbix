@@ -58,6 +58,8 @@ function validateProject(body, requireCompleteEffort = true) {
   const requestedDate = String(body?.requestedDate || new Date().toISOString().slice(0, 10));
   const durationMonths = Number(body?.durationMonths ?? 0);
   const durationDays = Number(body?.durationDays ?? 0);
+  const directEntry = body?.directEntry === true;
+  const directBudget = Number(body?.directBudget ?? 0);
   const periods = buildPeriods(requestedDate, durationMonths, durationDays);
   const projectType = String(body?.projectType || '');
   const projectStatus = String(body?.projectStatus || 'Tentative');
@@ -116,9 +118,10 @@ function validateProject(body, requireCompleteEffort = true) {
   if (requestorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requestorEmail)) return { error: 'Enter a valid requestor email address.' };
   if (cloud && !['aws', 'azure', 'gcp', 'multi cloud'].includes(cloud)) return { error: 'Select AWS, Azure, GCP, or Multi Cloud.' };
   if (!Number.isFinite(allowance) || allowance < 0 || allowance > 100) return { error: 'Allowance must be between 0 and 100 percent.' };
-  if (!resources.length) return { error: 'Add at least one resource row.' };
+  if (directEntry && (!Number.isFinite(directBudget) || directBudget <= 0 || directBudget > 9999999999999999 || Math.abs(directBudget * 100 - Math.round(directBudget * 100)) > 1e-7)) return { error: 'Enter a total project budget greater than zero with up to two decimal places.' };
+  if (!directEntry && !resources.length) return { error: 'Add at least one resource row.' };
 
-  for (const resource of resources) {
+  for (const resource of directEntry ? [] : resources) {
     if (!String(resource?.name || '').trim() || !String(resource?.grade || '').trim()) return { error: 'Every resource needs a name and grade.' };
     if (!resourceTypes.includes(resource.resourceType)) return { error: 'Select a valid resource type for every row.' };
     if (periods.some((period) => {
@@ -133,7 +136,7 @@ function validateProject(body, requireCompleteEffort = true) {
       return { error: 'Daily man-days must be between 0 and the project duration with up to two decimal places.' };
     }
   }
-  if (requireCompleteEffort) {
+  if (requireCompleteEffort && !directEntry) {
     for (let index = 0; index < durationMonths; index += 1) {
       if (!resources.some((resource) => resource.planType === 'monthly' && Number(resource.allocations?.[`month-${index + 1}`] ?? 0) > 0)) {
         return { error: 'Enter resource allocations for every project month.' };
@@ -143,7 +146,7 @@ function validateProject(body, requireCompleteEffort = true) {
       return { error: 'Complete the daily plan with man-days and FTE effort.' };
     }
   }
-  return { value: { accountName, clientName, year, currency, requestedDate, durationMonths, durationDays, periods, projectType, projectStatus, requestFromBy, requestorEmail, region, cloud, projectOverview, assumption, outOfScope, inScope, allowance, workingDays, resources } };
+  return { value: { accountName, clientName, year, currency, requestedDate, durationMonths, durationDays, directEntry, directBudget, periods, projectType, projectStatus, requestFromBy, requestorEmail, region, cloud, projectOverview, assumption, outOfScope, inScope, allowance, workingDays, resources: directEntry ? [] : resources } };
 }
 
 async function saveResourceVersion(pool, year, userId, rows) {
@@ -234,7 +237,7 @@ router.get('/rates/options/:year', async (req, res, next) => {
     const year = Number(req.params.year);
     const currency = String(req.query.currency || 'INR').toUpperCase();
     if (!currencies.includes(currency)) return res.status(400).json({ message: 'Select a supported currency.' });
-    const [gradesResult, yearsResult] = await Promise.all([
+    const [gradesResult, yearsResult, directYearsResult] = await Promise.all([
       pool.query('SELECT DISTINCT r.grade FROM resource_rate_cards r JOIN resource_rate_card_versions v ON v.id = r.version_id WHERE v.[year] = $1 ORDER BY r.grade', [year]),
       pool.query(`
         SELECT DISTINCT v.[year] AS year
@@ -248,10 +251,21 @@ router.get('/rates/options/:year', async (req, res, next) => {
           ))
         ORDER BY v.[year] DESC
       `, [year, currency]),
+      pool.query(`
+        SELECT DISTINCT v.[year] AS year
+        FROM currency_exchange_rate_versions v
+        WHERE $1 = 'INR' OR EXISTS (
+          SELECT 1
+          FROM currency_exchange_rates r
+          WHERE r.version_id = v.id AND r.currency_pair = $1 + '/INR'
+        )
+        ORDER BY v.[year] DESC
+      `, [currency]),
     ]);
     return res.json({
       grades: gradesResult.rows.map((row) => row.grade),
       years: yearsResult.rows.map((row) => Number(row.year)),
+      directYears: directYearsResult.rows.map((row) => Number(row.year)),
       resourceTypes,
       currencies,
     });
@@ -376,7 +390,9 @@ router.post('/calculate', async (req, res, next) => {
   const data = validation.value;
   try {
     const [rateResult, exchangeResult] = await Promise.all([
-      pool.query('SELECT r.grade, r.resource_type, r.daily_rate FROM resource_rate_cards r JOIN resource_rate_card_versions v ON v.id = r.version_id WHERE v.[year] = $1', [data.year]),
+      data.directEntry
+        ? Promise.resolve({ rows: [] })
+        : pool.query('SELECT r.grade, r.resource_type, r.daily_rate FROM resource_rate_cards r JOIN resource_rate_card_versions v ON v.id = r.version_id WHERE v.[year] = $1', [data.year]),
       data.currency === 'INR' ? Promise.resolve({ rows: [{ rate_to_inr: 1 }] }) : pool.query('SELECT r.rate_to_inr FROM currency_exchange_rates r JOIN currency_exchange_rate_versions v ON v.id = r.version_id WHERE v.[year] = $1 AND r.currency_pair = $2', [data.year, `${data.currency}/INR`]),
     ]);
     const rateMap = new Map(rateResult.rows.map((row) => [`${row.grade}|${row.resource_type}`, Number(row.daily_rate)]));
@@ -392,10 +408,18 @@ router.post('/calculate', async (req, res, next) => {
       }
       return { id: resource.id ?? String(index), total, missingRate: Boolean(resource.grade && rate === undefined) };
     });
-    const baseCost = resourceCosts.reduce((sum, row) => sum + row.total, 0);
-    const allowanceCost = baseCost * data.allowance / 100;
-    const grandTotal = baseCost + allowanceCost;
     const exchangeRate = Number(exchangeResult.rows[0]?.rate_to_inr || 0);
+    const directGrandTotal = data.directEntry ? data.directBudget * exchangeRate : 0;
+    const directBaseCost = directGrandTotal / (1 + data.allowance / 100);
+    const baseCost = data.directEntry
+      ? directBaseCost
+      : resourceCosts.reduce((sum, row) => sum + row.total, 0);
+    const allowanceCost = data.directEntry
+      ? directGrandTotal - directBaseCost
+      : baseCost * data.allowance / 100;
+    const grandTotal = data.directEntry
+      ? directGrandTotal
+      : baseCost + allowanceCost;
     return res.json({ resourceCosts, baseCost, allowanceCost, grandTotal, exchangeRate, selectedTotal: exchangeRate ? grandTotal / exchangeRate : 0 });
   } catch (error) { return next(error); }
 });
@@ -509,8 +533,10 @@ router.get('/projects/:id', async (req, res, next) => {
 
 async function persistProject(pool, userId, data, status, existingId = null, excludedRequestId = null) {
   await ensureUniqueRfpName(pool, data.accountName, existingId, excludedRequestId);
-  const rateResult = await pool.query('SELECT r.grade, r.resource_type, r.daily_rate FROM resource_rate_cards r JOIN resource_rate_card_versions v ON v.id = r.version_id WHERE v.[year] = $1', [data.year]);
-  if (!rateResult.rows.length) throw Object.assign(new Error(`No resource rate card exists for ${data.year}. Add rates in Resource Rate Card first.`), { status: 400 });
+  const rateResult = data.directEntry
+    ? { rows: [] }
+    : await pool.query('SELECT r.grade, r.resource_type, r.daily_rate FROM resource_rate_cards r JOIN resource_rate_card_versions v ON v.id = r.version_id WHERE v.[year] = $1', [data.year]);
+  if (!data.directEntry && !rateResult.rows.length) throw Object.assign(new Error(`No resource rate card exists for ${data.year}. Add rates in Resource Rate Card first.`), { status: 400 });
   const rateMap = new Map(rateResult.rows.map((row) => [`${row.grade}|${row.resource_type}`, Number(row.daily_rate)]));
   let baseCost = 0;
   for (const resource of data.resources) {
@@ -521,24 +547,27 @@ async function persistProject(pool, userId, data, status, existingId = null, exc
       if (resource.planType === 'daily' && period.key === 'days') baseCost += rate * Number(resource.dailyManDays ?? 0) * Number(resource.allocations?.days ?? 0);
       }
   }
-  const allowanceCost = baseCost * data.allowance / 100;
   const exchangeResult = data.currency === 'INR' ? { rows: [{ rate_to_inr: 1 }] } : await pool.query('SELECT r.rate_to_inr FROM currency_exchange_rates r JOIN currency_exchange_rate_versions v ON v.id = r.version_id WHERE v.[year] = $1 AND r.currency_pair = $2', [data.year, `${data.currency}/INR`]);
   const exchangeRate = Number(exchangeResult.rows[0]?.rate_to_inr);
   if (!exchangeRate) throw Object.assign(new Error(`No ${data.currency}/INR exchange rate exists for ${data.year}.`), { status: 400 });
-  const grandTotal = baseCost + allowanceCost;
+  const grandTotal = data.directEntry
+    ? data.directBudget * exchangeRate
+    : baseCost * (1 + data.allowance / 100);
+  if (data.directEntry) baseCost = grandTotal / (1 + data.allowance / 100);
+  const allowanceCost = grandTotal - baseCost;
   const currencyTotal = grandTotal / exchangeRate;
   const startMonth = data.periods[0].month;
   const endMonth = data.periods[data.periods.length - 1].month;
   const initiatedAt = data.projectStatus === 'Project Initiated' ? new Date() : null;
-  const values = [data.accountName, data.clientName, data.year, data.currency, monthDate(startMonth), monthDate(endMonth), data.allowance, data.workingDays, false, '', status, userId, data.projectType || null, data.projectStatus, data.requestFromBy || null, data.requestorEmail || null, data.requestedDate, data.region || null, data.cloud || null, data.projectOverview || null, data.assumption || null, data.outOfScope || null, data.inScope || null, data.durationMonths, data.durationDays, initiatedAt];
+  const values = [data.accountName, data.clientName, data.year, data.currency, monthDate(startMonth), monthDate(endMonth), data.allowance, data.workingDays, false, '', status, userId, data.projectType || null, data.projectStatus, data.requestFromBy || null, data.requestorEmail || null, data.requestedDate, data.region || null, data.cloud || null, data.projectOverview || null, data.assumption || null, data.outOfScope || null, data.inScope || null, data.durationMonths, data.durationDays, initiatedAt, data.directEntry, data.directEntry ? data.directBudget : 0];
   const sql = [];
   if (existingId) {
     values.push(existingId);
-    sql.push('UPDATE rfp_projects SET project_name = $1, client_name = $2, [year] = $3, currency_code = $4, start_month = $5, end_month = $6, allowance_percent = $7, working_days_per_month = $8, end_month_half_month = $9, notes = $10, status = $11, updated_by = $12, project_type = $13, project_status = $14, request_from_by = $15, requestor_email = $16, requested_date = $17, region = $18, cloud = $19, project_overview = $20, assumption = $21, out_of_scope = $22, in_scope = $23, duration_months = $24, duration_days = $25, initiated_at = CASE WHEN $14 = N\'Project Initiated\' AND (project_status <> N\'Project Initiated\' OR initiated_at IS NULL) THEN COALESCE(initiated_at, $26) ELSE initiated_at END, updated_at = SYSUTCDATETIME() WHERE id = $27; IF @@ROWCOUNT = 0 THROW 50001, \'Estimate not found\', 1; DELETE FROM rfp_resources WHERE project_id = $27;');
+    sql.push('UPDATE rfp_projects SET project_name = $1, client_name = $2, [year] = $3, currency_code = $4, start_month = $5, end_month = $6, allowance_percent = $7, working_days_per_month = $8, end_month_half_month = $9, notes = $10, status = $11, updated_by = $12, project_type = $13, project_status = $14, request_from_by = $15, requestor_email = $16, requested_date = $17, region = $18, cloud = $19, project_overview = $20, assumption = $21, out_of_scope = $22, in_scope = $23, duration_months = $24, duration_days = $25, initiated_at = CASE WHEN $14 = N\'Project Initiated\' AND (project_status <> N\'Project Initiated\' OR initiated_at IS NULL) THEN COALESCE(initiated_at, $26) ELSE initiated_at END, direct_entry = $27, direct_budget = $28, updated_at = SYSUTCDATETIME() WHERE id = $29; IF @@ROWCOUNT = 0 THROW 50001, \'Estimate not found\', 1; DELETE FROM rfp_resources WHERE project_id = $29;');
   } else {
-    sql.push('DECLARE @newProjectId INT; INSERT INTO rfp_projects (project_name, client_name, [year], currency_code, start_month, end_month, allowance_percent, working_days_per_month, end_month_half_month, notes, status, created_by, updated_by, project_type, project_status, request_from_by, requestor_email, requested_date, region, cloud, project_overview, assumption, out_of_scope, in_scope, duration_months, duration_days, initiated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26); SET @newProjectId = CAST(SCOPE_IDENTITY() AS INT);');
+    sql.push('DECLARE @newProjectId INT; INSERT INTO rfp_projects (project_name, client_name, [year], currency_code, start_month, end_month, allowance_percent, working_days_per_month, end_month_half_month, notes, status, created_by, updated_by, project_type, project_status, request_from_by, requestor_email, requested_date, region, cloud, project_overview, assumption, out_of_scope, in_scope, duration_months, duration_days, initiated_at, direct_entry, direct_budget) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28); SET @newProjectId = CAST(SCOPE_IDENTITY() AS INT);');
   }
-  const projectRef = existingId ? '$27' : '@newProjectId';
+  const projectRef = existingId ? '$29' : '@newProjectId';
   let allocationParameters = values.length + 1;
   for (let index = 0; index < data.resources.length; index += 1) {
     const resource = data.resources[index];
@@ -561,7 +590,7 @@ async function persistProject(pool, userId, data, status, existingId = null, exc
   sql.push(`MERGE rfp_cost_summary AS target USING (SELECT ${projectRef} AS project_id) AS source ON target.project_id = source.project_id WHEN MATCHED THEN UPDATE SET base_cost_inr = $${allocationParameters}, allowance_cost_inr = $${allocationParameters + 1}, grand_total_inr = $${allocationParameters + 2}, selected_currency_total = $${allocationParameters + 3}, exchange_rate = $${allocationParameters + 4}, updated_at = SYSUTCDATETIME() WHEN NOT MATCHED THEN INSERT (project_id, base_cost_inr, allowance_cost_inr, grand_total_inr, selected_currency_total, exchange_rate) VALUES (source.project_id, $${allocationParameters}, $${allocationParameters + 1}, $${allocationParameters + 2}, $${allocationParameters + 3}, $${allocationParameters + 4});`);
   sql.push(`UPDATE clients SET revenue = $${allocationParameters + 3}, currency_code = $${allocationParameters + 5}, project_overview = $${allocationParameters + 6}, assumption = $${allocationParameters + 7}, out_of_scope = $${allocationParameters + 8}, in_scope = $${allocationParameters + 9}, updated_at = SYSUTCDATETIME() WHERE rfp_project_id = ${projectRef};`);
   values.push(baseCost, allowanceCost, grandTotal, currencyTotal, exchangeRate, data.currency, data.projectOverview || null, data.assumption || null, data.outOfScope || null, data.inScope || null);
-  sql.push(existingId ? 'SELECT $27 AS id;' : 'SELECT @newProjectId AS id;');
+  sql.push(existingId ? 'SELECT $29 AS id;' : 'SELECT @newProjectId AS id;');
   const batch = `BEGIN TRY BEGIN TRANSACTION; ${sql.join('\n')} COMMIT TRANSACTION; END TRY BEGIN CATCH IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION; THROW; END CATCH;`;
   const result = await pool.query(batch, values);
   return { id: existingId || result.rows[0]?.id, status, initiatedAt, summary: { baseCostInr: baseCost, allowanceCostInr: allowanceCost, grandTotalInr: grandTotal, selectedCurrencyTotal: currencyTotal, exchangeRate } };
@@ -644,6 +673,8 @@ router.post('/projects/:id/duplicate', async (req, res, next) => {
       inScope: source.in_scope,
       durationMonths,
       durationDays,
+      directEntry: Boolean(source.direct_entry),
+      directBudget: Number(source.direct_budget || 0),
       allowancePercent: source.allowance_percent,
       workingDaysPerMonth: WORKING_DAYS_PER_MONTH,
       resources: mappedResources,

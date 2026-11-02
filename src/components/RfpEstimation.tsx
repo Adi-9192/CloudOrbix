@@ -51,6 +51,8 @@ type Estimate = {
   inScope: string;
   durationMonths: number;
   durationDays: number;
+  directEntry: boolean;
+  directBudget: number | string;
   allowancePercent: number;
   workingDaysPerMonth: number;
   status: string;
@@ -84,6 +86,7 @@ type RatePayload = {
   currencies: string[];
   grades?: string[];
   years?: number[];
+  directYears?: number[];
 };
 type EstimateCalculation = {
   resourceCosts: Array<{
@@ -174,6 +177,8 @@ const emptyEstimate = (): Estimate => {
     inScope: "",
     durationMonths: 3,
     durationDays: 0,
+    directEntry: false,
+    directBudget: "",
     allowancePercent: 0,
     workingDaysPerMonth: WORKING_DAYS_PER_MONTH,
     status: "Draft",
@@ -268,6 +273,12 @@ const restoreEstimateDraft = (value: unknown): Estimate => {
     inScope: String(stored.inScope || ""),
     durationMonths,
     durationDays,
+    directEntry: Boolean(stored.directEntry),
+    directBudget:
+      typeof stored.directBudget === "string" ||
+      typeof stored.directBudget === "number"
+        ? stored.directBudget
+        : "",
     allowancePercent: Number(stored.allowancePercent || 0),
     workingDaysPerMonth: WORKING_DAYS_PER_MONTH,
     status: String(stored.status || "Draft"),
@@ -433,6 +444,7 @@ export default function RfpEstimation({
             currencies: options.currencies,
             grades: options.grades,
             years: options.years,
+            directYears: options.directYears,
           });
       })
       .catch((reason) => {
@@ -450,17 +462,21 @@ export default function RfpEstimation({
 
   useEffect(() => {
     if (isAdmin) return;
-    const activeResources = estimate.resources.filter((resource) =>
-      resource.planType === "monthly"
-        ? estimate.durationMonths > 0
-        : estimate.durationDays > 0,
-    );
+    const activeResources = estimate.directEntry
+      ? []
+      : estimate.resources.filter((resource) =>
+          resource.planType === "monthly"
+            ? estimate.durationMonths > 0
+            : estimate.durationDays > 0,
+        );
     const validForCalculation =
       estimate.accountName.trim() &&
-      activeResources.length > 0 &&
-      activeResources.every(
-        (resource) => resource.name.trim() && resource.grade,
-      );
+      (estimate.directEntry
+        ? Number(estimate.directBudget) > 0
+        : activeResources.length > 0 &&
+          activeResources.every(
+            (resource) => resource.name.trim() && resource.grade,
+          ));
     if (!validForCalculation) {
       setCalculation(null);
       return;
@@ -535,11 +551,13 @@ export default function RfpEstimation({
       (_, index) => ({ key: `month-${index + 1}`, label: `Month ${index + 1}`, days: null as number | null }),
     );
   }, [estimate.durationMonths]);
-  const activeResources = estimate.resources.filter((resource) =>
-    resource.planType === "monthly"
-      ? estimate.durationMonths > 0
-      : estimate.durationDays > 0,
-  );
+  const activeResources = estimate.directEntry
+    ? []
+    : estimate.resources.filter((resource) =>
+        resource.planType === "monthly"
+          ? estimate.durationMonths > 0
+          : estimate.durationDays > 0,
+      );
   const monthlyResources = activeResources.filter(
     (resource) => resource.planType === "monthly",
   );
@@ -612,16 +630,34 @@ export default function RfpEstimation({
   });
   const localBaseCost = resourceCosts.reduce((sum, row) => sum + row.total, 0);
   const localAllowanceCost = (localBaseCost * Number(estimate.allowancePercent || 0)) / 100;
-  const baseCost = isAdmin ? localBaseCost : calculation?.baseCost || 0;
-  const allowanceCost = isAdmin
-    ? localAllowanceCost
-    : calculation?.allowanceCost || 0;
-  const grandTotal = baseCost + allowanceCost;
   const exchangeRate = isAdmin
     ? estimate.currency === "INR"
       ? 1
       : yearlyExchange.get(`${estimate.currency}/INR`) || 0
     : calculation?.exchangeRate || 0;
+  const enteredDirectBudget = Number(estimate.directBudget || 0);
+  const directGrandTotal = enteredDirectBudget * exchangeRate;
+  const directAllowanceCost = directGrandTotal -
+    directGrandTotal / (1 + Number(estimate.allowancePercent || 0) / 100);
+  const baseCost = estimate.directEntry
+    ? isAdmin
+      ? directGrandTotal - directAllowanceCost
+      : calculation?.baseCost || 0
+    : isAdmin
+      ? localBaseCost
+      : calculation?.baseCost || 0;
+  const allowanceCost = estimate.directEntry
+    ? isAdmin
+      ? directAllowanceCost
+      : calculation?.allowanceCost || 0
+    : isAdmin
+      ? localAllowanceCost
+      : calculation?.allowanceCost || 0;
+  const grandTotal = estimate.directEntry
+    ? isAdmin
+      ? directGrandTotal
+      : calculation?.grandTotal || 0
+    : baseCost + allowanceCost;
   const selectedTotal = isAdmin
     ? exchangeRate
       ? grandTotal / exchangeRate
@@ -795,15 +831,19 @@ export default function RfpEstimation({
         inScope: project.in_scope || "",
         durationMonths: Number(project.duration_months || 0),
         durationDays: Number(project.duration_days || 0),
+        directEntry: Boolean(project.direct_entry),
+        directBudget: Number(project.direct_budget || 0),
         allowancePercent: Number(project.allowance_percent || 0),
         workingDaysPerMonth: WORKING_DAYS_PER_MONTH,
         status: project.status,
-        resources: result.resources.map((row: ResourceRow) => ({
-          ...row,
-          id: String(row.id),
-          planType: row.planType || "monthly",
-          dailyManDays: Number(row.dailyManDays || 0),
-        })),
+        resources: result.resources.length
+          ? result.resources.map((row: ResourceRow) => ({
+              ...row,
+              id: String(row.id),
+              planType: row.planType || "monthly",
+              dailyManDays: Number(row.dailyManDays || 0),
+            }))
+          : emptyEstimate().resources,
       });
       setResourcePlanTab(Number(project.duration_months || 0) > 0 ? "monthly" : "daily");
       setSection("estimate");
@@ -842,7 +882,17 @@ export default function RfpEstimation({
       setError("Enter at least one month, or a duration of 1 to 365 days.");
       return;
     }
-    if (
+    if (estimate.directEntry) {
+      const directBudget = Number(estimate.directBudget);
+      if (
+        !Number.isFinite(directBudget) ||
+        directBudget <= 0 ||
+        Math.abs(directBudget * 100 - Math.round(directBudget * 100)) > 1e-7
+      ) {
+        setError("Enter a total project budget greater than zero with up to two decimal places.");
+        return;
+      }
+    } else if (
       durationDays > 0 &&
       estimate.resources.some(
         (resource) => Number(resource.dailyManDays || 0) > durationDays,
@@ -852,19 +902,20 @@ export default function RfpEstimation({
       return;
     }
     if (
-      (durationMonths > 0 &&
+      !estimate.directEntry &&
+      ((durationMonths > 0 &&
         periods.some(
           (period) =>
             !monthlyResources.some(
               (resource) => Number(resource.allocations[period.key] || 0) > 0,
             ),
         )) ||
-      (durationDays > 0 &&
-        !dailyResources.some(
-          (resource) =>
-            Number(resource.dailyManDays || 0) > 0 &&
-            Number(resource.allocations.days || 0) > 0,
-        ))
+        (durationDays > 0 &&
+          !dailyResources.some(
+            (resource) =>
+              Number(resource.dailyManDays || 0) > 0 &&
+              Number(resource.allocations.days || 0) > 0,
+          )))
     ) {
       setError(
         "Enter resource allocations for every project month and complete the daily plan when the duration includes days.",
@@ -892,15 +943,18 @@ export default function RfpEstimation({
         accountName: estimate.accountName,
         durationMonths,
         durationDays,
+        directBudget: Number(estimate.directBudget || 0),
         status,
-        resources: activeResources.map(({ name, grade, resourceType, allocations, dailyManDays, planType }) => ({
-          planType,
-          name,
-          grade,
-          resourceType,
-          allocations,
-          dailyManDays: durationDays > 0 ? dailyManDays : 0,
-        })),
+        resources: estimate.directEntry
+          ? []
+          : activeResources.map(({ name, grade, resourceType, allocations, dailyManDays, planType }) => ({
+              planType,
+              name,
+              grade,
+              resourceType,
+              allocations,
+              dailyManDays: durationDays > 0 ? dailyManDays : 0,
+            })),
       };
       const result = await api(
         estimate.id ? `/projects/${estimate.id}` : "/projects",
@@ -1027,7 +1081,18 @@ export default function RfpEstimation({
     ]),
   ].sort((a, b) => b - a);
   const estimateYearOptions = useMemo(() => {
-    if (!isAdmin) return ratePayload?.years || [];
+    if (!isAdmin) {
+      return estimate.directEntry
+        ? [
+            ...new Set([
+              ...(ratePayload?.directYears || []),
+              ...(estimate.currency === "INR"
+                ? [new Date().getFullYear(), Number(estimate.year)]
+                : []),
+            ]),
+          ].sort((a, b) => b - a)
+        : ratePayload?.years || [];
+    }
     const resourceYears = new Set(
       (ratePayload?.resourceRates || []).map((row) => Number(row.year)),
     );
@@ -1036,10 +1101,19 @@ export default function RfpEstimation({
         .filter((row) => row.currency_pair === `${estimate.currency}/INR`)
         .map((row) => Number(row.year)),
     );
-    return [...resourceYears]
+    const availableYears = estimate.directEntry
+      ? new Set([
+          ...(ratePayload?.currencyVersions || []).map((row) => Number(row.year)),
+          ...(ratePayload?.resourceVersions || []).map((row) => Number(row.year)),
+          ...(estimate.currency === "INR"
+            ? [new Date().getFullYear(), Number(estimate.year)]
+            : []),
+        ])
+      : resourceYears;
+    return [...availableYears]
       .filter((year) => estimate.currency === "INR" || exchangeYears.has(year))
       .sort((a, b) => b - a);
-  }, [estimate.currency, isAdmin, ratePayload]);
+  }, [estimate.currency, estimate.directEntry, isAdmin, ratePayload]);
 
   useEffect(() => {
     if (
@@ -1466,6 +1540,29 @@ export default function RfpEstimation({
                     <label className="text-xs font-semibold" style={labelStyle}>Number of Days<input type="number" min="0" max="365" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.durationDays} onChange={(event) => patchEstimate({ durationDays: Number(event.target.value) })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Allowance %<input type="number" min="0" max="100" step="0.1" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.allowancePercent} onChange={(event) => patchEstimate({ allowancePercent: Number(event.target.value) })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Working Days / Month<input type="number" className={`${inputClass} mt-1`} style={inputStyle} value={WORKING_DAYS_PER_MONTH} readOnly aria-readonly="true" /></label>
+                    <fieldset className="sm:col-span-2 xl:col-span-4">
+                      <legend className="text-xs font-semibold" style={labelStyle}>Estimation method</legend>
+                      <div className="mt-2 flex flex-wrap gap-4 text-sm">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="estimation-method"
+                            checked={!estimate.directEntry}
+                            onChange={() => patchEstimate({ directEntry: false })}
+                          />
+                          Resource plan
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="estimation-method"
+                            checked={estimate.directEntry}
+                            onChange={() => patchEstimate({ directEntry: true })}
+                          />
+                          Direct entry
+                        </label>
+                      </div>
+                    </fieldset>
                     {([
                       ["Project Overview", "projectOverview"],
                       ["In Scope", "inScope"],
@@ -1485,19 +1582,23 @@ export default function RfpEstimation({
                   >
                     <div>
                       <h2 className="text-base font-bold">
-                        {resourcePlanTab === "monthly"
-                          ? "Monthly resource plan"
-                          : "Daily resource plan"}
+                        {estimate.directEntry
+                          ? "Direct project budget"
+                          : resourcePlanTab === "monthly"
+                            ? "Monthly resource plan"
+                            : "Daily resource plan"}
                       </h2>
                       <p className="mt-1 text-xs" style={{ color: muted }}>
-                        {resourcePlanTab === "monthly"
-                          ? `${periods.length} monthly allocation periods`
-                          : `${estimate.durationDays} project days · daily effort is Man Days × FTE`} · rates automatically use{" "}
-                        {estimate.year} version
+                        {estimate.directEntry
+                          ? "Enter the total budget in the selected currency. The project duration is taken from Project Information."
+                          : resourcePlanTab === "monthly"
+                            ? `${periods.length} monthly allocation periods`
+                            : `${estimate.durationDays} project days · daily effort is Man Days × FTE`}{" "}
+                        {!estimate.directEntry && <>· rates automatically use {estimate.year} version</>}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      {estimate.durationMonths > 0 && (
+                      {!estimate.directEntry && estimate.durationMonths > 0 && (
                         <button
                           type="button"
                           className={resourcePlanTab === "monthly" ? "rfp-primary" : "rfp-action"}
@@ -1507,7 +1608,7 @@ export default function RfpEstimation({
                           Monthly
                         </button>
                       )}
-                      {estimate.durationDays > 0 && (
+                      {!estimate.directEntry && estimate.durationDays > 0 && (
                         <button
                           type="button"
                           className={resourcePlanTab === "daily" ? "rfp-primary" : "rfp-action"}
@@ -1517,7 +1618,7 @@ export default function RfpEstimation({
                           Daily
                         </button>
                       )}
-                      <button
+                      {!estimate.directEntry && <button
                         className="rfp-action"
                         onClick={() =>
                           setEstimate((current) => ({
@@ -1530,10 +1631,48 @@ export default function RfpEstimation({
                         }
                       >
                         <Plus size={15} /> Add Resource
-                      </button>
+                      </button>}
                     </div>
                   </div>
-                  {resourcePlanTab === "monthly" && estimate.durationMonths > 0 && (
+                  {estimate.directEntry && (
+                    <div className="grid gap-4 p-4 sm:grid-cols-2">
+                      <label className="text-xs font-semibold" style={labelStyle}>
+                        Total project budget ({estimate.currency})
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          className={`${inputClass} mt-1`}
+                          style={inputStyle}
+                          value={estimate.directBudget}
+                          onChange={(event) => patchEstimate({ directBudget: event.target.value })}
+                          aria-label={`Total project budget in ${estimate.currency}`}
+                          placeholder="Enter total budget"
+                        />
+                        <span className="mt-1 block font-normal">
+                          Includes the allowance shown above.
+                        </span>
+                      </label>
+                      <div className="text-xs font-semibold" style={labelStyle}>
+                        Total project duration
+                        <div className="mt-1 rounded border px-3 py-2 text-sm font-normal" style={{ background: panel, borderColor: line, color: ink }}>
+                          {estimate.durationMonths > 0 || estimate.durationDays > 0
+                            ? [
+                                estimate.durationMonths > 0
+                                  ? `${estimate.durationMonths} ${estimate.durationMonths === 1 ? "month" : "months"}`
+                                  : "",
+                                estimate.durationDays > 0
+                                  ? `${estimate.durationDays} ${estimate.durationDays === 1 ? "day" : "days"}`
+                                  : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" + ")
+                            : "Set the project duration above."}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {!estimate.directEntry && resourcePlanTab === "monthly" && estimate.durationMonths > 0 && (
                   <div className="rfp-grid-scroll overflow-auto">
                     <table className="rfp-grid w-full border-collapse text-left text-xs">
                       <thead>
@@ -1764,7 +1903,7 @@ export default function RfpEstimation({
                     </table>
                   </div>
                   )}
-                  {resourcePlanTab === "daily" && estimate.durationDays > 0 && (
+                  {!estimate.directEntry && resourcePlanTab === "daily" && estimate.durationDays > 0 && (
                     <div className="rfp-grid-scroll overflow-auto">
                       <table className="rfp-grid w-full border-collapse text-left text-xs">
                         <thead>
@@ -1837,12 +1976,12 @@ export default function RfpEstimation({
                       </table>
                     </div>
                   )}
-                  {periods.length === 0 && estimate.durationDays === 0 && (
+                  {!estimate.directEntry && periods.length === 0 && estimate.durationDays === 0 && (
                     <div className="p-4 text-sm text-amber-700">
                       Enter a duration of at least one month or one day to generate the planning grid.
                     </div>
                   )}
-                  {gradeOptions.length === 0 && (
+                  {!estimate.directEntry && gradeOptions.length === 0 && (
                     <div
                       className="border-t px-4 py-3 text-xs text-amber-700"
                       style={{ borderColor: line }}
@@ -1981,7 +2120,9 @@ export default function RfpEstimation({
                     </div>
                     <div className="mt-4 space-y-3 text-sm">
                       <div className="flex justify-between gap-3">
-                        <span style={{ color: muted }}>Base resource cost</span>
+                        <span style={{ color: muted }}>
+                          {estimate.directEntry ? "Base budget (INR)" : "Base resource cost"}
+                        </span>
                         <strong>{fmt(baseCost)}</strong>
                       </div>
                       <div className="flex justify-between gap-3">

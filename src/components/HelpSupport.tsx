@@ -150,6 +150,16 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "INR project revenue display",
+    detail:
+      "Project revenue, recovered revenue, and pending revenue are displayed in INR using the saved exchange rate for the project year.",
+  },
+  {
+    title: "RFP direct budget entry",
+    detail:
+      "Added a direct-entry estimation method for projects with a total budget and duration, without requiring resource allocations. Existing monthly and daily resource planning remains available.",
+  },
+  {
     title: "Project overview and scope",
     detail:
       "Moved each project’s Overview, In Scope, Out of Scope, and Assumptions section to the bottom of its project page and stacked the fields in one column. Reordered project page sections to show Project Details, Daily Updates, Project Summary, Task Manager, Task Manager Import, Risk Details, and then RFP Overview & Scope.",

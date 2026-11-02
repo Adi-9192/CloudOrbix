@@ -58,3 +58,36 @@ test("exports an RFP workbook with explicit month labels and scope sections", as
   assert.match(worksheet.getCell("B27").numFmt, /€/);
   assert.equal(worksheet.views, null);
 });
+
+test("exports a direct-entry estimate without resource rows", async () => {
+  const buffer = await buildRfpWorkbook({
+    project: {
+      id: 13,
+      project_name: "Direct budget project",
+      year: 2026,
+      currency_code: "EUR",
+      requested_date: "2026-03-02",
+      duration_months: 3,
+      duration_days: 0,
+      working_days_per_month: 19.67,
+      allowance_percent: 10,
+      direct_entry: true,
+      direct_budget: 1000,
+    },
+    resources: [],
+    monthlyPeriods: [],
+    allocations: new Map(),
+    exchangeRate: 100,
+  });
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(Buffer.from(buffer));
+  const worksheet = workbook.getWorksheet("RFP Estimate");
+  assert.ok(worksheet);
+  assert.equal(worksheet.getCell("A16").value, "DIRECT ENTRY");
+  assert.equal(worksheet.getCell("A17").value, "Entry Type");
+  assert.equal(worksheet.getCell("A18").value, "Direct entry");
+  assert.equal(worksheet.getCell("C18").value, 1000);
+  assert.equal(worksheet.getCell("D18").value, 100000);
+  assert.equal(worksheet.getCell("B25").value, 100000);
+});

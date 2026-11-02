@@ -403,19 +403,25 @@ const EMPTY_FORM = {
 const CURRENCIES = [
   "INR", "AED", "AUD", "CAD", "CHF", "DKK", "EUR", "GBP", "NOK", "SEK", "SGD", "USD",
 ]
-const formatRevenue = (value: number, currency: string) =>
-  new Intl.NumberFormat("en-IN", {
+const formatRevenueInr = (value: number, rateToInr: number | undefined) => {
+  if (!rateToInr || !Number.isFinite(rateToInr)) return "INR conversion unavailable"
+  const amountInr = convertCurrencyAmount(value, rateToInr, 1)
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: CURRENCIES.includes(currency) ? currency : "INR",
-    notation: value >= 1_000_000 ? "compact" : "standard",
-    maximumFractionDigits: value >= 1_000_000 ? 1 : 0,
-  }).format(value)
-const formatRevenueAmount = (value: number, currency: string) =>
-  new Intl.NumberFormat("en-IN", {
+    currency: "INR",
+    notation: amountInr >= 1_000_000 ? "compact" : "standard",
+    maximumFractionDigits: amountInr >= 1_000_000 ? 1 : 0,
+  }).format(amountInr)
+}
+const formatRevenueAmountInr = (value: number, rateToInr: number | undefined) => {
+  if (!rateToInr || !Number.isFinite(rateToInr)) return "INR conversion unavailable"
+  const amountInr = convertCurrencyAmount(value, rateToInr, 1)
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: CURRENCIES.includes(currency) ? currency : "INR",
+    currency: "INR",
     maximumFractionDigits: 2,
-  }).format(value)
+  }).format(amountInr)
+}
 export default function Projects({
   dark,
 
@@ -432,6 +438,9 @@ export default function Projects({
 }: ClientsProps) {
   const [clientList, setClientList] = useState<ClientRow[]>([])
   const [clientsLoaded, setClientsLoaded] = useState(false)
+  const [currencyRatesByYear, setCurrencyRatesByYear] = useState<
+    Record<number, Record<string, number>>
+  >({})
 
   const [search, setSearch] = useState("")
 
@@ -586,6 +595,66 @@ export default function Projects({
 
         isow: client.isow || "",
       }))
+
+      const years = [
+        ...new Set([
+          new Date().getFullYear(),
+          ...mapped.map((client) => Number(client.year)),
+        ]),
+      ]
+      const rateResults = await Promise.all(
+        years.map(async (year) => {
+          try {
+            const ratesResponse = await fetch(
+              `/api/rfp/rates/currency/${year}`,
+              { headers: { Authorization: ["Bearer", token].join(" ") } },
+            )
+            const ratesPayload = await ratesResponse.json()
+            if (!ratesResponse.ok) {
+              throw new Error(
+                ratesPayload.message || `Unable to load currency rates for ${year}.`,
+              )
+            }
+            return {
+              year,
+              rates: Object.fromEntries(
+                (ratesPayload.rates || []).map((rate: { currency: string; rateToInr: number }) => [
+                  rate.currency,
+                  Number(rate.rateToInr),
+                ]),
+              ) as Record<string, number>,
+              error: "",
+            }
+          } catch (error) {
+            return {
+              year,
+              rates: {},
+              error: error instanceof Error
+                ? error.message
+                : `Unable to load currency rates for ${year}.`,
+            }
+          }
+        }),
+      )
+      setCurrencyRatesByYear(
+        Object.fromEntries(rateResults.map(({ year, rates }) => [year, rates])),
+      )
+      const rateErrors = rateResults
+        .filter((result) =>
+          result.error &&
+          mapped.some(
+            (client) =>
+              client.currencyCode !== "INR" &&
+              Number(client.year) === result.year,
+          ),
+        )
+        .map((result) => result.error)
+      if (rateErrors.length) {
+        showCloudOrbixAlert(
+          `Some project amounts cannot be converted to INR: ${rateErrors.join(" ")}`,
+          "error",
+        )
+      }
 
       setClientList(mapped)
       setClientsLoaded(true)
@@ -991,7 +1060,7 @@ export default function Projects({
 
       const response = await fetch(
         `/api/rfp/rates/currency/${form.year}`,
-        { headers: { Authorization: `Bearer ${token}` } },
+        { headers: { Authorization: "Bearer " + token } },
       )
       const body = await response.json()
       if (!response.ok) {
@@ -1393,6 +1462,9 @@ export default function Projects({
     Number(form.revenue) || 0,
     Number(form.revenueRecoveryPercentage) || 0,
   )
+  const formRateToInr = form.currencyCode === "INR"
+    ? 1
+    : currencyRatesByYear[Number(form.year)]?.[form.currencyCode]
 
   return (
     <div className="p-6" style={{ color: text }}>
@@ -1649,6 +1721,9 @@ export default function Projects({
                   c.revenue,
                   c.revenueRecoveryPercentage,
                 )
+                const rateToInr = c.currencyCode === "INR"
+                  ? 1
+                  : currencyRatesByYear[c.year]?.[c.currencyCode]
                 const sc = STATUS_COLORS[normalizeProjectStatus(c.status)] || {
                   bg: dark ? "#334155" : "#F1F5F9",
                   text: dark ? "#E2E8F0" : "#475569",
@@ -1742,17 +1817,17 @@ export default function Projects({
                       style={{ color: text }}
                     >
                       {c.revenue > 0
-                        ? formatRevenue(c.revenue, c.currencyCode)
+                        ? formatRevenueInr(c.revenue, rateToInr)
                         : "—"}
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
                       {c.revenueRecoveryPercentage}%
                     </td>
                     <td className="px-4 py-3 text-xs font-semibold" style={{ color: text }}>
-                      {formatRevenueAmount(recoveryAmounts.recoveredRevenue, c.currencyCode)}
+                      {formatRevenueAmountInr(recoveryAmounts.recoveredRevenue, rateToInr)}
                     </td>
                     <td className="px-4 py-3 text-xs font-semibold" style={{ color: text }}>
-                      {formatRevenueAmount(recoveryAmounts.pendingRevenue, c.currencyCode)}
+                      {formatRevenueAmountInr(recoveryAmounts.pendingRevenue, rateToInr)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="relative w-10 h-10 mx-auto">
@@ -2028,7 +2103,7 @@ export default function Projects({
                     },
 
                     {
-                      label: "Recovered Revenue",
+                      label: "Recovered Revenue (INR)",
 
                       key: "recoveredRevenue",
 
@@ -2038,7 +2113,7 @@ export default function Projects({
                     },
 
                     {
-                      label: "Pending Revenue",
+                      label: "Pending Revenue (INR)",
 
                       key: "pendingRevenue",
 
@@ -2271,9 +2346,9 @@ export default function Projects({
                           required={f.required}
                           value={
                             f.key === "recoveredRevenue"
-                              ? formatRevenueAmount(formRecoveryAmounts.recoveredRevenue, form.currencyCode)
+                              ? formatRevenueAmountInr(formRecoveryAmounts.recoveredRevenue, formRateToInr)
                               : f.key === "pendingRevenue"
-                                ? formatRevenueAmount(formRecoveryAmounts.pendingRevenue, form.currencyCode)
+                                ? formatRevenueAmountInr(formRecoveryAmounts.pendingRevenue, formRateToInr)
                                 : (form as any)[f.key] ?? ""
                           }
                           onChange={(e) =>

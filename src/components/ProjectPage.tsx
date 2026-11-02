@@ -20,6 +20,7 @@ import {
   PROJECT_STATUSES,
 } from "../../shared/project-status.js";
 import { calculateRevenueRecovery } from "../../shared/revenue-recovery.js";
+import { convertCurrencyAmount } from "../../shared/currency-conversion.js";
 
 type ProjectPageProps = {
   dark: boolean;
@@ -198,6 +199,8 @@ export default function ProjectPage({
   user,
 }: ProjectPageProps) {
   const [project, setProject] = useState<Project | null>(null);
+  const [currencyRateToInr, setCurrencyRateToInr] = useState<number | null>(null);
+  const [currencyRateError, setCurrencyRateError] = useState("");
 
   const [tasks, setTasks] = useState<Task[]>([]);
 
@@ -360,6 +363,35 @@ export default function ProjectPage({
 
     setAccessDenied(false);
     setProject(body.project);
+    const currencyCode = body.project.currency_code?.trim().toUpperCase() || "INR";
+    setCurrencyRateError("");
+    if (currencyCode === "INR") {
+      setCurrencyRateToInr(1);
+    } else {
+      setCurrencyRateToInr(null);
+      try {
+        const rateResponse = await fetch(
+          `/api/rfp/rates/currency/${Number(body.project.year) || new Date().getFullYear()}`,
+          { headers },
+        );
+        const rateBody = await rateResponse.json();
+        if (!rateResponse.ok) {
+          throw new Error(rateBody.message || "Unable to load currency rates for INR display.");
+        }
+        const rate = (rateBody.rates || []).find(
+          (item: { currency: string }) => item.currency === currencyCode,
+        )?.rateToInr;
+        if (Number.isFinite(Number(rate)) && Number(rate) > 0) {
+          setCurrencyRateToInr(Number(rate));
+        } else {
+          setCurrencyRateError(`No ${currencyCode}/INR rate is configured for ${body.project.year}.`);
+        }
+      } catch (error) {
+        setCurrencyRateError(
+          error instanceof Error ? error.message : "Unable to load currency rates for INR display.",
+        );
+      }
+    }
 
     setTasks(body.tasks || []);
 
@@ -834,11 +866,13 @@ export default function ProjectPage({
     revenueRecoveryPercentage,
   );
   const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: project.currency_code?.trim().toUpperCase() || "INR",
-      maximumFractionDigits: 2,
-    }).format(amount);
+    currencyRateToInr === null
+      ? `INR conversion unavailable${currencyRateError ? `: ${currencyRateError}` : ""}`
+      : new Intl.NumberFormat("en-IN", {
+          style: "currency",
+          currency: "INR",
+          maximumFractionDigits: 2,
+        }).format(convertCurrencyAmount(amount, currencyRateToInr, 1));
 
   return (
     <div
@@ -1188,11 +1222,7 @@ export default function ProjectPage({
                 ["Project Billing Code", project.project_billing_code || "-"],
                 ["ISOW", project.isow || "-"],
                 ["Year", project.year || "-"],
-                ["Revenue", project.revenue == null ? "-" : new Intl.NumberFormat("en-IN", {
-                  style: "currency",
-                  currency: project.currency_code?.trim().toUpperCase() || "INR",
-                  maximumFractionDigits: 0,
-                }).format(Number(project.revenue))],
+                ["Revenue", project.revenue == null ? "-" : formatCurrency(revenue)],
                 ["Revenue Recovery Percentage", `${revenueRecoveryPercentage}%`],
                 ["Recovered Revenue", formatCurrency(recoveryAmounts.recoveredRevenue)],
                 ["Pending Revenue", formatCurrency(recoveryAmounts.pendingRevenue)],

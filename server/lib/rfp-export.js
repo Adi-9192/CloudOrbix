@@ -21,18 +21,21 @@ export async function buildRfpWorkbook({
   workbook.subject = "RFP estimation";
   workbook.title = `RFP Estimate - ${project.project_name}`;
 
+  const isDirectEntry = Boolean(project.direct_entry);
   const hasDailyPlan = Number(project.duration_days || 0) > 0;
-  const columns = [
-    "Resource Plan",
-    "Resource Name",
-    "Grade",
-    "Resource Type",
-    ...monthlyPeriods.map((period, index) => `M${index + 1}\n${period.month}`),
-    ...(hasDailyPlan
-      ? ["Man Days", "FTE Effort", "Total Daily Effort (Man Days)"]
-      : []),
-    "Total Cost (INR)",
-  ];
+  const columns = isDirectEntry
+    ? ["Entry Type", "Budget detail", `Total Budget (${project.currency_code})`, "Total Budget (INR)"]
+    : [
+        "Resource Plan",
+        "Resource Name",
+        "Grade",
+        "Resource Type",
+        ...monthlyPeriods.map((period, index) => `M${index + 1}\n${period.month}`),
+        ...(hasDailyPlan
+          ? ["Man Days", "FTE Effort", "Total Daily Effort (Man Days)"]
+          : []),
+        "Total Cost (INR)",
+      ];
   const worksheet = workbook.addWorksheet("RFP Estimate");
   const lastColumn = Math.max(columns.length, 6);
 
@@ -74,7 +77,7 @@ export async function buildRfpWorkbook({
   addSection(13, "Assumptions", project.assumption);
 
   worksheet.mergeCells(16, 1, 16, lastColumn);
-  worksheet.getCell(16, 1).value = "RESOURCE PLAN";
+  worksheet.getCell(16, 1).value = isDirectEntry ? "DIRECT ENTRY" : "RESOURCE PLAN";
   worksheet.getCell(16, 1).font = { bold: true, size: 12, color: { argb: "FF173F35" } };
   worksheet.getCell(16, 1).fill = sectionFill;
   worksheet.addRow(columns);
@@ -87,8 +90,18 @@ export async function buildRfpWorkbook({
   const totalFte = Object.fromEntries(monthlyPeriods.map((period) => [period.key, 0]));
   let baseCost = 0;
   let totalDailyEffort = 0;
+  const directGrandTotal = Number(project.direct_budget || 0) * exchangeRate;
+  if (isDirectEntry) {
+    baseCost = directGrandTotal / (1 + Number(project.allowance_percent || 0) / 100);
+    worksheet.addRow([
+      "Direct entry",
+      "Total project budget (includes allowance)",
+      Number(project.direct_budget || 0),
+      directGrandTotal,
+    ]);
+  }
 
-  for (const resource of resources) {
+  for (const resource of isDirectEntry ? [] : resources) {
     const rowAllocations = allocations.get(resource.id) || {};
     const isDaily = String(resource.resource_plan_type || "Monthly").toLowerCase() === "daily";
     const monthlyAllocations = monthlyPeriods.map((period) => {
@@ -122,27 +135,33 @@ export async function buildRfpWorkbook({
     ]);
   }
 
-  const totalRow = worksheet.addRow([
-    "TOTAL",
-    "",
-    "",
-    "",
-    ...monthlyPeriods.map((period) => totalFte[period.key]),
-    ...(hasDailyPlan ? ["", "", totalDailyEffort] : []),
-    baseCost,
-  ]);
+  const totalRow = worksheet.addRow(
+    isDirectEntry
+      ? ["TOTAL PROJECT BUDGET", "", Number(project.direct_budget || 0), directGrandTotal]
+      : [
+          "TOTAL",
+          "",
+          "",
+          "",
+          ...monthlyPeriods.map((period) => totalFte[period.key]),
+          ...(hasDailyPlan ? ["", "", totalDailyEffort] : []),
+          baseCost,
+        ],
+  );
   totalRow.font = { bold: true };
   totalRow.fill = sectionFill;
 
-  const allowanceCost = baseCost * Number(project.allowance_percent || 0) / 100;
-  const grandTotal = baseCost + allowanceCost;
+  const allowanceCost = isDirectEntry
+    ? directGrandTotal - baseCost
+    : baseCost * Number(project.allowance_percent || 0) / 100;
+  const grandTotal = isDirectEntry ? directGrandTotal : baseCost + allowanceCost;
   const summaryStart = worksheet.rowCount + 2;
   worksheet.addRow([]);
   worksheet.addRow(["Cost Summary", "Amount"]);
   worksheet.getRow(summaryStart + 1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   worksheet.getRow(summaryStart + 1).fill = headerFill;
   worksheet.addRows([
-    ["Base Resource Cost (INR)", baseCost],
+    [isDirectEntry ? "Base Project Budget (INR)" : "Base Resource Cost (INR)", baseCost],
     [`Allowance (${project.allowance_percent || 0}%) (INR)`, allowanceCost],
     ["Grand Total (INR)", grandTotal],
     ["Exchange Rate (selected currency per INR)", exchangeRate ? 1 / exchangeRate : "Not configured"],
@@ -162,6 +181,7 @@ export async function buildRfpWorkbook({
                 : 14,
   }));
   worksheet.getColumn(columns.length).numFmt = currencyFormat("INR");
+  if (isDirectEntry) worksheet.getColumn(3).numFmt = currencyFormat(project.currency_code || "INR");
   for (let rowNumber = 18; rowNumber <= totalRow.number; rowNumber += 1) {
     worksheet.getRow(rowNumber).alignment = { vertical: "middle", wrapText: true };
     worksheet.getCell(rowNumber, columns.length).numFmt = currencyFormat("INR");
