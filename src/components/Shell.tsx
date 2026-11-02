@@ -2,19 +2,13 @@ import { useState, useRef, useEffect } from "react";
 import {
   LayoutDashboard,
   Users,
-  FileArchive,
   Settings,
   HelpCircle,
   Bell,
-  Search,
   Moon,
   Sun,
-  ChevronLeft,
-  ChevronRight,
   LogOut,
   ChevronDown,
-  Upload,
-  ClipboardList,
   Shield,
   Menu,
   X,
@@ -29,7 +23,6 @@ export type Page =
   | "dashboard"
   | "projects"
   | "projectframework"
-  | "reports"
   | "excel"
   | "audit"
   | "admin"
@@ -42,21 +35,35 @@ export type Page =
   | "risks"
   | "rfp";
 
-const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: "portfolio", label: "Home", icon: Home },
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  // { id: "reports", label: "Reports", icon: FileText },
+export type DashboardView = "project" | "risk" | "rfp";
 
-  { id: "rfp", label: "RFP Estimation", icon: Calculator },
-  { id: "audit", label: "Audit Logs", icon: ClipboardList },
-  { id: "admin", label: "Admin", icon: Shield },
-  { id: "help", label: "Help", icon: HelpCircle },
-];
-const projectManagementItems: { id: Page; label: string }[] = [
-  { id: "projectframework", label: "Project Framework" },
-  { id: "projects", label: "Projects" },
-  { id: "repository", label: "Project Repository" },
-  { id: "excel", label: "Excel Import" },
+const navigationGroups: {
+  id: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  items: { id: Page; label: string; adminOnly?: boolean }[];
+}[] = [
+  {
+    id: "projects",
+    label: "Project Management",
+    icon: FolderKanban,
+    items: [
+      { id: "projectframework", label: "Project Framework" },
+      { id: "projects", label: "Projects" },
+      { id: "repository", label: "Project Repository" },
+      { id: "risks", label: "Risk Register" },
+      { id: "excel", label: "Excel Import", adminOnly: true },
+    ],
+  },
+  {
+    id: "administration",
+    label: "Administration",
+    icon: Shield,
+    items: [
+      { id: "admin", label: "Admin", adminOnly: true },
+      { id: "audit", label: "Audit Logs", adminOnly: true },
+    ],
+  },
 ];
 
 interface ShellProps {
@@ -72,8 +79,10 @@ interface ShellProps {
   };
   onToggleDark: () => void;
   children: React.ReactNode;
-  onSearch?: (query: string) => void;
   onOpenProject?: (clientId: string) => void;
+  repositoryDocuments?: boolean;
+  dashboardView: DashboardView;
+  onDashboardViewChange: (view: DashboardView) => void;
 }
 
 type NotificationItem = {
@@ -94,19 +103,20 @@ export default function Shell({
   user,
   onToggleDark,
   children,
-  onSearch,
   onOpenProject,
+  repositoryDocuments = false,
+  dashboardView,
+  onDashboardViewChange,
 }: ShellProps) {
-  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [openNavMenu, setOpenNavMenu] = useState<string | null>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [projectManagementOpen, setProjectManagementOpen] = useState(true);
   const [screenAlert, setScreenAlert] = useState<CloudOrbixAlert | null>(null);
   const [alertTimer, setAlertTimer] = useState<number | null>(null);
-  const [search, setSearch] = useState("");
   const [showAllNotifications, setShowAllNotifications] = useState(false);
   const [clearingNotifications, setClearingNotifications] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const isAdmin = user?.roles.includes("Admin") ?? false;
@@ -117,6 +127,10 @@ export default function Shell({
         setNotifOpen(false);
       if (profileRef.current && !profileRef.current.contains(e.target as Node))
         setProfileOpen(false);
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setOpenNavMenu(null);
+        setMobileOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -134,7 +148,6 @@ export default function Shell({
   }, [alertTimer]);
 
   const bg = dark ? "#0F172A" : "#FFFFFF";
-  const sidebarBg = dark ? "#1E293B" : "#FFFFFF";
   const borderColor = dark ? "#334155" : "#E2E8F0";
   const textMuted = dark ? "#94A3B8" : "#64748B";
   const textBody = dark ? "#E2E8F0" : "#0F172A";
@@ -153,6 +166,42 @@ export default function Shell({
     .filter(Boolean)
     .map((namePart) => namePart[0])
     .join("");
+  const visibleNavigationGroups = navigationGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) =>
+          (!item.adminOnly || isAdmin) &&
+          (!portfolioOnly || item.id === "portfolio"),
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
+  const breadcrumbPaths: Record<Page, { label: string; page?: Page }[]> = {
+    portfolio: [{ label: "Home" }],
+    dashboard: [
+      { label: "Home", page: "portfolio" },
+      { label: "Dashboard", page: "dashboard" },
+      { label: `${dashboardView === "risk" ? "Risk" : dashboardView === "rfp" ? "RFP" : "Project"} Dashboard` },
+    ],
+    projectframework: [{ label: "Home", page: "portfolio" }, { label: "Project Framework" }],
+    projects: [{ label: "Home", page: "portfolio" }, { label: "Projects" }],
+    project: [{ label: "Home", page: "portfolio" }, { label: "Projects", page: "projects" }, { label: "Project Details" }],
+    documents: [
+      { label: "Home", page: "portfolio" },
+      repositoryDocuments
+        ? { label: "Project Repository", page: "repository" }
+        : { label: "Project Details", page: "project" },
+      { label: "Documents" },
+    ],
+    repository: [{ label: "Home", page: "portfolio" }, { label: "Project Repository" }],
+    excel: [{ label: "Home", page: "portfolio" }, { label: "Project Management", page: "projects" }, { label: "Excel Import" }],
+    audit: [{ label: "Home", page: "portfolio" }, { label: "Administration", page: "admin" }, { label: "Audit Logs" }],
+    admin: [{ label: "Home", page: "portfolio" }, { label: "Administration" }],
+    help: [{ label: "Home", page: "portfolio" }, { label: "Help" }],
+    rfp: [{ label: "Home", page: "portfolio" }, { label: "RFP" }],
+    risks: [{ label: "Home", page: "portfolio" }, { label: "Risk Register" }],
+    profile: [{ label: "Home", page: "portfolio" }, { label: "My Profile" }],
+  };
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   useEffect(() => {
@@ -326,12 +375,14 @@ export default function Shell({
       )}
       {/* Top Nav */}
       <header
-        className="flex items-center h-14 px-4 gap-4 flex-shrink-0 border-b z-30"
+        className="relative flex flex-wrap items-center min-h-14 px-4 gap-3 flex-shrink-0 border-b z-30"
         style={{ background: bg, borderColor }}
       >
         <button
-          className="lg:hidden p-1.5 rounded-md text-slate-500 hover:bg-slate-100"
+          className="lg:hidden p-1.5 rounded-md hover:bg-slate-100"
           onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
+          aria-expanded={mobileOpen}
         >
           {mobileOpen ? (
             <X className="w-5 h-5" />
@@ -340,46 +391,194 @@ export default function Shell({
           )}
         </button>
         <button
+          type="button"
           className="flex items-center gap-2 flex-shrink-0"
-          onClick={() => onPageChange("portfolio")}
-          aria-label="Go to Portfolio"
+          onClick={() => {
+            onPageChange("portfolio");
+            setOpenNavMenu(null);
+            setMobileOpen(false);
+          }}
+          aria-label="Go to Home"
+          title="Go to Home"
         >
           <img
             src="/CloudOrbix.png"
             alt="CloudOrbix"
             className="h-7 w-7 object-contain"
           />
-          {!collapsed && (
-            <span
-              className="font-bold text-sm hidden lg:block"
-              style={{ color: "#1E40AF" }}
-            >
-              CloudOrbix
-            </span>
-          )}
+          <span className="font-bold text-sm" style={{ color: "#1E40AF" }}>
+            CloudOrbix
+          </span>
         </button>
 
-        {/* Search */}
-        {!portfolioOnly && <div className="flex-1 max-w-md relative hidden sm:block">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5"
-            style={{ color: textMuted }}
-          />
-          <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              onSearch?.(e.target.value);
+        <nav
+          ref={navRef}
+          aria-label="Main navigation"
+          className={`${mobileOpen ? "flex" : "hidden"} order-last basis-full flex-col gap-1 border-t py-2 lg:order-none lg:flex lg:basis-auto lg:flex-row lg:items-center lg:gap-1 lg:border-0 lg:py-0`}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              onPageChange("portfolio");
+              setOpenNavMenu(null);
+              setMobileOpen(false);
             }}
-            placeholder="Search projects, reports, actions…"
-            className="w-full pl-9 pr-4 py-1.5 rounded-lg text-xs border outline-none"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
             style={{
-              background: dark ? "#1E293B" : "#F8FAFC",
-              borderColor,
-              color: textBody,
+              background: page === "portfolio" ? (dark ? "#1E3A5F" : "#EFF6FF") : "transparent",
+              color: page === "portfolio" ? (dark ? "#93C5FD" : "#1E40AF") : textMuted,
             }}
-          />
-        </div>}
+          >
+            <Home className="h-4 w-4" />
+            Home
+          </button>
+          {!portfolioOnly && (
+            <>
+              <div className="relative">
+                <button
+                  type="button"
+                  aria-expanded={openNavMenu === "dashboard"}
+                  onClick={() => setOpenNavMenu(openNavMenu === "dashboard" ? null : "dashboard")}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors lg:w-auto"
+                  style={{
+                    background: page === "dashboard" ? (dark ? "#1E3A5F" : "#EFF6FF") : "transparent",
+                    color: page === "dashboard" ? (dark ? "#93C5FD" : "#1E40AF") : textMuted,
+                  }}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${openNavMenu === "dashboard" ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {openNavMenu === "dashboard" && (
+                  <div
+                    className="nav-dropdown-enter absolute left-0 top-full z-50 mt-1 min-w-52 overflow-hidden rounded-xl border py-1 shadow-xl"
+                    style={{ background: bg, borderColor }}
+                  >
+                    {([
+                      ["project", "Project Dashboard"],
+                      ["risk", "Risk Dashboard"],
+                      ["rfp", "RFP Dashboard"],
+                    ] as const).map(([view, label]) => {
+                      const selected = dashboardView === view;
+                      return (
+                        <button
+                          key={view}
+                          type="button"
+                          aria-current={selected ? "page" : undefined}
+                          onClick={() => {
+                            onDashboardViewChange(view);
+                            onPageChange("dashboard");
+                            setOpenNavMenu(null);
+                            setMobileOpen(false);
+                          }}
+                          className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs transition-colors hover:bg-slate-50"
+                          style={{
+                            background: selected ? (dark ? "#1E3A5F" : "#EFF6FF") : "transparent",
+                            color: selected ? (dark ? "#93C5FD" : "#1E40AF") : textBody,
+                          }}
+                        >
+                          {label}
+                          {selected && (
+                            <span className="ml-4 h-1.5 w-1.5 rounded-full bg-blue-700" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onPageChange("rfp");
+                  setOpenNavMenu(null);
+                  setMobileOpen(false);
+                }}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
+                style={{
+                  background: page === "rfp" ? (dark ? "#1E3A5F" : "#EFF6FF") : "transparent",
+                  color: page === "rfp" ? (dark ? "#93C5FD" : "#1E40AF") : textMuted,
+                }}
+              >
+                <Calculator className="h-4 w-4" />
+                RFP
+              </button>
+            </>
+          )}
+          {visibleNavigationGroups.map((group) => {
+            const Icon = group.icon;
+            const active = group.items.some((item) => item.id === page);
+            const expanded = openNavMenu === group.id;
+            return (
+              <div className="relative" key={group.id}>
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() => setOpenNavMenu(expanded ? null : group.id)}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors lg:w-auto"
+                  style={{
+                    background: active ? (dark ? "#1E3A5F" : "#EFF6FF") : "transparent",
+                    color: active ? (dark ? "#93C5FD" : "#1E40AF") : textMuted,
+                  }}
+                >
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <span>{group.label}</span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {expanded && (
+                  <div
+                    className="nav-dropdown-enter absolute left-0 top-full z-50 mt-1 min-w-52 overflow-hidden rounded-xl border py-1 shadow-xl"
+                    style={{ background: bg, borderColor }}
+                  >
+                    {group.items.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          onPageChange(item.id);
+                          setOpenNavMenu(null);
+                          setMobileOpen(false);
+                        }}
+                        className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs transition-colors hover:bg-slate-50"
+                        style={{
+                          background: page === item.id ? (dark ? "#1E3A5F" : "#EFF6FF") : "transparent",
+                          color: page === item.id ? (dark ? "#93C5FD" : "#1E40AF") : textBody,
+                        }}
+                      >
+                        {item.label}
+                        {page === item.id && (
+                          <span className="ml-4 h-1.5 w-1.5 rounded-full bg-blue-700" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {!portfolioOnly && (
+            <button
+              type="button"
+              onClick={() => {
+                onPageChange("help");
+                setOpenNavMenu(null);
+                setMobileOpen(false);
+              }}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors"
+              style={{
+                background: page === "help" ? (dark ? "#1E3A5F" : "#EFF6FF") : "transparent",
+                color: page === "help" ? (dark ? "#93C5FD" : "#1E40AF") : textMuted,
+              }}
+            >
+              <HelpCircle className="h-4 w-4" />
+              Help
+            </button>
+          )}
+        </nav>
 
         <div className="ml-auto flex items-center gap-1.5">
           {/* Dark mode */}
@@ -573,164 +772,40 @@ export default function Shell({
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <aside
-          className={`flex-shrink-0 flex flex-col border-r transition-all duration-200 z-20 ${mobileOpen ? "fixed inset-y-0 left-0 top-14 w-56" : "hidden lg:flex"} ${collapsed ? "lg:w-14" : "lg:w-52"}`}
-          style={{ background: sidebarBg, borderColor }}
-        >
-          <div className="flex-1 py-3 overflow-y-auto">
-            {navItems
-              .filter(({ id }) =>
-                portfolioOnly
-                  ? id === "portfolio"
-                  : id === "portfolio" || id === "dashboard",
-              )
-              .map(({ id, label, icon: Icon }) => {
-                const active = page === id;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => {
-                      onPageChange(id);
-                      setMobileOpen(false);
-                    }}
-                    title={collapsed ? label : undefined}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 mx-1.5 rounded-lg text-xs font-medium transition-all mb-0.5 ${collapsed ? "justify-center" : ""}`}
-                    style={{
-                      width: "calc(100% - 12px)",
-                      background: active ? "#EFF6FF" : "transparent",
-                      color: active ? "#1E40AF" : textMuted,
-                    }}
-                  >
-                    <Icon className="w-4 h-4 flex-shrink-0" />
-                    {!collapsed && <span>{label}</span>}
-                    {!collapsed && active && (
-                      <div
-                        className="ml-auto w-1.5 h-1.5 rounded-full"
-                        style={{ background: "#1E40AF" }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            {!portfolioOnly && <div className="mb-1">
-              <button
-                onClick={() => setProjectManagementOpen(!projectManagementOpen)}
-                aria-expanded={projectManagementOpen}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 mx-1.5 rounded-lg text-xs font-medium transition-all ${collapsed ? "justify-center" : ""}`}
-                style={{ width: "calc(100% - 12px)", color: textMuted }}
-                title={collapsed ? "Project Management" : undefined}
-              >
-                <FolderKanban className="w-4 h-4 flex-shrink-0" />
-                {!collapsed && (
-                  <span className="flex-1 text-left">Project Management</span>
-                )}
-                {!collapsed &&
-                  (projectManagementOpen ? (
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  ))}
-              </button>
-              {projectManagementOpen && !collapsed && (
-                <div className="ml-5 border-l" style={{ borderColor }}>
-                  {projectManagementItems
-                    .filter(
-                      ({ id }) =>
-                        id !== "excel" || user?.roles.includes("Admin"),
-                    )
-                    .map(({ id, label }) => {
-                      const active = page === id;
-                      return (
-                        <button
-                          key={id}
-                          onClick={() => {
-                            onPageChange(id);
-                            setMobileOpen(false);
-                          }}
-                          className="w-[calc(100%-1rem)] ml-2 flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-all"
-                          style={{
-                            background: active ? "#EFF6FF" : "transparent",
-                            color: active ? "#1E40AF" : textMuted,
-                          }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                </div>
-              )}
-            </div>}
-            {navItems
-              .filter(
-                ({ id }) =>
-                  !portfolioOnly &&
-                  id !== "dashboard" &&
-                  id !== "portfolio" &&
-                  (!(["admin", "excel", "audit", ] as Page[]).includes(
-                    id,
-                  ) ||
-                    isAdmin)
-              )
-              .map(({ id, label, icon: Icon }) => {
-                const active = page === id;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => {
-                      onPageChange(id);
-                      setMobileOpen(false);
-                    }}
-                    title={collapsed ? label : undefined}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 mx-1.5 rounded-lg text-xs font-medium transition-all mb-0.5 ${collapsed ? "justify-center" : ""}`}
-                    style={{
-                      width: "calc(100% - 12px)",
-                      background: active ? "#EFF6FF" : "transparent",
-                      color: active ? "#1E40AF" : textMuted,
-                    }}
-                    onMouseOver={(e) => {
-                      if (!active)
-                        (e.currentTarget as HTMLElement).style.background = dark
-                          ? "#1E293B"
-                          : "#F8FAFC";
-                    }}
-                    onMouseOut={(e) => {
-                      if (!active)
-                        (e.currentTarget as HTMLElement).style.background =
-                          "transparent";
-                    }}
-                  >
-                    <Icon className="w-4 h-4 flex-shrink-0" />
-                    {!collapsed && <span>{label}</span>}
-                    {!collapsed && active && (
-                      <div
-                        className="ml-auto w-1.5 h-1.5 rounded-full"
-                        style={{ background: "#1E40AF" }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-          </div>
-
-          {/* Collapse toggle */}
-          <div className="p-2 border-t" style={{ borderColor }}>
-            <button
-              onClick={() => setCollapsed(!collapsed)}
-              className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-slate-100 transition-colors"
-              style={{ color: textMuted }}
-            >
-              {collapsed ? (
-                <ChevronRight className="w-4 h-4" />
+      <nav
+        aria-label="Page directory"
+        className="flex h-10 flex-shrink-0 items-center gap-2 border-b px-5 text-xs"
+        style={{ background: bg, borderColor }}
+      >
+        {breadcrumbPaths[page].map((crumb, index) => {
+          const current = index === breadcrumbPaths[page].length - 1;
+          return (
+            <span className="flex items-center gap-2" key={`${crumb.label}-${index}`}>
+              {index > 0 && <span aria-hidden="true" style={{ color: textMuted }}>/</span>}
+              {crumb.page && !current ? (
+                <button
+                  type="button"
+                  onClick={() => onPageChange(crumb.page!)}
+                  className="font-medium hover:underline"
+                  style={{ color: textMuted }}
+                >
+                  {crumb.label}
+                </button>
               ) : (
-                <ChevronLeft className="w-4 h-4" />
+                <span
+                  aria-current={current ? "page" : undefined}
+                  className={current ? "font-semibold" : ""}
+                  style={{ color: current ? textBody : textMuted }}
+                >
+                  {crumb.label}
+                </span>
               )}
-            </button>
-          </div>
-        </aside>
+            </span>
+          );
+        })}
+      </nav>
 
-        {/* Main content */}
+      <div className="flex flex-1 overflow-hidden">
         <main className="flex-1 overflow-y-auto" style={{ background: pageBg }}>
           {children}
         </main>

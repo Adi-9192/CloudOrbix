@@ -258,6 +258,36 @@ router.get('/rates/options/:year', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+router.get('/rates/currency/:year', async (req, res, next) => {
+  const pool = requireDatabase(res);
+  if (!pool) return;
+  try {
+    const year = Number(req.params.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      return res.status(400).json({ message: 'Select a valid currency-rate year.' });
+    }
+    const result = await pool.query(
+      `SELECT r.currency_pair, r.rate_to_inr
+       FROM currency_exchange_rates r
+       JOIN currency_exchange_rate_versions v ON v.id = r.version_id
+       WHERE v.[year] = $1`,
+      [year],
+    );
+    return res.json({
+      year,
+      rates: [
+        { currency: 'INR', rateToInr: 1 },
+        ...result.rows.map((row) => ({
+          currency: String(row.currency_pair).split('/')[0],
+          rateToInr: Number(row.rate_to_inr),
+        })),
+      ],
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.post('/rates/resource/:year', requireRole('Admin'), async (req, res, next) => {
   const pool = requireDatabase(res);
   if (!pool) return;
