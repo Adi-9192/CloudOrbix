@@ -8,8 +8,14 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
 import { KPICard } from "./KPI";
+import type { DashboardView } from "./Shell";
 
-interface DashboardProps { dark: boolean; onNavigate: (p: string) => void; user?: { roles: string[] }; }
+interface DashboardProps {
+  dark: boolean;
+  onNavigate: (p: string, projectStatusFilter?: string) => void;
+  user?: { roles: string[] };
+  view?: DashboardView;
+}
 
 const projectBreakdownOptions = [
   { value: "status", label: "Status" },
@@ -43,7 +49,12 @@ const CustomTooltip = ({ active, payload, label, dark }: any) => {
   );
 };
 
-export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
+export default function Dashboard({
+  dark,
+  onNavigate,
+  user,
+  view = "project",
+}: DashboardProps) {
   const chartPeriod = "Monthly";
   const [selectedYear, setSelectedYear] = useState("all");
   const [projectGroupBy, setProjectGroupBy] = useState<(typeof projectBreakdownOptions)[number]["value"]>("status");
@@ -218,10 +229,10 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
   ], [summary]); */
 
   const kpiCards = useMemo(() => [
-    { title: "Total Projects", value: String(summary.totalClients), subtitle: "Approved project records", accent: "#1E40AF", icon: Users, action: () => onNavigate("clients") },
-    { title: "Active Projects", value: String(summary.activeProjects), subtitle: "Approved projects", accent: "#1E40AF", icon: FolderKanban },
-    { title: "Delayed (External)", value: String(summary.delayedProjectsExternal), subtitle: "Externally delayed projects", accent: "#C2410C", icon: AlertTriangle },
-    { title: "Delayed (Internal)", value: String(summary.delayedProjectsInternal), subtitle: "Internally delayed projects", accent: "#BE185D", icon: Clock },
+    { title: "Total Projects", value: String(summary.totalClients), subtitle: "Approved project records", accent: "#1E40AF", icon: Users, action: () => onNavigate("projects", "All") },
+    { title: "Active Projects", value: String(summary.activeProjects), subtitle: "Approved projects", accent: "#1E40AF", icon: FolderKanban, action: () => onNavigate("projects", "Active") },
+    { title: "Delayed (External)", value: String(summary.delayedProjectsExternal), subtitle: "Externally delayed projects", accent: "#C2410C", icon: AlertTriangle, action: () => onNavigate("projects", "Delayed(External)") },
+    { title: "Delayed (Internal)", value: String(summary.delayedProjectsInternal), subtitle: "Internally delayed projects", accent: "#BE185D", icon: Clock, action: () => onNavigate("projects", "Delayed(Internal)") },
     { title: "Total Risks", value: String(summary.totalRisks), subtitle: "All project risks", accent: "#7C3AED", icon: ShieldAlert, action: () => onNavigate("risks") },
     { title: "Open Risks", value: String(summary.openRisks), subtitle: "Risks not completed or cancelled", accent: "#D97706", icon: AlertCircle, action: () => onNavigate("risks") },
   ], [summary, onNavigate]);
@@ -236,7 +247,9 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
     <div className="p-6 space-y-6" style={{ color: text, background: pageBg }}>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold">Executive Dashboard</h1>
+          <h1 className="text-xl font-bold">
+            {view === "risk" ? "Risk Dashboard" : view === "rfp" ? "RFP Dashboard" : "Project Dashboard"}
+          </h1>
           <p className="text-xs mt-0.5" style={{ color: muted }}>
             {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString()}` : "Loading dashboard…"}
           </p>
@@ -267,7 +280,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
         </div>
       )}
 
-      <section
+      {view === "project" && <section
         aria-labelledby="dashboard-project-breakdown-heading"
         className="w-full max-w-2xl rounded-xl border p-5"
         style={{ background: bg, borderColor: border }}
@@ -330,9 +343,9 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
         ) : (
           <p className="py-8 text-center text-sm" style={{ color: muted }}>No projects for this year.</p>
         )}
-      </section>
+      </section>}
 
-      <section aria-labelledby="dashboard-rfp-heading" className="space-y-3">
+      {view === "rfp" && <section aria-labelledby="dashboard-rfp-heading" className="space-y-3">
         <h2 id="dashboard-rfp-heading" className="text-base font-semibold">
           RFP Dashboard
         </h2>
@@ -405,9 +418,9 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
-      <section aria-labelledby="dashboard-projects-heading" className="space-y-3">
+      {view === "project" && <section aria-labelledby="dashboard-projects-heading" className="space-y-3">
         <h2 id="dashboard-projects-heading" className="text-base font-semibold">
           Project
         </h2>
@@ -430,9 +443,9 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
             );
           })}
         </div>
-      </section>
+      </section>}
 
-      <section aria-labelledby="dashboard-risks-heading" className="space-y-3">
+      {view === "risk" && <section aria-labelledby="dashboard-risks-heading" className="space-y-3">
         <h2 id="dashboard-risks-heading" className="text-base font-semibold">
           Risks
         </h2>
@@ -455,7 +468,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
             );
           })}
         </div>
-      </section>
+      </section>}
 
       {/* <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
@@ -503,6 +516,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
         </div>
       </div> */}
 
+      {view === "project" && <>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {user?.roles.includes("Admin") && <div className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
           <h3 className="font-semibold text-sm mb-4">Service Adoption</h3>
@@ -593,6 +607,7 @@ export default function Dashboard({ dark, onNavigate, user }: DashboardProps) {
           <div className="space-y-2 text-xs">{regionSeries.slice(0, 6).map((region) => <div key={region.region} className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: region.color }} /><span>{region.region}</span><strong>{region.clients}</strong></div>)}</div>
         </div>
       </div>
+      </>}
     </div>
   );
 }

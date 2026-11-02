@@ -1071,7 +1071,7 @@ export default function RfpEstimation({
               >
                 PMO / Commercial
               </div>
-              <h1 className="text-lg font-bold">RFP Estimation</h1>
+              <h1 className="text-lg font-bold">RFP</h1>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">

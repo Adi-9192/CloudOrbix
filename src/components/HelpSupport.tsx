@@ -27,7 +27,8 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
       title: "Getting around",
       steps: [
         "Use Portfolio to browse service capabilities and Dashboard to review project, risk, and RFP views.",
-        "Open Project Management in the sidebar for Project Framework, Projects, Project Repository, and Excel Import.",
+        "Use Home, Dashboard, and RFP as direct navbar links; open Project Management for projects, framework, repository, Risk Register, and Excel Import.",
+        "Use the clickable page directory below the navbar to return to a parent page.",
         "Use the profile menu for your profile and account actions. The theme button switches between light and dark appearance.",
       ],
     },
@@ -41,19 +42,19 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
       ],
     },
     {
-      title: "Dashboard and reporting",
+      title: "Dashboards",
       steps: [
-        "Dashboard contains Project Dashboard, Risk Dashboard, and RFP Dashboard tabs.",
+        "Open the Dashboard navbar dropdown and choose Project Dashboard, Risk Dashboard, or RFP Dashboard.",
         "Use each dashboard's Group by control to change the breakdown, such as project status, type, or region.",
         "Adjust the available period or year filters to review the corresponding metrics and activity.",
       ],
     },
     {
-      title: "RFP estimation and approvals",
+      title: "RFP and approvals",
       steps: [
-        "Open RFP Estimation to prepare an estimate, enter project details, build resource plans, and save or submit the estimate.",
+        "Open RFP to prepare an estimate, enter project details, build resource plans, and save or submit the estimate.",
         "Review submitted RFP requests from Admin → Approvals. Approve or reject requests after checking their details.",
-        "Maintain resource rate cards and currency exchange rates in RFP Estimation. Keep the selected year and rates aligned with the estimate.",
+        "Maintain resource rate cards and currency exchange rates in RFP. Keep the selected year and rates aligned with the estimate.",
         "Export a saved estimate to Excel from its estimation page.",
       ],
     },
@@ -79,7 +80,8 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
       title: "Navigation and dashboard",
       steps: [
         "Use Portfolio for service capabilities and Dashboard for Project Dashboard, Risk Dashboard, and RFP Dashboard.",
-        "Open Project Management for Project Framework, Projects, and Project Repository.",
+        "Use the Project Management dropdown in the navbar for Project Framework, Projects, and Project Repository.",
+        "Use the clickable page directory below the navbar to return to a parent page.",
         "Use Group by and the available period/year filters to focus dashboard summaries.",
       ],
     },
@@ -94,7 +96,7 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
     {
       title: "RFP estimates",
       steps: [
-        "Open RFP Estimation to prepare an estimate and its resource plan.",
+        "Open RFP to prepare an estimate and its resource plan.",
         "Save a draft to continue later, or submit the estimate for administrator approval.",
         "Use the RFP Dashboard to review estimates and adjust its grouping. Rate-card and exchange-rate administration is restricted to Admin users.",
       ],
@@ -113,8 +115,9 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
       title: "Navigation and dashboard",
       steps: [
         "Use Portfolio to browse service capabilities and Dashboard to review project, risk, and RFP summaries.",
-        "Open Project Management for Project Framework, Projects, and Project Repository.",
-        "Use dashboard tabs, grouping controls, and available filters to find the information you need.",
+        "Use the Project Management dropdown in the navbar for Project Framework, Projects, and Project Repository.",
+        "Use the clickable page directory below the navbar to return to a parent page.",
+        "Use the Dashboard dropdown to select a dashboard, then use its grouping controls and available filters.",
       ],
     },
     {
@@ -129,7 +132,7 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
     {
       title: "Estimation and project resources",
       steps: [
-        "Open RFP Estimation to prepare or review estimates available to your account.",
+        "Open RFP to prepare or review estimates available to your account.",
         "Save a draft when you need to continue later. Submit an estimate when it is ready for administrator review.",
         "Resource rate-card and currency-rate maintenance is available to Admin users only.",
       ],
@@ -147,6 +150,16 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Navigation and dashboard options",
+    detail:
+      "Separated Home, Dashboard, and RFP as direct navbar links. Moved Risk Register into Project Management, matched the Dashboard dropdown to its menu style, made the CloudOrbix logo navigate Home, and removed the standalone Reports page.",
+  },
+  {
+    title: "Navbar and page directory",
+    detail:
+      "Replaced the sidebar with role-aware dropdowns in the top navbar, removed global search from the navbar, and added clickable page-directory breadcrumbs below it.",
+  },
+  {
     title: "Portfolio service popups",
     detail:
       "Portfolio at-a-glance popups show the matching service image and title, its definition as a subtitle, and all core capabilities, with a blue accent bar and reduced top padding. Removed the separate collapsible service list from the page.",
@@ -154,7 +167,7 @@ const releaseNotes = [
   {
     title: "Home navigation",
     detail:
-      "Renamed the Portfolio sidebar entry to Home for all roles; it continues to open the existing Portfolio page.",
+      "Renamed the Portfolio navigation entry to Home for all roles; it continues to open the existing Portfolio page.",
   },
   {
     title: "Projects navigation",
@@ -212,7 +225,7 @@ const faqs = [
   {
     question: "How do I submit an RFP estimate?",
     answer:
-      "Open RFP Estimation, complete the estimate and resource plan, then choose Submit for approval. You can save a draft before submitting.",
+      "Open RFP, complete the estimate and resource plan, then choose Submit for approval. You can save a draft before submitting.",
   },
   {
     question: "Where can I review risks and project progress?",

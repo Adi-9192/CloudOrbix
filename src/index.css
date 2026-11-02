@@ -37,6 +37,23 @@ body {
 
 .mono { font-family: var(--font-mono); }
 
+.nav-dropdown-enter {
+  animation: nav-dropdown-in 160ms ease-out both;
+  transform-origin: top left;
+}
+
+@keyframes nav-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.35rem) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .marquee {
   display: inline-block;
   padding-left: 100%;

@@ -1,13 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import Login from "./components/Login";
-import Shell, { type Page } from "./components/Shell";
+import Shell, { type DashboardView, type Page } from "./components/Shell";
 import LoadingScreen from "./components/LoadingScreen";
 import type { RfpProjectPrefill } from "./components/RfpEstimation";
 
 const Dashboard = lazy(() => import("./components/Dashboard"));
 const Projects = lazy(() => import("./components/Projects"));
 const ExcelImport = lazy(() => import("./components/ExcelImport"));
-const Reports = lazy(() => import("./components/Reports"));
 const AuditLogs = lazy(() => import("./components/AuditLogs"));
 const Admin = lazy(() => import("./components/Admin"));
 const SimplePage = lazy(() => import("./components/SimplePage"));
@@ -35,6 +34,7 @@ const LAST_ACTIVITY_KEY = "clmp-last-activity";
 const legacyPages: Record<string, Page> = {
   clients: "projects",
   servicecatalogue: "portfolio",
+  reports: "dashboard",
 };
 
 const normalizePage = (page: string): string => legacyPages[page] || page;
@@ -58,7 +58,7 @@ const getInitialPage = (): Page => {
   if (hasViewerOnlyAccess(getStoredUser())) return "portfolio";
   const rawHash = window.location.hash.replace(/^#/, "");
   const hash = normalizePage(rawHash) as Page;
-  const validPages: Page[] = ["dashboard", "projects", "projectframework", "reports", "excel", "audit", "admin", "help", "project", "documents", "repository", "portfolio", "profile", "risks", "rfp"];
+  const validPages: Page[] = ["dashboard", "projects", "projectframework", "excel", "audit", "admin", "help", "project", "documents", "repository", "portfolio", "profile", "risks", "rfp"];
   return validPages.includes(hash) ? hash : "dashboard";
 };
 
@@ -66,12 +66,13 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [loggedIn, setLoggedIn] = useState(Boolean(localStorage.getItem("clmp-token")));
   const [page, setPage] = useState<Page>(getInitialPage);
+  const [dashboardView, setDashboardView] = useState<DashboardView>("project");
+  const [projectStatusFilter, setProjectStatusFilter] = useState("All");
   const [dark, setDark] = useState(() => localStorage.getItem("clmp-theme") !== "light");
   const [user, setUser] = useState<AuthUser | null>(getStoredUser());
   const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem("clmp-project-id"));
   const [requestedEditProjectId, setRequestedEditProjectId] = useState<string | null>(null);
   const [repositoryDocuments, setRepositoryDocuments] = useState(() => localStorage.getItem("clmp-repository-documents") === "true");
-  const [globalSearch, setGlobalSearch] = useState("");
   const [rfpProjectSeed, setRfpProjectSeed] = useState<RfpProjectPrefill | null>(null);
 
   useEffect(() => {
@@ -108,8 +109,9 @@ export default function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const navigateTo = (nextPage: Page) => {
+  const navigateTo = (nextPage: Page, initialProjectStatusFilter = "All") => {
     const accessiblePage = hasViewerOnlyAccess(user) ? "portfolio" : nextPage;
+    if (accessiblePage === "projects") setProjectStatusFilter(initialProjectStatusFilter);
     setPage(accessiblePage);
     window.history.pushState({ page: accessiblePage }, "", accessiblePage === "dashboard" ? "/" : `#${accessiblePage}`);
   };
@@ -126,15 +128,6 @@ export default function App() {
   const openRfpProject = (seed: RfpProjectPrefill) => {
     setRfpProjectSeed(seed);
     navigateTo("projects");
-  };
-
-  const handleGlobalSearch = (query: string) => {
-    setGlobalSearch(query);
-    if (hasViewerOnlyAccess(user)) return;
-    if (query && page !== "projects") {
-      setPage("projects");
-      window.history.replaceState({ page: "projects" }, "", "#projects");
-    }
   };
 
   useEffect(() => {
@@ -234,17 +227,16 @@ export default function App() {
   const visiblePage: Page = hasViewerOnlyAccess(user) ? "portfolio" : page;
   const renderPage = () => {
     switch (visiblePage) {
-      case "dashboard":   return <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
-      case "projects":   return <Projects dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
-      case "project":     return projectId ? <ProjectPage dark={dark} clientId={projectId} user={user} onBack={() => navigateTo("projects")} onOpenDocuments={() => navigateTo("documents")} onEditProject={() => { setRequestedEditProjectId(projectId); navigateTo("projects"); }} /> : <Projects dark={dark} user={user} initialSearch={globalSearch} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
-      case "documents":  return projectId ? <DocumentsPage dark={dark} clientId={projectId} readOnly={repositoryDocuments} onBack={() => navigateTo(repositoryDocuments ? "repository" : "project")} /> : <Projects dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
+      case "dashboard":   return <Dashboard dark={dark} onNavigate={(p, statusFilter) => navigateTo(p as Page, statusFilter)} user={user} view={dashboardView} />;
+      case "projects":   return <Projects dark={dark} user={user} initialStatusFilter={projectStatusFilter} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
+      case "project":     return projectId ? <ProjectPage dark={dark} clientId={projectId} user={user} onBack={() => navigateTo("projects")} onOpenDocuments={() => navigateTo("documents")} onEditProject={() => { setRequestedEditProjectId(projectId); navigateTo("projects"); }} /> : <Projects dark={dark} user={user} requestedEditId={requestedEditProjectId} onEditRequestHandled={() => setRequestedEditProjectId(null)} newProjectSeed={rfpProjectSeed} onProjectSeedConsumed={() => setRfpProjectSeed(null)} onOpenProject={(id) => openProject(id)} />;
+      case "documents":  return projectId ? <DocumentsPage dark={dark} clientId={projectId} readOnly={repositoryDocuments} onBack={() => navigateTo(repositoryDocuments ? "repository" : "project")} /> : <Projects dark={dark} user={user} onOpenProject={(id) => openProject(id)} />;
       case "repository": return <ProjectRepository dark={dark} onOpenProject={(id) => openProject(id, "documents")} />;
       case "projectframework": return <ProjectFramework dark={dark} />;
       case "portfolio": return <Portfolio dark={dark} />;
-      case "excel":       return user.roles.includes("Admin") ? <ExcelImport dark={dark} /> : <Projects dark={dark} user={user} initialSearch={globalSearch} onOpenProject={(id) => openProject(id)} />;
-      case "reports":     return <Reports dark={dark} />;
-      case "audit":       return user.roles.includes("Admin") ? <AuditLogs dark={dark} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
-      case "admin":       return user.roles.includes("Admin") ? <Admin dark={dark} user={user} onOpenProject={(id) => openProject(id)} /> : <Dashboard dark={dark} onNavigate={p => navigateTo(p as Page)} user={user} />;
+      case "excel":       return user.roles.includes("Admin") ? <ExcelImport dark={dark} /> : <Projects dark={dark} user={user} onOpenProject={(id) => openProject(id)} />;
+      case "audit":       return user.roles.includes("Admin") ? <AuditLogs dark={dark} /> : <Dashboard dark={dark} onNavigate={(p, statusFilter) => navigateTo(p as Page, statusFilter)} user={user} />;
+      case "admin":       return user.roles.includes("Admin") ? <Admin dark={dark} user={user} onOpenProject={(id) => openProject(id)} /> : <Dashboard dark={dark} onNavigate={(p, statusFilter) => navigateTo(p as Page, statusFilter)} user={user} />;
       case "rfp":         return <RfpEstimation dark={dark} isAdmin={user.roles.includes("Admin")} userId={user.id} onMoveToProject={openRfpProject} />;
       case "profile":     return <ProfilePage dark={dark} user={user} onOpenProject={(id) => openProject(id)} />;
       case "risks":       return <RiskRegisterPage dark={dark} user={user} onOpenProject={(id) => openProject(id, "project")} />;
@@ -261,8 +253,10 @@ export default function App() {
       dark={dark}
       user={user}
       onToggleDark={() => setDark(d => !d)}
-      onSearch={handleGlobalSearch}
       onOpenProject={(id) => openProject(id)}
+      repositoryDocuments={repositoryDocuments}
+      dashboardView={dashboardView}
+      onDashboardViewChange={setDashboardView}
     >
       <Suspense fallback={<LoadingScreen />}>{renderPage()}</Suspense>
     </Shell>

@@ -47,6 +47,7 @@ interface ClientsProps {
   onOpenProject?: (clientId: string) => void
 
   initialSearch?: string
+  initialStatusFilter?: string
   requestedEditId?: string | null
   onEditRequestHandled?: () => void
 
@@ -423,6 +424,7 @@ export default function Projects({
   onOpenProject,
 
   initialSearch = "",
+  initialStatusFilter = "All",
   requestedEditId = null,
   onEditRequestHandled,
   newProjectSeed,
@@ -606,6 +608,10 @@ export default function Projects({
   }, [initialSearch])
 
   useEffect(() => {
+    setStatusFilter(initialStatusFilter)
+  }, [initialStatusFilter])
+
+  useEffect(() => {
     setPage(1)
   }, [search, statusFilter, regionFilter])
 
@@ -681,7 +687,12 @@ export default function Projects({
 
     .filter(
       (c) =>
-        (statusFilter === "All" || c.status === statusFilter) &&
+        (statusFilter === "All" ||
+          (statusFilter === "Active"
+            ? !["completed", "cancelled", "canceled", "offboarded"].includes(
+                normalizeProjectStatus(c.status).toLowerCase(),
+              ) && Number(c.completion || 0) < 100
+            : c.status === statusFilter)) &&
         (regionFilter === "All" || c.region === regionFilter),
     )
 
@@ -1500,6 +1511,7 @@ export default function Projects({
           style={{ background: bg, borderColor: border, color: text }}
         >
           <option value="All">All Statuses</option>
+          <option value="Active">Active Projects</option>
           {PROJECT_STATUSES.map((s) => (
             <option key={s}>{s}</option>
           ))}
