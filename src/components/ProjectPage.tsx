@@ -1233,7 +1233,7 @@ export default function ProjectPage({
           </table>
         </div>}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div
           className="rounded-xl border p-5"
           style={{ background: bg, borderColor: border }}
@@ -1310,48 +1310,6 @@ export default function ProjectPage({
                 No daily updates recorded yet.
               </p>
             )}
-          </div>
-        </div>
-        <div
-          className="rounded-xl border p-5"
-          style={{ background: bg, borderColor: border }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold text-sm">On Track risks</h2>
-              <p className="text-xs mt-1" style={{ color: muted }}>
-                Current risk tracker
-              </p>
-            </div>
-            <div
-              className="text-3xl font-bold"
-              style={{ color: openRisks ? "#DC2626" : "#16A34A" }}
-            >
-              {openRisks}
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-2 mt-5">
-            {riskLevels.map((level) => (
-              <div
-                key={level}
-                className="rounded-lg p-3 text-center"
-                style={{ background: `${riskColor(level)}18` }}
-              >
-                <div
-                  className="text-lg font-bold"
-                  style={{ color: riskColor(level) }}
-                >
-                  {
-                    risks.filter(
-                      (item) => item.status === "On Track" && item.level === level,
-                    ).length
-                  }
-                </div>
-                <div className="text-[10px]" style={{ color: muted }}>
-                  {level}
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </div>
@@ -1568,22 +1526,48 @@ export default function ProjectPage({
           </div>
         </div>
       </div>
-      <section className="mb-4">
-        <h2 className="mb-3 text-sm font-semibold">RFP Overview & Scope</h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {([
-            ["Overview", project.project_overview],
-            ["In Scope", project.in_scope],
-            ["Out of Scope", project.out_of_scope],
-            ["Assumptions", project.assumption],
-          ] as const).map(([title, content]) => (
-            <article key={title} className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
-              <h3 className="mb-2 text-xs font-semibold">{title}</h3>
-              <p className="whitespace-pre-wrap text-xs leading-5" style={{ color: muted }}>{content || ""}</p>
-            </article>
+      <div
+        className="rounded-xl border p-5"
+        style={{ background: bg, borderColor: border }}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-sm">On Track risks</h2>
+            <p className="text-xs mt-1" style={{ color: muted }}>
+              Current risk tracker
+            </p>
+          </div>
+          <div
+            className="text-3xl font-bold"
+            style={{ color: openRisks ? "#DC2626" : "#16A34A" }}
+          >
+            {openRisks}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-5">
+          {riskLevels.map((level) => (
+            <div
+              key={level}
+              className="rounded-lg p-3 text-center"
+              style={{ background: `${riskColor(level)}18` }}
+            >
+              <div
+                className="text-lg font-bold"
+                style={{ color: riskColor(level) }}
+              >
+                {
+                  risks.filter(
+                    (item) => item.status === "On Track" && item.level === level,
+                  ).length
+                }
+              </div>
+              <div className="text-[10px]" style={{ color: muted }}>
+                {level}
+              </div>
+            </div>
           ))}
         </div>
-      </section>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div
           className="lg:col-span-2 rounded-xl border p-5"
@@ -2184,6 +2168,22 @@ export default function ProjectPage({
           )}
         </div>
       </div>
+      <section>
+        <h2 className="mb-3 text-sm font-semibold">RFP Overview & Scope</h2>
+        <div className="grid grid-cols-1 gap-4">
+          {([
+            ["Overview", project.project_overview],
+            ["In Scope", project.in_scope],
+            ["Out of Scope", project.out_of_scope],
+            ["Assumptions", project.assumption],
+          ] as const).map(([title, content]) => (
+            <article key={title} className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
+              <h3 className="mb-2 text-xs font-semibold">{title}</h3>
+              <p className="whitespace-pre-wrap text-xs leading-5" style={{ color: muted }}>{content || ""}</p>
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

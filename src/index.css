@@ -100,10 +100,6 @@ body {
   order: 5;
 }
 
-.project-page > .risk-details {
-  order: 6;
-}
-
 .project-page > .risk-register > .mt-5 {
   display: none;
 }

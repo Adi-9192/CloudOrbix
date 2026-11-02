@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Project overview and scope",
+    detail:
+      "Moved each project’s Overview, In Scope, Out of Scope, and Assumptions section to the bottom of its project page and stacked the fields in one column. Reordered project page sections to show Project Details, Daily Updates, Project Summary, Task Manager, Task Manager Import, Risk Details, and then RFP Overview & Scope.",
+  },
+  {
     title: "Navigation and dashboard options",
     detail:
       "Separated Home, Dashboard, and RFP as direct navbar links. Moved Risk Register into Project Management, matched the Dashboard dropdown to its menu style, made the CloudOrbix logo navigate Home, and removed the standalone Reports page.",
