@@ -7,6 +7,7 @@ import ExcelJS from "exceljs"
 import { appState, createAuditEntry, createImportLog, getPool } from "../db.js"
 
 import { protectRoute, requireRole } from "../middleware/auth.js"
+import { normalizeHyperscaler } from "../../shared/hyperscalers.js"
 
 import {
   createProjectIdAllocator,
@@ -218,7 +219,7 @@ router.post(
               client.project_manager ||
               client.accountManager,
 
-            hyperscaler: client.hyperscaler,
+            hyperscaler: normalizeHyperscaler(client.hyperscaler),
 
             projectType: client.projectType || client.project_type,
 
@@ -606,7 +607,7 @@ router.post(
             value(record, "% Completion"),
           ),
 
-          hyperscaler: String(value(record, "Hyperscaler")),
+          hyperscaler: normalizeHyperscaler(value(record, "Hyperscaler")),
 
           projectType: String(value(record, "Project Type")),
 

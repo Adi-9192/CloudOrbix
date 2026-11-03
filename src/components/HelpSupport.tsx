@@ -150,14 +150,29 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Projects table readability",
+    detail:
+      "Increased the Projects table typography and cell spacing by 25%, made the full header row bold, and updated clickable project names to use theme-appropriate Portfolio colors.",
+  },
+  {
+    title: "Project Dashboard layout",
+    detail:
+      "Applied consistent enlarged typography and themed metric cards across the Project, Risk, and RFP dashboards. Project and RFP views use side-by-side charts and overviews with compact color-coded legends, while existing metric and revenue content is preserved.",
+  },
+  {
     title: "INR project revenue display",
     detail:
       "Project revenue, recovered revenue, and pending revenue are displayed in INR using the saved exchange rate for the project year.",
   },
   {
-    title: "RFP direct budget entry",
+    title: "RFP lumpsum amount entry",
     detail:
-      "Added a direct-entry estimation method for projects with a total budget and duration, without requiring resource allocations. Existing monthly and daily resource planning remains available.",
+      "Renamed the RFP estimation method option from Direct entry to Lumpsum amount. It continues to support projects with a total budget and duration without requiring resource allocations. Existing monthly and daily resource planning remains available.",
+  },
+  {
+    title: "RFP estimate register readability",
+    detail:
+      "Increased the estimate register table font size by 25% and styled both account names in bold blue, with brighter blue text in dark mode.",
   },
   {
     title: "Project overview and scope",
@@ -177,7 +192,7 @@ const releaseNotes = [
   {
     title: "Portfolio service popups",
     detail:
-      "Portfolio at-a-glance popups show the matching service image and title, its definition as a subtitle, and all core capabilities, with a blue accent bar and reduced top padding. Removed the separate collapsible service list from the page.",
+      "Portfolio at-a-glance cards have service titles increased by 25%. Their popups show the matching service image and title, its definition as a subtitle, and all core capabilities, with the capability text matched to the subtitle size, a blue accent bar, and reduced top padding. Removed the separate collapsible service list from the page.",
   },
   {
     title: "Home navigation",

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { normalizeProjectName } from "../../shared/project-name.js";
+import { PROJECT_REGIONS } from "../../shared/regions.js";
+import { HYPERSCALERS, normalizeHyperscaler } from "../../shared/hyperscalers.js";
 import {
   Archive,
   ArrowDownToLine,
@@ -266,7 +268,7 @@ const restoreEstimateDraft = (value: unknown): Estimate => {
     requestorEmail: String(stored.requestorEmail || ""),
     requestedDate,
     region: String(stored.region || ""),
-    cloud: String(stored.cloud || ""),
+    cloud: normalizeHyperscaler(stored.cloud),
     projectOverview: String(stored.projectOverview || ""),
     assumption: String(stored.assumption || ""),
     outOfScope: String(stored.outOfScope || ""),
@@ -824,7 +826,7 @@ export default function RfpEstimation({
         requestorEmail: project.requestor_email || "",
         requestedDate: new Date(project.requested_date).toISOString().slice(0, 10),
         region: project.region || "",
-        cloud: project.cloud || "",
+        cloud: normalizeHyperscaler(project.cloud),
         projectOverview: project.project_overview || "",
         assumption: project.assumption || "",
         outOfScope: project.out_of_scope || "",
@@ -1532,8 +1534,8 @@ export default function RfpEstimation({
                     <label className="text-xs font-semibold" style={labelStyle}>Request From/By<input className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestFromBy} onChange={(event) => patchEstimate({ requestFromBy: event.target.value })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Requestor Email ID (optional)<input type="email" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestorEmail} onChange={(event) => patchEstimate({ requestorEmail: event.target.value })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Requested Date<input type="date" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestedDate} onChange={(event) => patchEstimate({ requestedDate: event.target.value })} /></label>
-                    <label className="text-xs font-semibold" style={labelStyle}>Region<input className={`${inputClass} mt-1`} style={inputStyle} value={estimate.region} onChange={(event) => patchEstimate({ region: event.target.value })} /></label>
-                    <label className="text-xs font-semibold" style={labelStyle}>Cloud<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.cloud} onChange={(event) => patchEstimate({ cloud: event.target.value })}><option value="">Select</option><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option><option value="multi cloud">Multi Cloud</option></select></label>
+                    <label className="text-xs font-semibold" style={labelStyle}>Region<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.region} onChange={(event) => patchEstimate({ region: event.target.value })}><option value="">Select region</option>{PROJECT_REGIONS.map((region) => <option key={region}>{region}</option>)}</select></label>
+                    <label className="text-xs font-semibold" style={labelStyle}>Hyperscaler<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.cloud} onChange={(event) => patchEstimate({ cloud: event.target.value })}><option value="">Select</option>{HYPERSCALERS.map((hyperscaler) => <option key={hyperscaler}>{hyperscaler}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Year<select className={`${inputClass} mt-1`} style={inputStyle} value={estimateYearOptions.includes(Number(estimate.year)) ? estimate.year : ""} onChange={(event) => { if (event.target.value) patchEstimate({ year: Number(event.target.value) }); }}><option value="" disabled>{estimateYearOptions.length ? "Select year" : "No configured rate years"}</option>{estimateYearOptions.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Currency<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.currency} onChange={(event) => patchEstimate({ currency: event.target.value })}>{CURRENCIES.map((currency) => <option key={currency}>{currency}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Number of Months<input type="number" min="0" max="120" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.durationMonths} onChange={(event) => patchEstimate({ durationMonths: Number(event.target.value) })} /></label>
@@ -1559,7 +1561,7 @@ export default function RfpEstimation({
                             checked={estimate.directEntry}
                             onChange={() => patchEstimate({ directEntry: true })}
                           />
-                          Direct entry
+                          Lumpsum amount
                         </label>
                       </div>
                     </fieldset>
@@ -2000,7 +2002,7 @@ export default function RfpEstimation({
                   >
                     <h2 className="text-sm font-bold">Estimate register</h2>
                     <div className="mt-3 overflow-x-auto">
-                      <table className="w-full min-w-[520px] text-left text-xs">
+                      <table id="rfp-estimate-register-table" className="w-full min-w-[520px] text-left text-xs">
                         <thead>
                           <tr style={{ color: muted }}>
                             <th className="py-2">Account Name</th>
@@ -2019,14 +2021,15 @@ export default function RfpEstimation({
                             >
                               <td className="py-2">
                                 <button
-                                  className="font-semibold hover:underline"
+                                  className="font-bold hover:underline"
+                                  style={{ color: dark ? "var(--portfolio-primary)" : "#1E40AF" }}
                                   onClick={() => void loadEstimate(item.id)}
                                 >
                                   {item.project_name}
                                 </button>
                                 <div
-                                  className="mt-0.5"
-                                  style={{ color: muted }}
+                                  className="mt-0.5 font-bold"
+                                  style={{ color: dark ? "var(--portfolio-primary)" : "#1E40AF" }}
                                 >
                                   {item.client_name}
                                 </div>
@@ -2171,6 +2174,7 @@ export default function RfpEstimation({
       .rfp-icon-action{padding:7px;width:32px;height:32px}
       .rfp-grid-scroll{max-height:min(58vh,680px)}
       .rfp-grid thead{position:sticky;top:0;z-index:5}
+      .rfp-page{--portfolio-primary:#93C5FD}
       .rfp-grid th,.rfp-grid td{background:${surface}}
       .rfp-grid thead th{background:${panel}}
       .rfp-grid .rfp-sticky-1,.rfp-grid .rfp-sticky-2,.rfp-grid .rfp-sticky-3{position:sticky;z-index:3;background:${surface}}
@@ -2178,6 +2182,7 @@ export default function RfpEstimation({
       .rfp-grid .rfp-sticky-1{left:0}.rfp-grid .rfp-sticky-2{left:208px}.rfp-grid .rfp-sticky-3{left:320px}
       @media(max-width:767px){.rfp-grid-scroll{max-height:62vh}.rfp-grid .rfp-sticky-1{left:0;min-width:176px}.rfp-grid .rfp-sticky-2{left:176px;min-width:100px}.rfp-grid .rfp-sticky-3{left:276px;min-width:132px}}
       @media print{.rfp-toolbar,.rfp-page [role=tablist],.rfp-action,.rfp-primary,.rfp-icon-action,.rfp-register,body:has(.rfp-page) header,body:has(.rfp-page) aside{display:none!important}.rfp-page{color:#14251F!important}.rfp-grid-scroll{max-height:none;overflow:visible}.rfp-grid thead{position:static}.rfp-grid .rfp-sticky-1,.rfp-grid .rfp-sticky-2,.rfp-grid .rfp-sticky-3{position:static}body:has(.rfp-page) main{overflow:visible!important}}
+      #rfp-estimate-register-table th,#rfp-estimate-register-table td,#rfp-estimate-register-table th *,#rfp-estimate-register-table td *{font-size:15px!important}
     `}</style>
     </div>
   );

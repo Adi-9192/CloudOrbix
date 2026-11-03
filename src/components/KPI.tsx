@@ -14,6 +14,8 @@ export type KPICardProps = {
   accent: string;
   icon: LucideIcon;
   subtitle?: string;
+  hideFooter?: boolean;
+  blackText?: boolean;
   children?: ReactNode;
 };
 
@@ -34,7 +36,7 @@ function TrendPill({ trend, value }: { trend: KPITrend; value: string }) {
   );
 }
 
-export function KPICard({ title, value, change, trend, lastUpdated, accent, icon: Icon, subtitle, children }: KPICardProps) {
+export function KPICard({ title, value, change, trend, lastUpdated, accent, icon: Icon, subtitle, hideFooter = false, blackText = false, children }: KPICardProps) {
   return (
     <div className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_18px_36px_rgba(30,64,175,0.12)]">
       <div className="flex items-start justify-between gap-3">
@@ -43,7 +45,7 @@ export function KPICard({ title, value, change, trend, lastUpdated, accent, icon
             <Icon className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{title}</p>
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.08em] ${blackText ? "text-black" : "text-slate-500"}`}>{title}</p>
             <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{value}</p>
           </div>
         </div>
@@ -52,12 +54,14 @@ export function KPICard({ title, value, change, trend, lastUpdated, accent, icon
         </button>
       </div>
 
-      {subtitle && <p className="mt-2 text-[11px] text-slate-500">{subtitle}</p>}
+      {subtitle && <p className={`mt-2 text-[11px] ${blackText ? "text-black" : "text-slate-500"}`}>{subtitle}</p>}
 
-      <div className="mt-4 flex items-center justify-between">
-        <TrendPill trend={trend} value={change} />
-        <span className="text-[10px] text-slate-500">Updated {lastUpdated}</span>
-      </div>
+      {!hideFooter && (
+        <div className="mt-4 flex items-center justify-between">
+          <TrendPill trend={trend} value={change} />
+          <span className="text-[10px] text-slate-500">Updated {lastUpdated}</span>
+        </div>
+      )}
 
       {children && <div className="mt-4">{children}</div>}
     </div>

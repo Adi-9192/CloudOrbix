@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Shield, Users, Settings, Plus, Edit2, Trash2, Check, X, Eye, EyeOff, KeyRound, ToggleLeft, ToggleRight } from "lucide-react";
 import { showCloudOrbixAlert } from "../alert";
+import { normalizeHyperscaler } from "../../shared/hyperscalers.js";
 
 type UserStatus = "active" | "inactive";
 type TabKey = "users" | "roles" | "permissions" | "approvals";
@@ -792,7 +793,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
                 region: project.region,
                 industry: project.industry,
                 revenue: project.revenue,
-                hyperscaler: project.hyperscaler,
+                hyperscaler: normalizeHyperscaler(project.hyperscaler),
                 projectType: project.project_type,
                 serviceCategory: project.service_category,
                 projectBrief: project.project_brief,
@@ -823,7 +824,11 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
                   </div>
                   <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 text-xs">
                     <div className="font-semibold">Field</div><div className="font-semibold" style={{ color: muted }}>Current approved</div><div className="font-semibold" style={{ color: "#1E40AF" }}>Requested</div>
-                    {fields.map(([label, key]) => <div key={key} className="contents"><div className="border-t py-2" style={{ borderColor: border }}>{label}</div><div className="border-t py-2" style={{ borderColor: border }}>{formatReviewValue(current[key])}</div><div className="border-t py-2 font-semibold" style={{ borderColor: border, color: formatReviewValue(current[key]) !== formatReviewValue(requested[key]) ? "#D97706" : text }}>{formatReviewValue(requested[key])}</div></div>)}
+                    {fields.map(([label, key]) => {
+                      const currentValue = key === "hyperscaler" ? normalizeHyperscaler(current[key]) : current[key];
+                      const requestedValue = key === "hyperscaler" ? normalizeHyperscaler(requested[key]) : requested[key];
+                      return <div key={key} className="contents"><div className="border-t py-2" style={{ borderColor: border }}>{label}</div><div className="border-t py-2" style={{ borderColor: border }}>{formatReviewValue(currentValue)}</div><div className="border-t py-2 font-semibold" style={{ borderColor: border, color: formatReviewValue(currentValue) !== formatReviewValue(requestedValue) ? "#D97706" : text }}>{formatReviewValue(requestedValue)}</div></div>;
+                    })}
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
                     {[['Documents', reviewDetails?.documents?.length], ['Tasks', reviewDetails?.tasks?.length], ['Daily updates', reviewDetails?.updates?.length], ['Risks', reviewDetails?.risks?.length]].map(([label, count]) => <div key={String(label)} className="rounded-lg border p-3" style={{ borderColor: border }}><div className="text-lg font-bold">{count ?? "-"}</div><div className="text-[10px]" style={{ color: muted }}>{label}</div></div>)}

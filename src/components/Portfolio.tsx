@@ -326,7 +326,7 @@ export default function Portfolio({
                           type="button"
                           aria-haspopup="dialog"
                           onClick={() => setSelectedPortfolioItem(itemIndex)}
-                          className="grid min-h-24 w-full cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 px-5 py-5 text-left text-sm font-bold leading-5 text-[var(--portfolio-ink)] outline-none transition-colors duration-300 hover:text-[var(--portfolio-primary)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--portfolio-accent)] md:px-6 md:text-base md:leading-6"
+                          className="grid min-h-24 w-full cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 px-5 py-5 text-left text-[1.09375rem] font-bold leading-[1.5625rem] text-[var(--portfolio-ink)] outline-none transition-colors duration-300 hover:text-[var(--portfolio-primary)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--portfolio-accent)] md:px-6 md:text-[1.25rem] md:leading-[1.875rem]"
                         >
                           <span
                             aria-hidden="true"
@@ -391,7 +391,7 @@ export default function Portfolio({
                   </p>
                 </div>
               </header>
-              <div className="pt-6">
+              <div className="pt-6 text-sm leading-6 md:text-base md:leading-7">
                 <ServiceCapabilities service={selectedService} />
               </div>
             </div>
@@ -413,7 +413,7 @@ export default function Portfolio({
 function ServiceCapabilities({ service }: { service: Service }) {
   return (
     <>
-      <span className="mono" style={{ fontSize: "10px", letterSpacing: "0.16em", color: "var(--portfolio-muted)", textTransform: "uppercase", fontWeight: 500 }}>
+      <span className="mono" style={{ letterSpacing: "0.16em", color: "var(--portfolio-muted)", textTransform: "uppercase", fontWeight: 500 }}>
         Core Capabilities
       </span>
       {service.capabilities.length > 0 && (
@@ -433,7 +433,7 @@ function ServiceCapabilities({ service }: { service: Service }) {
                     display: "inline-block",
                   }}
                 />
-                <span style={{ fontSize: "0.9rem", color: "var(--portfolio-detail)", lineHeight: 1.65, fontWeight: 400 }}>
+                <span style={{ color: "var(--portfolio-detail)", fontWeight: 400 }}>
                   {labelled ? <><strong className="font-semibold text-[var(--portfolio-primary)]">{labelled[1]}{labelled[2]}</strong>{labelled[3]}</> : cap}
                 </span>
               </li>

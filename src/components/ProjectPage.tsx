@@ -20,6 +20,7 @@ import {
   PROJECT_STATUSES,
 } from "../../shared/project-status.js";
 import { calculateRevenueRecovery } from "../../shared/revenue-recovery.js";
+import { normalizeHyperscaler } from "../../shared/hyperscalers.js";
 import { convertCurrencyAmount } from "../../shared/currency-conversion.js";
 
 type ProjectPageProps = {
@@ -951,7 +952,7 @@ export default function ProjectPage({
           <p className="text-xs mt-1" style={{ color: muted }}>
             {project.client_id} · PM:{" "}
             {project.project_manager || project.account_manager || "Unassigned"}{" "}
-            · {project.hyperscaler || "No hyperscaler"}
+            · {normalizeHyperscaler(project.hyperscaler) || "No hyperscaler"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -1218,7 +1219,7 @@ export default function ProjectPage({
                 ["Project Type", project.project_type || "-"],
                 ["Service Category", project.service_category || "-"],
                 ["Services", project.services?.join(", ") || "-"],
-                ["Hyperscaler", project.hyperscaler || "-"],
+                ["Hyperscaler", normalizeHyperscaler(project.hyperscaler) || "-"],
                 ["Project Billing Code", project.project_billing_code || "-"],
                 ["ISOW", project.isow || "-"],
                 ["Year", project.year || "-"],
@@ -1442,7 +1443,7 @@ export default function ProjectPage({
 
               <div>
                 <span style={{ color: muted }}>Hyperscaler:</span>{" "}
-                {project.hyperscaler || "-"}
+                {normalizeHyperscaler(project.hyperscaler) || "-"}
               </div>
             </div>
           </div>

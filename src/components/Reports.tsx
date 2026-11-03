@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Download, FileText, Calendar, Clock, CheckCircle2, BarChart3, Users, DollarSign, Server, Plus, Send } from "lucide-react";
+import { PROJECT_REGIONS } from "../../shared/regions.js";
 
 interface ReportsProps { dark: boolean; }
 
@@ -114,9 +115,8 @@ export default function Reports({ dark }: ReportsProps) {
                 </div>
                 <div>
                   <label className="block text-[10px] font-semibold mb-1" style={{ color: muted }}>REGION</label>
-                  <select className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={{ background: bg, borderColor: border, color: text }}>
-                    <option>All Regions</option>
-                    <option>North America</option><option>Europe</option><option>APAC</option>
+                  <select defaultValue="All Regions" className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={{ background: bg, borderColor: border, color: text }}>
+                    {PROJECT_REGIONS.map((region) => <option key={region}>{region}</option>)}
                   </select>
                 </div>
               </div>

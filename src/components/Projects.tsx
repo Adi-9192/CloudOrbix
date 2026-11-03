@@ -31,6 +31,8 @@ import {
   PROJECT_STATUS_COLORS,
 } from "../../shared/project-status.js"
 import { normalizeProjectName } from "../../shared/project-name.js"
+import { PROJECT_REGIONS } from "../../shared/regions.js"
+import { HYPERSCALERS, normalizeHyperscaler } from "../../shared/hyperscalers.js"
 import { MANDATORY_DOCUMENTS } from "../data/projectDocuments"
 import type { RfpProjectPrefill } from "./RfpEstimation"
 
@@ -279,10 +281,6 @@ const ALL_SERVICES = [
 
 // aDDED NEW variable og list of regions, hyperscalers,
 
-const REGIONS = ["North America", "Europe", "APAC", "Middle East", "LATAM"]
-
-const HYPERSCALERS = ["GCP", "AZURE", "AWS", "Oracle", "Other"]
-
 const INDUSTRIES = [
   "Financial Services",
 
@@ -446,7 +444,7 @@ export default function Projects({
 
   const [statusFilter, setStatusFilter] = useState("All")
 
-  const [regionFilter, setRegionFilter] = useState("All")
+  const [regionFilter, setRegionFilter] = useState("All Regions")
 
   const [sortCol, setSortCol] = useState("status")
 
@@ -583,7 +581,7 @@ export default function Projects({
 
         completion: toPercentage(client.completion),
 
-        hyperscaler: client.hyperscaler || "",
+        hyperscaler: normalizeHyperscaler(client.hyperscaler),
 
         projectType: client.projectType || "",
 
@@ -700,7 +698,7 @@ export default function Projects({
       region: newProjectSeed.region,
       revenue: String(newProjectSeed.revenue),
       currencyCode: newProjectSeed.currency,
-      hyperscaler: newProjectSeed.cloud.toUpperCase(),
+      hyperscaler: normalizeHyperscaler(newProjectSeed.cloud),
       projectType: newProjectSeed.projectType === "Non Std" ? "Non-STD" : "STD",
       projectBrief: newProjectSeed.projectOverview,
       projectOverview: newProjectSeed.projectOverview,
@@ -762,7 +760,7 @@ export default function Projects({
                 normalizeProjectStatus(c.status).toLowerCase(),
               ) && Number(c.completion || 0) < 100
             : c.status === statusFilter)) &&
-        (regionFilter === "All" || c.region === regionFilter),
+        (regionFilter === "All Regions" || c.region === regionFilter),
     )
 
     .filter(
@@ -950,7 +948,7 @@ export default function Projects({
 
       completion: String(toPercentage((client as any).completion)),
 
-      hyperscaler: (client as any).hyperscaler || "",
+      hyperscaler: normalizeHyperscaler((client as any).hyperscaler),
 
       projectType: (client as any).projectType || "",
 
@@ -1159,7 +1157,7 @@ export default function Projects({
 
       accountManager: form.manager,
 
-      region: form.region || "North America",
+      region: form.region || "America",
 
       industry: form.industry || "Technology",
 
@@ -1350,7 +1348,7 @@ export default function Projects({
           serverClient?.completion ?? payload.completion,
         ),
 
-        hyperscaler: serverClient?.hyperscaler || "",
+        hyperscaler: normalizeHyperscaler(serverClient?.hyperscaler),
 
         projectType: serverClient?.projectType || "",
 
@@ -1467,7 +1465,11 @@ export default function Projects({
     : currencyRatesByYear[Number(form.year)]?.[form.currencyCode]
 
   return (
-    <div className="p-6" style={{ color: text }}>
+    <div
+      data-theme={dark ? "dark" : undefined}
+      className="projects-page p-6"
+      style={{ color: text }}
+    >
       {confirmDialog && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
           <div
@@ -1528,8 +1530,8 @@ export default function Projects({
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-bold">Project Management</h1>
-          <p className="text-xs mt-0.5" style={{ color: muted }}>
+          <h1 className="text-[25px] font-bold">Project Management</h1>
+          <p className="mt-0.5 text-[15px]" style={{ color: muted }}>
             {filtered.length} projects ·{" "}
             {selected.length > 0 && `${selected.length} selected`}
           </p>
@@ -1552,10 +1554,10 @@ export default function Projects({
           {user?.roles.includes("Admin") && (
             <button
               onClick={openAddClient}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-colors"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[15px] font-semibold text-white transition-colors"
               style={{ background: "#1E40AF" }}
             >
-              <Plus className="w-3.5 h-3.5" /> Add Project
+              <Plus className="h-[17.5px] w-[17.5px]" /> Add Project
             </button>
           )}
         </div>
@@ -1594,8 +1596,7 @@ export default function Projects({
           className="px-3 py-2 rounded-lg border text-xs outline-none"
           style={{ background: bg, borderColor: border, color: text }}
         >
-          <option value="All">All Regions</option>
-          {REGIONS.map((r) => (
+          {PROJECT_REGIONS.map((r) => (
             <option key={r}>{r}</option>
           ))}
         </select>
@@ -1607,7 +1608,7 @@ export default function Projects({
         style={{ background: bg, borderColor: border }}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1900px]">
+          <table id="projects-table" className="w-full min-w-[1900px]">
             <thead>
               <tr
                 className="border-b"
@@ -1782,8 +1783,12 @@ export default function Projects({
                     <td className="px-4 py-3">
                       <button
                         onClick={() => onOpenProject?.(c.id)}
-                        className="font-semibold text-xs text-left hover:underline"
-                        style={{ color: "#1E40AF" }}
+                        className="font-semibold text-left hover:underline"
+                        style={{
+                          color: dark
+                            ? "var(--portfolio-primary)"
+                            : "var(--portfolio-primary-light)",
+                        }}
                       >
                         {c.name}
                       </button>
@@ -1859,7 +1864,7 @@ export default function Projects({
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
-                      {c.hyperscaler || "-"}
+                      {normalizeHyperscaler(c.hyperscaler) || "-"}
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
                       {c.projectType || "-"}
@@ -2168,7 +2173,7 @@ export default function Projects({
 
                       type: "select",
 
-                      options: REGIONS,
+                      options: PROJECT_REGIONS,
                     },
 
                     {
