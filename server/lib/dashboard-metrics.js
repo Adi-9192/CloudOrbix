@@ -1,4 +1,5 @@
 import { normalizeProjectStatus } from '../../shared/project-status.js';
+import { normalizeHyperscaler } from '../../shared/hyperscalers.js';
 
 const normalizedStatus = (value) =>
   String(value || '')
@@ -12,7 +13,7 @@ const delayedCategory = (value) =>
 const projectBreakdownFields = {
   status: (client) => client.current_status ?? client.currentStatus,
   region: (client) => client.region,
-  hyperscaler: (client) => client.hyperscaler,
+  hyperscaler: (client) => normalizeHyperscaler(client.hyperscaler) || 'Unspecified',
   projectType: (client) => client.project_type ?? client.projectType,
 };
 

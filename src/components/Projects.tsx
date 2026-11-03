@@ -31,6 +31,8 @@ import {
   PROJECT_STATUS_COLORS,
 } from "../../shared/project-status.js"
 import { normalizeProjectName } from "../../shared/project-name.js"
+import { PROJECT_REGIONS } from "../../shared/regions.js"
+import { HYPERSCALERS, normalizeHyperscaler } from "../../shared/hyperscalers.js"
 import { MANDATORY_DOCUMENTS } from "../data/projectDocuments"
 import type { RfpProjectPrefill } from "./RfpEstimation"
 
@@ -279,10 +281,6 @@ const ALL_SERVICES = [
 
 // aDDED NEW variable og list of regions, hyperscalers,
 
-const REGIONS = ["North America", "Europe", "APAC", "Middle East", "LATAM"]
-
-const HYPERSCALERS = ["GCP", "AZURE", "AWS", "Oracle", "Other"]
-
 const INDUSTRIES = [
   "Financial Services",
 
@@ -446,7 +444,7 @@ export default function Projects({
 
   const [statusFilter, setStatusFilter] = useState("All")
 
-  const [regionFilter, setRegionFilter] = useState("All")
+  const [regionFilter, setRegionFilter] = useState("All Regions")
 
   const [sortCol, setSortCol] = useState("status")
 
@@ -583,7 +581,7 @@ export default function Projects({
 
         completion: toPercentage(client.completion),
 
-        hyperscaler: client.hyperscaler || "",
+        hyperscaler: normalizeHyperscaler(client.hyperscaler),
 
         projectType: client.projectType || "",
 
@@ -700,7 +698,7 @@ export default function Projects({
       region: newProjectSeed.region,
       revenue: String(newProjectSeed.revenue),
       currencyCode: newProjectSeed.currency,
-      hyperscaler: newProjectSeed.cloud.toUpperCase(),
+      hyperscaler: normalizeHyperscaler(newProjectSeed.cloud),
       projectType: newProjectSeed.projectType === "Non Std" ? "Non-STD" : "STD",
       projectBrief: newProjectSeed.projectOverview,
       projectOverview: newProjectSeed.projectOverview,
@@ -762,7 +760,7 @@ export default function Projects({
                 normalizeProjectStatus(c.status).toLowerCase(),
               ) && Number(c.completion || 0) < 100
             : c.status === statusFilter)) &&
-        (regionFilter === "All" || c.region === regionFilter),
+        (regionFilter === "All Regions" || c.region === regionFilter),
     )
 
     .filter(
@@ -950,7 +948,7 @@ export default function Projects({
 
       completion: String(toPercentage((client as any).completion)),
 
-      hyperscaler: (client as any).hyperscaler || "",
+      hyperscaler: normalizeHyperscaler((client as any).hyperscaler),
 
       projectType: (client as any).projectType || "",
 
@@ -1159,7 +1157,7 @@ export default function Projects({
 
       accountManager: form.manager,
 
-      region: form.region || "North America",
+      region: form.region || "America",
 
       industry: form.industry || "Technology",
 
@@ -1350,7 +1348,7 @@ export default function Projects({
           serverClient?.completion ?? payload.completion,
         ),
 
-        hyperscaler: serverClient?.hyperscaler || "",
+        hyperscaler: normalizeHyperscaler(serverClient?.hyperscaler),
 
         projectType: serverClient?.projectType || "",
 
@@ -1598,8 +1596,7 @@ export default function Projects({
           className="px-3 py-2 rounded-lg border text-xs outline-none"
           style={{ background: bg, borderColor: border, color: text }}
         >
-          <option value="All">All Regions</option>
-          {REGIONS.map((r) => (
+          {PROJECT_REGIONS.map((r) => (
             <option key={r}>{r}</option>
           ))}
         </select>
@@ -1867,7 +1864,7 @@ export default function Projects({
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
-                      {c.hyperscaler || "-"}
+                      {normalizeHyperscaler(c.hyperscaler) || "-"}
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
                       {c.projectType || "-"}
@@ -2176,7 +2173,7 @@ export default function Projects({
 
                       type: "select",
 
-                      options: REGIONS,
+                      options: PROJECT_REGIONS,
                     },
 
                     {

@@ -1,1 +1,3 @@
 - Reset password link for viewer role.
+- ![alt text](image.png) reframe this properly . Explainations of roles 
+- ![alt text](image-1.png) even here is view reports and stuff , we have to delete it too . 

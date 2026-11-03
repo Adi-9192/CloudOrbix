@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FolderOpen, RefreshCw, Search } from "lucide-react";
 import { showCloudOrbixAlert } from "../alert";
+import { normalizeHyperscaler } from "../../shared/hyperscalers.js";
 
 type RepositoryProps = { dark: boolean; onOpenProject: (clientId: string) => void };
 type RepositoryProject = {
@@ -139,7 +140,7 @@ export default function ProjectRepository({ dark, onOpenProject }: RepositoryPro
                 {project.project_manager || project.account_manager || "Unassigned"}
                 {project.region ? ` · ${project.region}` : ""}
                 {project.year ? ` · ${project.year}` : ""}
-                {project.hyperscaler ? ` · ${project.hyperscaler}` : ""}
+                {normalizeHyperscaler(project.hyperscaler) ? ` · ${normalizeHyperscaler(project.hyperscaler)}` : ""}
               </div>
             </div>
             <div className="text-right shrink-0">

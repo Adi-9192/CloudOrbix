@@ -4,6 +4,7 @@ import { protectRoute, requireRole } from '../middleware/auth.js';
 import { buildPeriods, periodAllocationKey } from '../lib/rfp-periods.js';
 import { buildRfpWorkbook } from '../lib/rfp-export.js';
 import { normalizeProjectName } from '../../shared/project-name.js';
+import { HYPERSCALERS, normalizeHyperscaler } from '../../shared/hyperscalers.js';
 
 const router = express.Router();
 const resourceTypes = ['Long Term', 'Standard', 'Moderate', 'Experts'];
@@ -66,7 +67,7 @@ function validateProject(body, requireCompleteEffort = true) {
   const requestFromBy = String(body?.requestFromBy || '').trim();
   const requestorEmail = String(body?.requestorEmail || '').trim();
   const region = String(body?.region || '').trim();
-  const cloud = String(body?.cloud || '').toLowerCase();
+  const cloud = body?.cloud ? normalizeHyperscaler(body.cloud) : '';
   const projectOverview = String(body?.projectOverview || '').trim();
   const assumption = String(body?.assumption || '').trim();
   const outOfScope = String(body?.outOfScope || '').trim();
@@ -116,7 +117,7 @@ function validateProject(body, requireCompleteEffort = true) {
   if (projectType && !['Std', 'Non Std'].includes(projectType)) return { error: 'Select Std or Non Std project type.' };
   if (!['Tentative', 'Completed', 'Project Initiated', 'Cancelled', 'In Discussion', 'Firm'].includes(projectStatus)) return { error: 'Select a valid project status.' };
   if (requestorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requestorEmail)) return { error: 'Enter a valid requestor email address.' };
-  if (cloud && !['aws', 'azure', 'gcp', 'multi cloud'].includes(cloud)) return { error: 'Select AWS, Azure, GCP, or Multi Cloud.' };
+  if (body?.cloud && !HYPERSCALERS.includes(cloud)) return { error: 'Select AZURE, AWS, GCP, ORACLE, or MULTICLOUD.' };
   if (!Number.isFinite(allowance) || allowance < 0 || allowance > 100) return { error: 'Allowance must be between 0 and 100 percent.' };
   if (directEntry && (!Number.isFinite(directBudget) || directBudget <= 0 || directBudget > 9999999999999999 || Math.abs(directBudget * 100 - Math.round(directBudget * 100)) > 1e-7)) return { error: 'Enter a total project budget greater than zero with up to two decimal places.' };
   if (!directEntry && !resources.length) return { error: 'Add at least one resource row.' };
@@ -378,7 +379,12 @@ router.get('/projects', async (req, res, next) => {
   if (!pool) return;
   try {
     const result = await pool.query('SELECT p.id, p.project_name, p.client_name, p.[year], p.currency_code, p.status, p.project_status, p.initiated_at, p.requested_date, p.region, p.project_type, p.cloud, p.request_from_by, p.requestor_email, p.duration_months, p.duration_days, p.project_overview, p.assumption, p.out_of_scope, p.in_scope, p.updated_at, s.grand_total_inr, s.selected_currency_total FROM rfp_projects p LEFT JOIN rfp_cost_summary s ON s.project_id = p.id ORDER BY p.updated_at DESC');
-    return res.json({ projects: result.rows });
+    return res.json({
+      projects: result.rows.map((project) => ({
+        ...project,
+        cloud: normalizeHyperscaler(project.cloud),
+      })),
+    });
   } catch (error) { return next(error); }
 });
 
@@ -527,7 +533,7 @@ router.get('/projects/:id', async (req, res, next) => {
       if (key) rowAllocations[key] = Number(row.fte);
       allocationMap.set(row.resource_id, rowAllocations);
     });
-    return res.json({ project: project.rows[0], resources: resources.rows.map((row) => ({ id: row.id, planType: String(row.resource_plan_type || 'Monthly').toLowerCase(), name: row.resource_name, grade: row.grade, resourceType: row.resource_type, dailyManDays: Number(row.daily_man_days || 0), allocations: allocationMap.get(row.id) || {} })) });
+    return res.json({ project: { ...project.rows[0], cloud: normalizeHyperscaler(project.rows[0].cloud) }, resources: resources.rows.map((row) => ({ id: row.id, planType: String(row.resource_plan_type || 'Monthly').toLowerCase(), name: row.resource_name, grade: row.grade, resourceType: row.resource_type, dailyManDays: Number(row.daily_man_days || 0), allocations: allocationMap.get(row.id) || {} })) });
   } catch (error) { return next(error); }
 });
 
@@ -666,7 +672,7 @@ router.post('/projects/:id/duplicate', async (req, res, next) => {
       requestorEmail: source.requestor_email,
       requestedDate: new Date(source.requested_date).toISOString().slice(0, 10),
       region: source.region,
-      cloud: source.cloud,
+      cloud: normalizeHyperscaler(source.cloud),
       projectOverview: source.project_overview,
       assumption: source.assumption,
       outOfScope: source.out_of_scope,

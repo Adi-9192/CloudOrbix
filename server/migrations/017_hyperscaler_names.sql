@@ -1,0 +1,21 @@
+UPDATE dbo.clients
+SET hyperscaler = CASE
+    WHEN UPPER(LTRIM(RTRIM(hyperscaler))) = 'AZURE' THEN 'AZURE'
+    WHEN UPPER(LTRIM(RTRIM(hyperscaler))) = 'AWS' THEN 'AWS'
+    WHEN UPPER(LTRIM(RTRIM(hyperscaler))) = 'GCP' THEN 'GCP'
+    WHEN UPPER(LTRIM(RTRIM(hyperscaler))) = 'ORACLE' THEN 'ORACLE'
+    WHEN UPPER(REPLACE(REPLACE(LTRIM(RTRIM(hyperscaler)), '_', ' '), '-', ' ')) IN ('MULTICLOUD', 'MULTI CLOUD') THEN 'MULTICLOUD'
+END
+WHERE UPPER(LTRIM(RTRIM(hyperscaler))) IN ('AZURE', 'AWS', 'GCP', 'ORACLE')
+   OR UPPER(REPLACE(REPLACE(LTRIM(RTRIM(hyperscaler)), '_', ' '), '-', ' ')) IN ('MULTICLOUD', 'MULTI CLOUD');
+
+UPDATE dbo.rfp_projects
+SET cloud = CASE
+    WHEN UPPER(LTRIM(RTRIM(cloud))) = 'AZURE' THEN 'AZURE'
+    WHEN UPPER(LTRIM(RTRIM(cloud))) = 'AWS' THEN 'AWS'
+    WHEN UPPER(LTRIM(RTRIM(cloud))) = 'GCP' THEN 'GCP'
+    WHEN UPPER(LTRIM(RTRIM(cloud))) = 'ORACLE' THEN 'ORACLE'
+    WHEN UPPER(REPLACE(REPLACE(LTRIM(RTRIM(cloud)), '_', ' '), '-', ' ')) IN ('MULTICLOUD', 'MULTI CLOUD') THEN 'MULTICLOUD'
+END
+WHERE UPPER(LTRIM(RTRIM(cloud))) IN ('AZURE', 'AWS', 'GCP', 'ORACLE')
+   OR UPPER(REPLACE(REPLACE(LTRIM(RTRIM(cloud)), '_', ' '), '-', ' ')) IN ('MULTICLOUD', 'MULTI CLOUD');

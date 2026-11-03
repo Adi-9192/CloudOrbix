@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { normalizeProjectName } from "../../shared/project-name.js";
+import { PROJECT_REGIONS } from "../../shared/regions.js";
+import { HYPERSCALERS, normalizeHyperscaler } from "../../shared/hyperscalers.js";
 import {
   Archive,
   ArrowDownToLine,
@@ -266,7 +268,7 @@ const restoreEstimateDraft = (value: unknown): Estimate => {
     requestorEmail: String(stored.requestorEmail || ""),
     requestedDate,
     region: String(stored.region || ""),
-    cloud: String(stored.cloud || ""),
+    cloud: normalizeHyperscaler(stored.cloud),
     projectOverview: String(stored.projectOverview || ""),
     assumption: String(stored.assumption || ""),
     outOfScope: String(stored.outOfScope || ""),
@@ -824,7 +826,7 @@ export default function RfpEstimation({
         requestorEmail: project.requestor_email || "",
         requestedDate: new Date(project.requested_date).toISOString().slice(0, 10),
         region: project.region || "",
-        cloud: project.cloud || "",
+        cloud: normalizeHyperscaler(project.cloud),
         projectOverview: project.project_overview || "",
         assumption: project.assumption || "",
         outOfScope: project.out_of_scope || "",
@@ -1532,8 +1534,8 @@ export default function RfpEstimation({
                     <label className="text-xs font-semibold" style={labelStyle}>Request From/By<input className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestFromBy} onChange={(event) => patchEstimate({ requestFromBy: event.target.value })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Requestor Email ID (optional)<input type="email" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestorEmail} onChange={(event) => patchEstimate({ requestorEmail: event.target.value })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Requested Date<input type="date" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestedDate} onChange={(event) => patchEstimate({ requestedDate: event.target.value })} /></label>
-                    <label className="text-xs font-semibold" style={labelStyle}>Region<input className={`${inputClass} mt-1`} style={inputStyle} value={estimate.region} onChange={(event) => patchEstimate({ region: event.target.value })} /></label>
-                    <label className="text-xs font-semibold" style={labelStyle}>Cloud<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.cloud} onChange={(event) => patchEstimate({ cloud: event.target.value })}><option value="">Select</option><option value="aws">AWS</option><option value="azure">Azure</option><option value="gcp">GCP</option><option value="multi cloud">Multi Cloud</option></select></label>
+                    <label className="text-xs font-semibold" style={labelStyle}>Region<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.region} onChange={(event) => patchEstimate({ region: event.target.value })}><option value="">Select region</option>{PROJECT_REGIONS.map((region) => <option key={region}>{region}</option>)}</select></label>
+                    <label className="text-xs font-semibold" style={labelStyle}>Hyperscaler<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.cloud} onChange={(event) => patchEstimate({ cloud: event.target.value })}><option value="">Select</option>{HYPERSCALERS.map((hyperscaler) => <option key={hyperscaler}>{hyperscaler}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Year<select className={`${inputClass} mt-1`} style={inputStyle} value={estimateYearOptions.includes(Number(estimate.year)) ? estimate.year : ""} onChange={(event) => { if (event.target.value) patchEstimate({ year: Number(event.target.value) }); }}><option value="" disabled>{estimateYearOptions.length ? "Select year" : "No configured rate years"}</option>{estimateYearOptions.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Currency<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.currency} onChange={(event) => patchEstimate({ currency: event.target.value })}>{CURRENCIES.map((currency) => <option key={currency}>{currency}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Number of Months<input type="number" min="0" max="120" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.durationMonths} onChange={(event) => patchEstimate({ durationMonths: Number(event.target.value) })} /></label>

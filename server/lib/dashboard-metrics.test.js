@@ -22,7 +22,7 @@ test('groups approved projects for the dashboard pie chart', () => {
     { name: 'APAC', value: 1 },
   ]);
   assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'hyperscaler'), [
-    { name: 'Azure', value: 2 },
+    { name: 'AZURE', value: 2 },
     { name: 'AWS', value: 1 },
   ]);
   assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'projectType'), [
