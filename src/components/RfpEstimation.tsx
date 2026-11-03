@@ -1561,7 +1561,7 @@ export default function RfpEstimation({
                             checked={estimate.directEntry}
                             onChange={() => patchEstimate({ directEntry: true })}
                           />
-                          Direct entry
+                          Lumpsum amount
                         </label>
                       </div>
                     </fieldset>
@@ -2002,7 +2002,7 @@ export default function RfpEstimation({
                   >
                     <h2 className="text-sm font-bold">Estimate register</h2>
                     <div className="mt-3 overflow-x-auto">
-                      <table className="w-full min-w-[520px] text-left text-xs">
+                      <table id="rfp-estimate-register-table" className="w-full min-w-[520px] text-left text-xs">
                         <thead>
                           <tr style={{ color: muted }}>
                             <th className="py-2">Account Name</th>
@@ -2021,14 +2021,15 @@ export default function RfpEstimation({
                             >
                               <td className="py-2">
                                 <button
-                                  className="font-semibold hover:underline"
+                                  className="font-bold hover:underline"
+                                  style={{ color: dark ? "var(--portfolio-primary)" : "#1E40AF" }}
                                   onClick={() => void loadEstimate(item.id)}
                                 >
                                   {item.project_name}
                                 </button>
                                 <div
-                                  className="mt-0.5"
-                                  style={{ color: muted }}
+                                  className="mt-0.5 font-bold"
+                                  style={{ color: dark ? "var(--portfolio-primary)" : "#1E40AF" }}
                                 >
                                   {item.client_name}
                                 </div>
@@ -2173,6 +2174,7 @@ export default function RfpEstimation({
       .rfp-icon-action{padding:7px;width:32px;height:32px}
       .rfp-grid-scroll{max-height:min(58vh,680px)}
       .rfp-grid thead{position:sticky;top:0;z-index:5}
+      .rfp-page{--portfolio-primary:#93C5FD}
       .rfp-grid th,.rfp-grid td{background:${surface}}
       .rfp-grid thead th{background:${panel}}
       .rfp-grid .rfp-sticky-1,.rfp-grid .rfp-sticky-2,.rfp-grid .rfp-sticky-3{position:sticky;z-index:3;background:${surface}}
@@ -2180,6 +2182,7 @@ export default function RfpEstimation({
       .rfp-grid .rfp-sticky-1{left:0}.rfp-grid .rfp-sticky-2{left:208px}.rfp-grid .rfp-sticky-3{left:320px}
       @media(max-width:767px){.rfp-grid-scroll{max-height:62vh}.rfp-grid .rfp-sticky-1{left:0;min-width:176px}.rfp-grid .rfp-sticky-2{left:176px;min-width:100px}.rfp-grid .rfp-sticky-3{left:276px;min-width:132px}}
       @media print{.rfp-toolbar,.rfp-page [role=tablist],.rfp-action,.rfp-primary,.rfp-icon-action,.rfp-register,body:has(.rfp-page) header,body:has(.rfp-page) aside{display:none!important}.rfp-page{color:#14251F!important}.rfp-grid-scroll{max-height:none;overflow:visible}.rfp-grid thead{position:static}.rfp-grid .rfp-sticky-1,.rfp-grid .rfp-sticky-2,.rfp-grid .rfp-sticky-3{position:static}body:has(.rfp-page) main{overflow:visible!important}}
+      #rfp-estimate-register-table th,#rfp-estimate-register-table td,#rfp-estimate-register-table th *,#rfp-estimate-register-table td *{font-size:15px!important}
     `}</style>
     </div>
   );

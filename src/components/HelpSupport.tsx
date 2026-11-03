@@ -165,9 +165,14 @@ const releaseNotes = [
       "Project revenue, recovered revenue, and pending revenue are displayed in INR using the saved exchange rate for the project year.",
   },
   {
-    title: "RFP direct budget entry",
+    title: "RFP lumpsum amount entry",
     detail:
-      "Added a direct-entry estimation method for projects with a total budget and duration, without requiring resource allocations. Existing monthly and daily resource planning remains available.",
+      "Renamed the RFP estimation method option from Direct entry to Lumpsum amount. It continues to support projects with a total budget and duration without requiring resource allocations. Existing monthly and daily resource planning remains available.",
+  },
+  {
+    title: "RFP estimate register readability",
+    detail:
+      "Increased the estimate register table font size by 25% and styled both account names in bold blue, with brighter blue text in dark mode.",
   },
   {
     title: "Project overview and scope",
