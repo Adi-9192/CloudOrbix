@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Projects table readability",
+    detail:
+      "Increased the Projects table typography and cell spacing by 25%, made the full header row bold, and updated clickable project names to use theme-appropriate Portfolio colors.",
+  },
+  {
     title: "Project Dashboard layout",
     detail:
       "Applied consistent enlarged typography and themed metric cards across the Project, Risk, and RFP dashboards. Project and RFP views use side-by-side charts and overviews with compact color-coded legends, while existing metric and revenue content is preserved.",

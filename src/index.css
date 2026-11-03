@@ -153,3 +153,21 @@ body {
   --portfolio-warning: #FBBF24;
   --portfolio-warning-bg: #292717;
 }
+
+.projects-page {
+  --portfolio-primary-light: #1E3A5F;
+}
+
+.projects-page[data-theme='dark'] {
+  --portfolio-primary: #93C5FD;
+}
+
+#projects-table th,
+#projects-table td {
+  padding: 0.9375rem 1.25rem !important;
+  font-size: 0.9375rem !important;
+}
+
+#projects-table th {
+  font-weight: 700 !important;
+}
