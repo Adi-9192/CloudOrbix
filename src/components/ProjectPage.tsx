@@ -1219,7 +1219,7 @@ export default function ProjectPage({
               {renderProjectDetails()}
               <div className="border-t px-5 py-4" style={{ borderColor: border }}>
                 <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: muted }}>Project brief</p>
-                <p className="mt-2 whitespace-pre-wrap text-xs leading-5" style={{ color: text }}>
+                <p className="mt-2 min-h-[96px] whitespace-pre-wrap text-xs leading-5" style={{ color: text }}>
                   {project.project_brief || "No project brief has been added."}
                 </p>
               </div>
@@ -1388,7 +1388,7 @@ export default function ProjectPage({
             <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: border }}>
                 <div>
-                  <h2 className="text-sm font-bold">Priority tasks</h2>
+                  <h2 className="text-sm font-bold">Tasks</h2>
                   <p className="mt-1 text-[11px]" style={{ color: muted }}>Current project tasks and due dates</p>
                 </div>
                 <button type="button" onClick={() => { setActiveTab("Tasks"); setShowTaskForm(true); setEditingTaskId(null); setTask({ ...emptyTask, assignedTo: manager === "Unassigned" ? "" : manager }); }} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold" style={{ borderColor: border }}>
