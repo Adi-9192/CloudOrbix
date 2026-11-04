@@ -42,9 +42,14 @@ export const isAssignedProjectManager = (user = {}, project = {}) => {
 
 export const canAccessProject = (user = {}, project = {}) => {
   const roles = normalizeRoles(user.roles || []);
+  const userEmail = String(user.email || '').trim().toLowerCase();
+  const temporaryManagers = normalizeProjectAssignees(project.temporaryManagerEmails);
 
   return canManageProject(roles) ||
-    (roles.includes('Manager') && isAssignedProjectManager(user, project));
+    (roles.includes('Manager') && (
+      isAssignedProjectManager(user, project) ||
+      temporaryManagers.includes(userEmail)
+    ));
 };
 
 export const canApprove = (roles = []) => hasAnyRole(roles, ['Admin']);
