@@ -6,6 +6,7 @@ import {
   canDelete,
   canManageProject,
   hasAnyRole,
+  isAssignedProjectManager,
 } from './permissions.js';
 
 test('restricts approval and deletion to administrators', () => {
@@ -51,4 +52,29 @@ test('limits manager project access to the assigned project manager', () => {
   assert.equal(canAccessProject(otherManager, project), false);
   assert.equal(canAccessProject({ roles: ['Admin'] }, project), true);
   assert.equal(canAccessProject({ roles: ['Operations Team'] }, project), true);
+});
+
+test('grants project access to managers with approved temporary access', () => {
+  const project = {
+    accountManager: 'Assigned Manager',
+    projectManager: 'assigned.manager@example.com',
+    temporaryManagerEmails: 'temporary.manager@example.com',
+  };
+  const temporaryManager = {
+    firstName: 'Temporary',
+    lastName: 'Manager',
+    email: 'temporary.manager@example.com',
+    roles: ['Manager'],
+  };
+  const unrelatedManager = {
+    firstName: 'Other',
+    lastName: 'Manager',
+    email: 'other.manager@example.com',
+    roles: ['Manager'],
+  };
+
+  assert.equal(canAccessProject(temporaryManager, project), true);
+  assert.equal(isAssignedProjectManager(temporaryManager, project), false);
+  assert.equal(canAccessProject(unrelatedManager, project), false);
+  assert.equal(canAccessProject({ ...temporaryManager, roles: ['Viewer'] }, project), false);
 });

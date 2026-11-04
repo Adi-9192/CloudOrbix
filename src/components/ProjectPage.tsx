@@ -86,6 +86,28 @@ type Project = {
   voumetric?: number | null;
 };
 
+type ProjectManagerOption = {
+  id: number;
+  email: string;
+  fullName: string;
+  roles: string[];
+  isActive: boolean;
+};
+
+type TemporaryAccessEntry = {
+  id: number;
+  clientId: string;
+  clientName: string;
+  managerId: number;
+  managerName: string;
+  managerEmail: string;
+  requesterName: string;
+  requesterEmail: string;
+  reason: string;
+  status: "pending" | "approved";
+  createdAt: string;
+};
+
 type TaskDraft = {
   taskTitle: string;
   assignedTo: string;
@@ -202,6 +224,12 @@ export default function ProjectPage({
   const [project, setProject] = useState<Project | null>(null);
   const [currencyRateToInr, setCurrencyRateToInr] = useState<number | null>(null);
   const [currencyRateError, setCurrencyRateError] = useState("");
+  const [temporaryAccess, setTemporaryAccess] = useState<TemporaryAccessEntry[]>([]);
+  const [projectManagers, setProjectManagers] = useState<ProjectManagerOption[]>([]);
+  const [showTemporaryAccessForm, setShowTemporaryAccessForm] = useState(false);
+  const [selectedTemporaryManager, setSelectedTemporaryManager] = useState("");
+  const [temporaryAccessReason, setTemporaryAccessReason] = useState("");
+  const [savingTemporaryAccess, setSavingTemporaryAccess] = useState(false);
 
   const [tasks, setTasks] = useState<Task[]>([]);
 
@@ -394,6 +422,49 @@ export default function ProjectPage({
       }
     }
 
+    const temporaryAccessResponse = await fetch(
+      `/api/projects/${clientId}/temporary-access`,
+      { headers },
+    );
+    const temporaryAccessBody = await temporaryAccessResponse.json();
+    if (!temporaryAccessResponse.ok) {
+      throw new Error(temporaryAccessBody.message || "Unable to load temporary project access.");
+    }
+    const accessEntries: TemporaryAccessEntry[] = temporaryAccessBody.access || [];
+    setTemporaryAccess(accessEntries);
+
+    const currentName = `${user.firstName || ""} ${user.lastName || ""}`.trim().toLowerCase();
+    const assignedIdentities = [
+      body.project.project_manager,
+      body.project.account_manager,
+    ]
+      .filter(Boolean)
+      .flatMap((value: string) => value.split(/[,;/|]+/))
+      .map((value: string) => value.trim().toLowerCase());
+    const isAssignedManager = assignedIdentities.some(
+      (identity: string) => identity === currentName || identity === user.email.toLowerCase(),
+    );
+    if (user.roles.includes("Admin") || (user.roles.includes("Manager") && isAssignedManager)) {
+      const usersResponse = await fetch("/api/users", { headers });
+      const usersBody = await usersResponse.json();
+      if (!usersResponse.ok) {
+        throw new Error(usersBody.message || "Unable to load project managers.");
+      }
+      setProjectManagers(
+        (usersBody.users || [])
+          .filter((candidate: ProjectManagerOption) =>
+            candidate.isActive &&
+            candidate.roles.includes("Manager") &&
+            candidate.email.toLowerCase() !== user.email.toLowerCase(),
+          )
+          .sort((a: ProjectManagerOption, b: ProjectManagerOption) =>
+            a.fullName.localeCompare(b.fullName),
+          ),
+      );
+    } else {
+      setProjectManagers([]);
+    }
+
     setTasks(body.tasks || []);
 
     setDocuments(body.documents || []);
@@ -450,6 +521,63 @@ export default function ProjectPage({
       );
     } finally {
       setSendingAccessRequest(false);
+    }
+  };
+
+  const submitTemporaryAccess = async () => {
+    if (!selectedTemporaryManager || !temporaryAccessReason.trim()) {
+      showCloudOrbixAlert("Select a manager and enter a reason.", "error");
+      return;
+    }
+    setSavingTemporaryAccess(true);
+    try {
+      const response = await fetch(`/api/projects/${clientId}/temporary-access`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          managerId: Number(selectedTemporaryManager),
+          reason: temporaryAccessReason.trim(),
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || "Unable to assign temporary manager access.");
+      setShowTemporaryAccessForm(false);
+      setSelectedTemporaryManager("");
+      setTemporaryAccessReason("");
+      showCloudOrbixAlert(
+        payload.status === "approved"
+          ? "Temporary project access granted."
+          : "Temporary access request sent to administrators for approval.",
+        "success",
+      );
+      await load();
+    } catch (error) {
+      showCloudOrbixAlert(
+        error instanceof Error ? error.message : "Unable to assign temporary manager access.",
+        "error",
+      );
+    } finally {
+      setSavingTemporaryAccess(false);
+    }
+  };
+
+  const revokeTemporaryAccess = async (entry: TemporaryAccessEntry) => {
+    const action = entry.status === "pending" ? "withdraw this request" : "revoke this manager's access";
+    if (!window.confirm(`Are you sure you want to ${action}?`)) return;
+    try {
+      const response = await fetch(
+        `/api/projects/${clientId}/temporary-access/${entry.id}`,
+        { method: "DELETE", headers },
+      );
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || "Unable to revoke temporary access.");
+      showCloudOrbixAlert("Temporary project access revoked.", "success");
+      await load();
+    } catch (error) {
+      showCloudOrbixAlert(
+        error instanceof Error ? error.message : "Unable to revoke temporary access.",
+        "error",
+      );
     }
   };
 
@@ -858,6 +986,21 @@ export default function ProjectPage({
       </div>
     );
 
+  const currentUserName = `${user.firstName || ""} ${user.lastName || ""}`.trim().toLowerCase();
+  const primaryManagerIdentities = [project.project_manager, project.account_manager]
+    .filter(Boolean)
+    .flatMap((value) => String(value).split(/[,;/|]+/))
+    .map((value) => value.trim().toLowerCase());
+  const isPrimaryProjectManager = primaryManagerIdentities.some(
+    (identity) => identity === currentUserName || identity === user.email.toLowerCase(),
+  );
+  const isAdmin = user.roles.includes("Admin");
+  const canManageTemporaryAccess = isAdmin ||
+    (user.roles.includes("Manager") && isPrimaryProjectManager);
+  const availableTemporaryManagers = projectManagers.filter(
+    (manager) => !temporaryAccess.some((entry) => entry.managerId === manager.id),
+  );
+
   const revenue = Number(project.revenue || 0);
   const revenueRecoveryPercentage = Number(
     project.revenue_recovery_percentage || 0,
@@ -935,6 +1078,78 @@ export default function ProjectPage({
                   Delete task
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showTemporaryAccessForm && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div
+            className="w-full max-w-lg rounded-xl border p-5 shadow-2xl"
+            style={{ background: bg, borderColor: border }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="temporary-access-title"
+          >
+            <h2 id="temporary-access-title" className="text-base font-bold">
+              Add temporary manager
+            </h2>
+            <p className="mt-1 text-xs" style={{ color: muted }}>
+              {isAdmin
+                ? "As an administrator, access will be granted immediately."
+                : "Your request will be sent to an administrator for approval."}
+            </p>
+            <label className="mt-4 block text-xs font-semibold" style={{ color: muted }}>
+              Project manager
+              <select
+                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ background: inputBg, borderColor: border, color: text }}
+                value={selectedTemporaryManager}
+                onChange={(event) => setSelectedTemporaryManager(event.target.value)}
+              >
+                <option value="">Select a manager</option>
+                {availableTemporaryManagers.map((manager) => (
+                  <option key={manager.id} value={manager.id}>
+                    {manager.fullName} ({manager.email})
+                  </option>
+                ))}
+              </select>
+              {availableTemporaryManagers.length === 0 && (
+                <span className="mt-1 block font-normal">
+                  No eligible managers are available for assignment.
+                </span>
+              )}
+            </label>
+            <label className="mt-4 block text-xs font-semibold" style={{ color: muted }}>
+              Reason
+              <textarea
+                className="mt-1 min-h-24 w-full rounded-lg border px-3 py-2 text-sm"
+                style={{ background: inputBg, borderColor: border, color: text }}
+                maxLength={1000}
+                value={temporaryAccessReason}
+                onChange={(event) => setTemporaryAccessReason(event.target.value)}
+                placeholder="Explain why temporary project access is needed"
+              />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={savingTemporaryAccess}
+                onClick={() => setShowTemporaryAccessForm(false)}
+                className="rounded-lg border px-4 py-2 text-xs font-semibold"
+                style={{ borderColor: border, color: muted }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={savingTemporaryAccess || !selectedTemporaryManager || !temporaryAccessReason.trim()}
+                onClick={() => void submitTemporaryAccess()}
+                className="rounded-lg px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                style={{ background: "#1E40AF" }}
+              >
+                {savingTemporaryAccess ? "Submitting..." : isAdmin ? "Grant access" : "Send for approval"}
+              </button>
             </div>
           </div>
         </div>
@@ -1077,6 +1292,85 @@ export default function ProjectPage({
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           {message}
         </div>
+      )}
+      {(canManageTemporaryAccess || temporaryAccess.length > 0) && (
+        <section
+          className="rounded-xl border p-4"
+          style={{ background: bg, borderColor: border }}
+          aria-label="Temporary project manager access"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">Temporary manager access</h2>
+              <p className="mt-1 text-xs" style={{ color: muted }}>
+                Approved managers can access this project until their access is revoked.
+              </p>
+            </div>
+            {canManageTemporaryAccess && (
+              <button
+                type="button"
+                onClick={() => setShowTemporaryAccessForm(true)}
+                className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white"
+                style={{ background: "#1E40AF" }}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add temporary manager
+              </button>
+            )}
+          </div>
+          {temporaryAccess.length > 0 ? (
+            <div className="mt-3 divide-y" style={{ borderColor: border }}>
+              {temporaryAccess.map((entry) => {
+                const canRevoke = isAdmin ||
+                  isPrimaryProjectManager ||
+                  entry.managerEmail.toLowerCase() === user.email.toLowerCase();
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold">
+                        {entry.managerName} ({entry.managerEmail})
+                        <span
+                          className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            entry.status === "approved"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {entry.status === "approved" ? "Active" : "Pending approval"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs" style={{ color: muted }}>
+                        Reason: {entry.reason}
+                      </p>
+                      {entry.status === "pending" && (
+                        <p className="mt-1 text-[11px]" style={{ color: muted }}>
+                          Requested by {entry.requesterName} · {new Date(entry.createdAt).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                    {canRevoke && (
+                      <button
+                        type="button"
+                        onClick={() => void revokeTemporaryAccess(entry)}
+                        className="rounded-lg border px-3 py-2 text-xs font-semibold text-red-600"
+                        style={{ borderColor: "#FECACA" }}
+                      >
+                        {entry.status === "pending" ? "Withdraw request" : "Revoke access"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-3 text-xs" style={{ color: muted }}>
+              No temporary managers have been assigned.
+            </p>
+          )}
+        </section>
       )}
       <div
         className={

@@ -362,7 +362,9 @@ Use Azure networking controls to limit database access to the API and migration 
 
 ## 11. Deploy the API
 
-The API must run migrations before the new version starts. A recommended CI/CD sequence is:
+The API must run migrations before the new version starts. The repository's GitHub Actions workflow runs a migration job after build/tests and before Azure deployment. Add a GitHub Actions repository secret named `MIGRATION_DATABASE_URL` containing the Azure SQL connection string for a migration-capable database identity. The migration runner must be allowed to connect to the database; if database firewall rules restrict access, allow the runner's network or use a self-hosted runner with database connectivity.
+
+A recommended CI/CD sequence is:
 
 ```powershell
 npm ci
@@ -391,7 +393,7 @@ az webapp config set `
   --startup-file "npm run server"
 ```
 
-Do not run `npm run migrate` from normal application startup. Run it as a controlled release step using a migration-capable database identity.
+Do not run `npm run migrate` from normal application startup. Run it as a controlled release step using a migration-capable database identity. In GitHub Actions, a missing `MIGRATION_DATABASE_URL` or a failed migration stops the workflow before deployment.
 
 ## 12. Frontend deployment options
 
