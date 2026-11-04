@@ -59,6 +59,19 @@ type AccessRequest = {
   createdAt: string;
 };
 
+type TemporaryAccessRequest = {
+  id: number;
+  clientId: string;
+  clientName: string;
+  managerName: string;
+  managerEmail: string;
+  requesterName: string;
+  requesterEmail: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+};
+
 type RfpApprovalRequest = {
   id: number;
   request_type: "create" | "update" | "delete";
@@ -144,6 +157,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
   const [busy, setBusy] = useState(false);
   const [pendingClients, setPendingClients] = useState<PendingClient[]>([]);
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([]);
+  const [temporaryAccessRequests, setTemporaryAccessRequests] = useState<TemporaryAccessRequest[]>([]);
   const [rfpApprovals, setRfpApprovals] = useState<RfpApprovalRequest[]>([]);
   const [focusedApproval, setFocusedApproval] = useState<{ kind: string; id: string; clientId?: string } | null>(null);
   const [reviewClientId, setReviewClientId] = useState<string | null>(null);
@@ -202,6 +216,25 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
       .then(response => response.ok ? response.json() : Promise.reject(new Error("Unable to load approvals")))
       .then((payload: { clients?: PendingClient[] }) => setPendingClients(payload.clients || []))
       .catch(() => setPendingClients([]));
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "approvals") return;
+    const token = localStorage.getItem("clmp-token");
+    fetch("/api/projects/temporary-access/approvals", {
+      headers: { Authorization: "Bearer " + token },
+    })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.message || "Unable to load temporary access requests.");
+        setTemporaryAccessRequests(payload.requests || []);
+      })
+      .catch((error: unknown) => {
+        showCloudOrbixAlert(
+          error instanceof Error ? error.message : "Unable to load temporary access requests.",
+          "error",
+        );
+      });
   }, [tab]);
 
   useEffect(() => {
@@ -299,6 +332,32 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
     } catch (error) {
       showCloudOrbixAlert(
         error instanceof Error ? error.message : `Unable to ${decision} access request.`,
+        "error",
+      );
+    }
+  };
+
+  const reviewTemporaryAccessRequest = async (requestId: number, decision: "approve" | "reject") => {
+    const token = localStorage.getItem("clmp-token");
+    try {
+      const response = await fetch(`/api/projects/temporary-access/approvals/${requestId}/decision`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({ decision }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || `Unable to ${decision} temporary access.`);
+      setTemporaryAccessRequests((current) => current.filter((request) => request.id !== requestId));
+      showCloudOrbixAlert(
+        decision === "approve" ? "Temporary project access approved." : "Temporary project access declined.",
+        "success",
+      );
+    } catch (error) {
+      showCloudOrbixAlert(
+        error instanceof Error ? error.message : `Unable to ${decision} temporary access.`,
         "error",
       );
     }
@@ -747,6 +806,58 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
               ))}
             </section>
           )}
+          {temporaryAccessRequests.length > 0 && (
+            <section aria-label="Pending temporary manager access requests">
+              <div className="px-5 py-3 border-b font-semibold text-xs" style={{ borderColor: border, background: subtle }}>
+                Temporary manager access requests ({temporaryAccessRequests.length})
+              </div>
+              {temporaryAccessRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="px-5 py-4 border-b flex flex-wrap items-start justify-between gap-4"
+                  style={{ borderColor: border }}
+                >
+                  <div className="space-y-1">
+                    <div className="text-sm font-semibold" style={{ color: text }}>
+                      {request.clientName} ({request.clientId})
+                    </div>
+                    <div className="text-xs" style={{ color: muted }}>
+                      Temporary manager: {request.managerName} ({request.managerEmail})
+                    </div>
+                    <div className="text-xs" style={{ color: muted }}>
+                      Requested by: {request.requesterName} ({request.requesterEmail}) · {new Date(request.createdAt).toLocaleString()}
+                    </div>
+                    <p className="text-sm" style={{ color: text }}>
+                      <strong>Reason:</strong> {request.reason}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onOpenProject?.(request.clientId)}
+                      className="px-3 py-2 rounded-lg text-xs font-semibold border"
+                      style={{ borderColor: border, color: text }}
+                    >
+                      View project
+                    </button>
+                    <button
+                      onClick={() => void reviewTemporaryAccessRequest(request.id, "reject")}
+                      className="px-3 py-2 rounded-lg text-xs font-semibold border text-red-600"
+                      style={{ borderColor: "#FECACA" }}
+                    >
+                      Decline
+                    </button>
+                    <button
+                      onClick={() => void reviewTemporaryAccessRequest(request.id, "approve")}
+                      className="px-3 py-2 rounded-lg text-xs font-semibold text-white"
+                      style={{ background: "#16A34A" }}
+                    >
+                      Approve
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
           {pendingClients.length ? pendingClients.map(client => (
             <div
               id={`project-approval-${client.clientId}`}
@@ -774,7 +885,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
                 <button onClick={() => void reviewClient(client.clientId, "approve")} className="px-3 py-2 rounded-lg text-xs font-semibold text-white" style={{ background: "#16A34A" }}><Check className="w-3.5 h-3.5 inline mr-1" />Approve</button>
               </div>
             </div>
-          )) : accessRequests.length === 0 && rfpApprovals.length === 0 ? <p className="p-5 text-xs" style={{ color: muted }}>No pending approvals.</p> : null}
+          )) : accessRequests.length === 0 && temporaryAccessRequests.length === 0 && rfpApprovals.length === 0 ? <p className="p-5 text-xs" style={{ color: muted }}>No pending approvals.</p> : null}
         </div>
       )}
 

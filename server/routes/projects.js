@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import multer from 'multer';
 import ExcelJS from 'exceljs';
 import { BlobServiceClient } from '@azure/storage-blob';
-import { getPool } from '../db.js';
-import { canAccessProject } from '../lib/permissions.js';
-import { protectRoute } from '../middleware/auth.js';
+import { createNotification, getPool } from '../db.js';
+import { canAccessProject, isAssignedProjectManager } from '../lib/permissions.js';
+import { protectRoute, requireRole } from '../middleware/auth.js';
 import { createProjectExport } from '../lib/project-export.js';
 import { createRiskExport } from '../lib/risk-export.js';
 import { MANDATORY_DOCUMENTS } from '../../shared/project-documents.js';
@@ -20,7 +20,11 @@ async function projectFor(clientId) {
   const pool = getPool();
   const result = await pool.query(`
     SELECT c.*,
-      COALESCE((SELECT AVG(t.progress) FROM project_tasks t WHERE t.client_id = c.id), c.completion, 0) project_progress
+      COALESCE((SELECT AVG(t.progress) FROM project_tasks t WHERE t.client_id = c.id), c.completion, 0) project_progress,
+      (SELECT STRING_AGG(u.email, ',')
+       FROM project_temporary_access ta
+       JOIN users u ON u.id = ta.manager_user_id
+       WHERE ta.client_id = c.id AND ta.status = 'approved' AND u.is_active = 1) temporary_manager_emails
     FROM clients c
     WHERE c.client_id = $1 OR c.id = TRY_CONVERT(INT, $1)
     ORDER BY CASE WHEN c.client_id = $1 THEN 0 ELSE 1 END
@@ -148,11 +152,274 @@ router.get('/repository/:clientId', protectRoute, async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+const mapTemporaryAccess = (row) => ({
+  id: Number(row.id),
+  clientId: row.client_id,
+  clientName: row.client_name,
+  managerId: Number(row.manager_user_id),
+  managerName: row.manager_name,
+  managerEmail: row.manager_email,
+  requesterName: row.requester_name,
+  requesterEmail: row.requester_email,
+  reason: row.reason,
+  status: row.status,
+  createdAt: row.created_at,
+});
+
+async function notifyTemporaryAccessAdmins(project, request, requester) {
+  const pool = getPool();
+  const administrators = await pool.query(`
+    SELECT DISTINCT u.email
+    FROM users u
+    JOIN user_roles ur ON ur.user_id = u.id
+    JOIN roles r ON r.id = ur.role_id
+    WHERE r.name = 'Admin' AND u.is_active = 1
+  `);
+  const requesterName = `${requester.firstName || ''} ${requester.lastName || ''}`.trim() || requester.email;
+  await Promise.all(administrators.rows.map((admin) => createNotification(
+    admin.email,
+    'approval',
+    'Temporary project access approval requested',
+    `${requesterName} requested temporary access for ${request.manager_name} to ${project.client_name}: ${request.reason}`,
+    {
+      action: 'temporary_project_access',
+      requestId: String(request.id),
+      projectId: project.client_id,
+    },
+  )));
+}
+
+router.get('/temporary-access/approvals', protectRoute, requireRole('Admin'), async (req, res, next) => {
+  try {
+    const result = await getPool().query(`
+      SELECT ta.id, c.client_id, c.client_name,
+        manager.id AS manager_user_id,
+        CONCAT(manager.first_name, ' ', manager.last_name) AS manager_name,
+        manager.email AS manager_email,
+        CONCAT(requester.first_name, ' ', requester.last_name) AS requester_name,
+        requester.email AS requester_email,
+        ta.reason, ta.status, ta.created_at
+      FROM project_temporary_access ta
+      JOIN clients c ON c.id = ta.client_id
+      JOIN users manager ON manager.id = ta.manager_user_id
+      JOIN users requester ON requester.id = ta.requester_user_id
+      WHERE ta.status = 'pending'
+      ORDER BY ta.created_at DESC
+    `);
+    return res.json({ requests: result.rows.map(mapTemporaryAccess) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/temporary-access/approvals/:requestId/decision', protectRoute, requireRole('Admin'), async (req, res, next) => {
+  try {
+    const decision = req.body?.decision;
+    if (!['approve', 'reject'].includes(decision)) {
+      return res.status(400).json({ message: 'Select approve or reject.' });
+    }
+    const pool = getPool();
+    const requestId = Number(req.params.requestId);
+    if (!Number.isInteger(requestId) || requestId < 1) {
+      return res.status(400).json({ message: 'Temporary access request is invalid.' });
+    }
+    const requestResult = await pool.query(`
+      SELECT ta.id, ta.client_id, ta.manager_user_id, ta.requester_user_id,
+        ta.reason, c.client_name, c.client_id AS project_key,
+        manager.email AS manager_email, requester.email AS requester_email
+      FROM project_temporary_access ta
+      JOIN clients c ON c.id = ta.client_id
+      JOIN users manager ON manager.id = ta.manager_user_id
+      JOIN users requester ON requester.id = ta.requester_user_id
+      WHERE ta.id = $1 AND ta.status = 'pending'
+    `, [requestId]);
+    const request = requestResult.rows[0];
+    if (!request) return res.status(404).json({ message: 'Pending temporary access request was not found.' });
+    const updated = await pool.query(`
+      UPDATE project_temporary_access
+      SET status = $1, decided_at = SYSUTCDATETIME(), decided_by = $2
+      OUTPUT INSERTED.id AS id
+      WHERE id = $3 AND status = 'pending'
+    `, [decision === 'approve' ? 'approved' : 'rejected', req.user.id, requestId]);
+    if (!updated.rowCount) {
+      return res.status(409).json({ message: 'This temporary access request has already been decided.' });
+    }
+    const decisionText = decision === 'approve' ? 'approved' : 'declined';
+    const adminName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email;
+    await Promise.all([request.requester_email, request.manager_email]
+      .filter((email, index, emails) => email && emails.indexOf(email) === index)
+      .map((email) => createNotification(
+        email,
+        'approval',
+        `Temporary project access ${decisionText}`,
+        `Temporary access for ${request.manager_email} to ${request.client_name} was ${decisionText} by ${adminName}.`,
+        { action: `temporary_access_${decision}`, projectId: request.project_key, requestId: String(requestId) },
+      )));
+    return res.json({ decided: true, decision });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get('/:clientId/temporary-access', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
+    const result = await getPool().query(`
+      SELECT ta.id, c.client_id, c.client_name,
+        manager.id AS manager_user_id,
+        CONCAT(manager.first_name, ' ', manager.last_name) AS manager_name,
+        manager.email AS manager_email,
+        CONCAT(requester.first_name, ' ', requester.last_name) AS requester_name,
+        requester.email AS requester_email,
+        ta.reason, ta.status, ta.created_at
+      FROM project_temporary_access ta
+      JOIN clients c ON c.id = ta.client_id
+      JOIN users manager ON manager.id = ta.manager_user_id
+      JOIN users requester ON requester.id = ta.requester_user_id
+      WHERE ta.client_id = $1 AND ta.status IN ('pending', 'approved')
+      ORDER BY ta.created_at DESC
+    `, [project.id]);
+    return res.json({ access: result.rows.map(mapTemporaryAccess) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/:clientId/temporary-access', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project || project.approval_status === 'pending') {
+      return res.status(404).json({ message: 'Approved project not found.' });
+    }
+    const isAdmin = req.user?.roles?.includes('Admin');
+    if (!isAdmin && (
+      !req.user?.roles?.includes('Manager') ||
+      !isAssignedProjectManager(req.user, project)
+    )) {
+      return res.status(403).json({ message: 'Only the assigned project manager or an administrator can assign temporary project access.' });
+    }
+    const managerId = Number(req.body?.managerId);
+    const reason = String(req.body?.reason || '').trim();
+    if (!Number.isInteger(managerId) || managerId < 1) {
+      return res.status(400).json({ message: 'Select a project manager.' });
+    }
+    if (!reason || reason.length > 1000) {
+      return res.status(400).json({ message: 'Enter a reason of 1 to 1000 characters.' });
+    }
+    const pool = getPool();
+    const managerResult = await pool.query(`
+      SELECT u.id, u.email, u.first_name, u.last_name
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      JOIN roles r ON r.id = ur.role_id
+      WHERE u.id = $1 AND u.is_active = 1 AND r.name = 'Manager'
+    `, [managerId]);
+    const manager = managerResult.rows[0];
+    if (!manager) return res.status(400).json({ message: 'Select an active user with the Manager role.' });
+    if (
+      `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim().toLowerCase() ===
+        `${manager.first_name || ''} ${manager.last_name || ''}`.trim().toLowerCase() ||
+      String(req.user.email).toLowerCase() === String(manager.email).toLowerCase()
+    ) {
+      return res.status(400).json({ message: 'You cannot assign temporary access to yourself.' });
+    }
+    const existing = await pool.query(`
+      SELECT TOP 1 id FROM project_temporary_access
+      WHERE client_id = $1 AND manager_user_id = $2
+        AND status IN ('pending', 'approved')
+    `, [project.id, managerId]);
+    if (existing.rows.length) {
+      return res.status(409).json({ message: 'This manager already has active access or a pending request for the project.' });
+    }
+    const status = isAdmin ? 'approved' : 'pending';
+    const inserted = await pool.query(`
+      INSERT INTO project_temporary_access
+        (client_id, manager_user_id, requester_user_id, reason, status, decided_at, decided_by)
+      OUTPUT INSERTED.id AS id
+      VALUES ($1, $2, $3, $4, $5,
+        CASE WHEN $5 = 'approved' THEN SYSUTCDATETIME() ELSE NULL END,
+        CASE WHEN $5 = 'approved' THEN $3 ELSE NULL END)
+    `, [project.id, managerId, req.user.id, reason, status]);
+    const request = {
+      id: Number(inserted.rows[0].id),
+      manager_id: manager.id,
+      manager_name: `${manager.first_name || ''} ${manager.last_name || ''}`.trim(),
+      manager_email: manager.email,
+    };
+    if (isAdmin) {
+      await createNotification(
+        manager.email,
+        'approval',
+        'Temporary project access granted',
+        `An administrator granted you temporary access to ${project.client_name}. Reason: ${reason}`,
+        { action: 'temporary_access_approved', projectId: project.client_id, requestId: String(request.id) },
+      );
+    } else {
+      await notifyTemporaryAccessAdmins(project, request, req.user);
+    }
+    return res.status(isAdmin ? 201 : 202).json({
+      accessId: request.id,
+      status,
+      message: isAdmin ? 'Temporary access granted.' : 'Temporary access request sent for administrator approval.',
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete('/:clientId/temporary-access/:accessId', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    const accessId = Number(req.params.accessId);
+    if (!Number.isInteger(accessId) || accessId < 1) {
+      return res.status(400).json({ message: 'Temporary access entry is invalid.' });
+    }
+    const pool = getPool();
+    const entryResult = await pool.query(`
+      SELECT ta.id, ta.manager_user_id, ta.status, u.email AS manager_email,
+        c.client_name, c.client_id AS project_key
+      FROM project_temporary_access ta
+      JOIN users u ON u.id = ta.manager_user_id
+      JOIN clients c ON c.id = ta.client_id
+      WHERE ta.id = $1 AND ta.client_id = $2
+        AND ta.status IN ('pending', 'approved')
+    `, [accessId, project.id]);
+    const entry = entryResult.rows[0];
+    if (!entry) return res.status(404).json({ message: 'Active temporary access entry was not found.' });
+    const isAdmin = req.user?.roles?.includes('Admin');
+    const isOwner = isAssignedProjectManager(req.user, project);
+    const isGrantHolder = String(req.user?.email || '').toLowerCase() === String(entry.manager_email).toLowerCase();
+    if (!isAdmin && !isOwner && !isGrantHolder) {
+      return res.status(403).json({ message: 'Only an administrator, assigned project manager, or the temporary manager can revoke this access.' });
+    }
+    const updated = await pool.query(`
+      UPDATE project_temporary_access
+      SET status = 'revoked', revoked_at = SYSUTCDATETIME(), revoked_by = $1
+      OUTPUT INSERTED.id AS id
+      WHERE id = $2 AND status IN ('pending', 'approved')
+    `, [req.user.id, accessId]);
+    if (!updated.rowCount) return res.status(409).json({ message: 'This temporary access entry has already changed.' });
+    await createNotification(
+      entry.manager_email,
+      'approval',
+      'Temporary project access revoked',
+      `Temporary access to ${entry.client_name} has been revoked.`,
+      { action: 'temporary_access_revoked', projectId: entry.project_key, requestId: String(accessId) },
+    );
+    return res.json({ revoked: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get('/:clientId/export', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
     if (!project) return res.status(404).json({ message: 'Project not found.' });
-    if (!canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
 
     const pool = getPool();
     const [tasks, updates, risks] = await Promise.all([
@@ -183,7 +450,7 @@ router.get('/:clientId/risks/export', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
     if (!project) return res.status(404).json({ message: 'Project not found.' });
-    if (!canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
 
     const result = await getPool().query(
       `SELECT pr.*, c.client_id AS project_id, c.client_name, c.project_manager, c.account_manager
@@ -216,7 +483,7 @@ router.get('/:clientId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
     if (!project) return res.status(404).json({ message: 'Project not found.' });
-    if (!canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied. Only the assigned project manager or an administrator can access this project.' });
+    if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied. Only the assigned project manager, an approved temporary manager, or an administrator can access this project.' });
     const pool = getPool();
     const [tasks, documents, updates, risks] = await Promise.all([
       pool.query('SELECT * FROM project_tasks WHERE client_id = $1 ORDER BY expected_start_date NULLS LAST, id', [project.id]),
@@ -240,7 +507,7 @@ router.get('/:clientId', protectRoute, async (req, res, next) => {
 router.post('/:clientId/updates', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     const updateText = String(req.body?.updateText || '').trim();
     if (!updateText) return res.status(400).json({ message: 'Update text is required.' });
     const result = await getPool().query('INSERT INTO project_updates(client_id,update_text,updated_by) VALUES($1,$2,$3) RETURNING *', [project.id, updateText, `${req.user.firstName} ${req.user.lastName}`.trim() || req.user.email]);
@@ -252,7 +519,7 @@ router.delete('/:clientId/updates/:updateId', protectRoute, async (req, res, nex
   try {
     const project = await projectFor(req.params.clientId);
     if (!project) return res.status(404).json({ message: 'Project not found.' });
-    if (!canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     const result = await getPool().query(
       'DELETE FROM project_updates WHERE id=$1 AND client_id=$2 RETURNING id',
       [req.params.updateId, project.id],
@@ -265,7 +532,7 @@ router.delete('/:clientId/updates/:updateId', protectRoute, async (req, res, nex
 router.post('/:clientId/risks', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     const body = req.body || {};
     const riskTitle = String(body.riskTitle || body.description || '').trim();
     if (!riskTitle) return res.status(400).json({ message: 'Risk description is required.' });
@@ -284,7 +551,7 @@ router.post('/:clientId/risks', protectRoute, async (req, res, next) => {
 router.put('/:clientId/risks/:riskId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     if (req.body?.status !== undefined && !isProjectStatus(req.body.status)) {
       return res.status(400).json({ message: 'Invalid risk status.' });
     }
@@ -303,7 +570,7 @@ router.post('/:clientId/tasks', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
     if (!project) return res.status(404).json({ message: 'Project not found.' });
-    if (!canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     const body = req.body || {};
     if (!body.taskTitle) return res.status(400).json({ message: 'Task title is required.' });
     const result = await getPool().query(`INSERT INTO project_tasks(client_id,task_title,assigned_to,expected_start_date,expected_end_date,actual_start_date,actual_end_date,progress,status,remark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`, [project.id, body.taskTitle, body.assignedTo || project.project_manager || project.account_manager || null, body.expectedStartDate || null, body.expectedEndDate || null, body.actualStartDate || null, body.actualEndDate || null, Number(body.progress || 0), body.status || 'Not Started', body.remark || null]);
@@ -315,7 +582,7 @@ router.post('/:clientId/tasks', protectRoute, async (req, res, next) => {
 router.post('/:clientId/tasks/import', protectRoute, upload.single('file'), async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     if (!req.file) return res.status(400).json({ message: 'No Excel file uploaded.' });
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(req.file.buffer);
@@ -344,7 +611,7 @@ router.post('/:clientId/tasks/import', protectRoute, upload.single('file'), asyn
 router.put('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     const body = req.body || {};
     const result = await getPool().query(`UPDATE project_tasks SET task_title=COALESCE($1,task_title),assigned_to=COALESCE($2,assigned_to),expected_start_date=$3,expected_end_date=$4,actual_start_date=$5,actual_end_date=$6,progress=COALESCE($7,progress),status=COALESCE($8,status),remark=$9,updated_at=CURRENT_TIMESTAMP WHERE id=$10 AND client_id=$11 RETURNING *`, [body.taskTitle, body.assignedTo || project.project_manager || project.account_manager, body.expectedStartDate || null, body.expectedEndDate || null, body.actualStartDate || null, body.actualEndDate || null, body.progress === undefined ? null : Number(body.progress), body.status, body.remark || null, req.params.taskId, project.id]);
     if (!result.rows[0]) return res.status(404).json({ message: 'Task not found.' });
@@ -356,7 +623,7 @@ router.put('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) => {
 router.delete('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     const result = await getPool().query('DELETE FROM project_tasks WHERE id = $1 AND client_id = $2 RETURNING id', [req.params.taskId, project.id]);
     if (!result.rows[0]) return res.status(404).json({ message: 'Task not found.' });
     const completion = await syncCompletion(project.id);
@@ -367,7 +634,7 @@ router.delete('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) =
 router.post('/:clientId/documents/link', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
 
     const documentType = String(req.body?.documentType || '').trim();
     const fileName = String(req.body?.fileName || '').trim();
@@ -397,7 +664,7 @@ router.post('/:clientId/documents/link', protectRoute, async (req, res, next) =>
 router.delete('/:clientId/documents/:documentId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
 
     const pool = getPool();
     const existing = await pool.query(
@@ -438,7 +705,7 @@ router.delete('/:clientId/documents/:documentId', protectRoute, async (req, res,
 router.post('/:clientId/documents', protectRoute, upload.single('file'), async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
-    if (!project || !canAccessProject(req.user, { projectManager: project.project_manager, accountManager: project.account_manager })) return res.status(403).json({ message: 'Project access denied.' });
+    if (!project || !canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     if (!req.file) return res.status(400).json({ message: 'No document uploaded.' });
     const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
     if (!connectionString) return res.status(503).json({ message: 'Azure document storage is not configured. Set AZURE_STORAGE_CONNECTION_STRING on the API server.' });
