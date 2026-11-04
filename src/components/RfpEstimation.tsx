@@ -2027,12 +2027,6 @@ export default function RfpEstimation({
                                 >
                                   {item.project_name}
                                 </button>
-                                <div
-                                  className="mt-0.5 font-bold"
-                                  style={{ color: dark ? "var(--portfolio-primary)" : "#1E40AF" }}
-                                >
-                                  {item.client_name}
-                                </div>
                               </td>
                               <td>{item.year}</td>
                               <td>{item.project_status}</td>
