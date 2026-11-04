@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Project page readability",
+    detail:
+      "Increased project-page typography by 10%, gave the project brief a one-inch minimum height that grows with its content, and renamed Priority tasks to Tasks.",
+  },
+  {
     title: "Temporary project manager access",
     detail:
       "Assigned project managers can request temporary access for another project manager with a reason for administrator approval. Administrators can grant access immediately, review requests, and project managers or administrators can revoke access.",

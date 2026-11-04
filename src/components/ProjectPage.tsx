@@ -1,18 +1,24 @@
-import { useEffect, useState } from "react";
-
+import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   ArrowLeft,
+  CalendarDays,
   Check,
-  ChevronDown,
-  ChevronUp,
+  ChevronRight,
+  Circle,
+  Clock3,
   Download,
+  ExternalLink,
+  FileText,
   Pencil,
   Plus,
+  Send,
+  Target,
   Trash2,
   Upload,
+  UserRound,
   X,
 } from "lucide-react";
-
 import { MANDATORY_DOCUMENTS } from "../data/projectDocuments";
 import { showCloudOrbixAlert } from "../alert";
 import {
@@ -32,19 +38,6 @@ type ProjectPageProps = {
   user: { firstName: string; lastName: string; email: string; roles: string[] };
 };
 
-type Task = {
-  id: number;
-  task_title: string;
-  assigned_to: string;
-  expected_start_date: string;
-  expected_end_date: string;
-  actual_start_date: string;
-  actual_end_date: string;
-  progress: number;
-  status: string;
-  remark: string;
-};
-
 type Project = {
   client_id: string;
   client_name: string;
@@ -52,7 +45,7 @@ type Project = {
   project_manager: string;
   region?: string | null;
   industry?: string | null;
-  project_progress: number;
+  project_progress?: number;
   project_brief: string;
   current_status: string;
   completion: number;
@@ -84,6 +77,20 @@ type Project = {
     infrastructureAccess?: boolean;
   }[];
   voumetric?: number | null;
+  rfp_project_id?: number | null;
+};
+
+type Task = {
+  id: number;
+  task_title: string;
+  assigned_to: string;
+  expected_start_date: string;
+  expected_end_date: string;
+  actual_start_date: string;
+  actual_end_date: string;
+  progress: number;
+  status: string;
+  remark: string;
 };
 
 type ProjectManagerOption = {
@@ -127,6 +134,14 @@ type ProjectUpdate = {
   created_at: string;
 };
 
+type ProjectDocument = {
+  id: number;
+  file_name: string;
+  blob_url: string;
+  document_type?: string;
+  created_at?: string;
+};
+
 type Risk = {
   id: number;
   customer_name: string;
@@ -165,6 +180,8 @@ type RiskDraft = {
   commentsActions: string;
 };
 
+type Tab = "Overview" | "Tasks" | "Risks" | "Documents" | "RFP";
+
 const emptyTask: TaskDraft = {
   taskTitle: "",
   assignedTo: "",
@@ -177,19 +194,14 @@ const emptyTask: TaskDraft = {
   remark: "",
 };
 
-const statuses = PROJECT_STATUSES;
-const riskStatuses = PROJECT_STATUSES;
-
-const riskLevels = ["Low", "Medium", "High"];
-
-const emptyRisk: RiskDraft = {
-  customerName: "",
-  initiativeName: "",
-  pm: "",
+const emptyRisk = (project?: Project | null, user?: ProjectPageProps["user"]): RiskDraft => ({
+  customerName: project?.client_name || "",
+  initiativeName: project?.client_name || "",
+  pm: project?.project_manager || project?.account_manager || "",
   riskTitle: "",
   riskCategory: "",
   dateRaised: new Date().toISOString().slice(0, 10),
-  raisedBy: "",
+  raisedBy: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || user?.email || "",
   description: "",
   probability: "Medium",
   owner: "",
@@ -199,15 +211,36 @@ const emptyRisk: RiskDraft = {
   status: "On Track",
   mitigation: "",
   commentsActions: "",
+});
+
+const dateLabel = (value?: string | null) => {
+  if (!value) return "—";
+  const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }).format(date);
 };
 
-const toDraft = (task: Task): TaskDraft => ({
+const initialsFor = (value: string) =>
+  value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "P";
+
+const taskDraftFromTask = (task: Task): TaskDraft => ({
   taskTitle: task.task_title || "",
   assignedTo: task.assigned_to || "",
-  expectedStartDate: task.expected_start_date || "",
-  expectedEndDate: task.expected_end_date || "",
-  actualStartDate: task.actual_start_date || "",
-  actualEndDate: task.actual_end_date || "",
+  expectedStartDate: task.expected_start_date?.slice(0, 10) || "",
+  expectedEndDate: task.expected_end_date?.slice(0, 10) || "",
+  actualStartDate: task.actual_start_date?.slice(0, 10) || "",
+  actualEndDate: task.actual_end_date?.slice(0, 10) || "",
   progress: String(task.progress || 0),
   status: normalizeProjectStatus(task.status),
   remark: task.remark || "",
@@ -222,6 +255,16 @@ export default function ProjectPage({
   user,
 }: ProjectPageProps) {
   const [project, setProject] = useState<Project | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [documents, setDocuments] = useState<ProjectDocument[]>([]);
+  const [updates, setUpdates] = useState<ProjectUpdate[]>([]);
+  const [risks, setRisks] = useState<Risk[]>([]);
+  const [activeTab, setActiveTab] = useState<Tab>("Overview");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [accessRequestSent, setAccessRequestSent] = useState(false);
+  const [sendingAccessRequest, setSendingAccessRequest] = useState(false);
   const [currencyRateToInr, setCurrencyRateToInr] = useState<number | null>(null);
   const [currencyRateError, setCurrencyRateError] = useState("");
   const [temporaryAccess, setTemporaryAccess] = useState<TemporaryAccessEntry[]>([]);
@@ -230,168 +273,54 @@ export default function ProjectPage({
   const [selectedTemporaryManager, setSelectedTemporaryManager] = useState("");
   const [temporaryAccessReason, setTemporaryAccessReason] = useState("");
   const [savingTemporaryAccess, setSavingTemporaryAccess] = useState(false);
-
-  const [tasks, setTasks] = useState<Task[]>([]);
-
-  const [documents, setDocuments] = useState<
-    {
-      id: number;
-      file_name: string;
-      blob_url: string;
-      document_type?: string;
-    }[]
-  >([]);
-
-  const [updates, setUpdates] = useState<ProjectUpdate[]>([]);
-
-  const [risks, setRisks] = useState<Risk[]>([]);
-
   const [updateText, setUpdateText] = useState("");
-
-  const [risk, setRisk] = useState<RiskDraft>(emptyRisk);
-
   const [task, setTask] = useState<TaskDraft>(emptyTask);
-
+  const [risk, setRisk] = useState<RiskDraft>(emptyRisk());
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
-
-  const [message, setMessage] = useState("");
-  const [accessDenied, setAccessDenied] = useState(false);
-  const [accessRequestSent, setAccessRequestSent] = useState(false);
-  const [sendingAccessRequest, setSendingAccessRequest] = useState(false);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showRiskForm, setShowRiskForm] = useState(false);
+  const [savingTask, setSavingTask] = useState(false);
+  const [savingRisk, setSavingRisk] = useState(false);
+  const [downloadingRisks, setDownloadingRisks] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     message: string;
     onConfirm: () => void;
   } | null>(null);
 
-  const [showAllTasks, setShowAllTasks] = useState(false);
-
-  const [showAllRisks, setShowAllRisks] = useState(false);
-  const [showProjectDetails, setShowProjectDetails] = useState(false);
-  const [downloadingRisks, setDownloadingRisks] = useState(false);
-  const [showTaskForm, setShowTaskForm] = useState(false);
-  const [showRiskForm, setShowRiskForm] = useState(false);
-
-  const alerts: string[] = [];
-
-  tasks.forEach((task) => {
-    const today = new Date();
-
-    const startDate = task.expected_start_date
-      ? new Date(task.expected_start_date)
-      : null;
-
-    const endDate = task.expected_end_date
-      ? new Date(task.expected_end_date)
-      : null;
-
-    const status = task.status?.toLowerCase();
-
-    if (startDate && today > startDate && status === "not started") {
-      const daysLate = Math.floor(
-        (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-      );
-
-      alerts.push(`⚠️ ${task.task_title}: Start delayed by ${daysLate} days`);
-    }
-
-    if (status === "blocked") {
-      alerts.push(`⛔ ${task.task_title}: is currently blocked`);
-    }
-
-    if (
-      endDate &&
-      today > endDate &&
-      status !== "completed" &&
-      status !== "closed"
-    ) {
-      const daysLate = Math.floor(
-        (today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24),
-      );
-
-      alerts.push(`🔴 ${task.task_title}: End delayed by ${daysLate} days`);
-    }
+  const bg = dark ? "#1E293B" : "#FFFFFF";
+  const border = dark ? "#334155" : "#E2E8F0";
+  const text = dark ? "#E2E8F0" : "#0F172A";
+  const muted = dark ? "#94A3B8" : "#64748B";
+  const soft = dark ? "#0F172A" : "#F8FAFC";
+  const accent = "#1E40AF";
+  const headers = () => ({
+    Authorization: `Bearer ${localStorage.getItem("clmp-token") || ""}`,
+  });
+  const jsonHeaders = () => ({
+    ...headers(),
+    "Content-Type": "application/json",
   });
 
-  const bg = dark ? "#1E293B" : "#FFFFFF";
-
-  const border = dark ? "#334155" : "#E2E8F0";
-
-  const borderColor = border;
-
-  const text = dark ? "#E2E8F0" : "#0F172A";
-
-  const muted = dark ? "#94A3B8" : "#64748B";
-
-  const inputBg = dark ? "#0F172A" : "#F8FAFC";
-
-  const token = localStorage.getItem("clmp-token");
-
-  const headers = { Authorization: `Bearer ${token}` };
-
-  // Dashboard Statistics
-
-  const totalTasks = tasks.length;
-
-  const completedTasks = tasks.filter(
-    (t) => t.status?.toLowerCase() === "completed",
-  ).length;
-
-  const inProgressTasks = tasks.filter(
-    (t) => t.status?.toLowerCase() === "in progress",
-  ).length;
-
-  const notStartedTasks = tasks.filter(
-    (t) => t.status?.toLowerCase() === "not started",
-  ).length;
-
-  const blockedTasks = tasks.filter(
-    (t) => t.status?.toLowerCase() === "blocked",
-  ).length;
-
-  const delayedTasks = tasks.filter(
-    (t) => t.status?.toLowerCase() === "delayed",
-  ).length;
-
-  const overallProgress =
-    totalTasks > 0
-      ? Math.round(
-          tasks.reduce(
-            (sum, task) => sum + Number(task.progress || 0),
-
-            0,
-          ) / totalTasks,
-        )
-      : 0;
-
-  const completedPercent =
-    totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
-
-  const inProgressPercent =
-    totalTasks > 0 ? (inProgressTasks / totalTasks) * 100 : 0;
-
-  const notStartedPercent =
-    totalTasks > 0 ? (notStartedTasks / totalTasks) * 100 : 0;
-
-  const blockedPercent = totalTasks > 0 ? (blockedTasks / totalTasks) * 100 : 0;
-
-  const delayedPercent = totalTasks > 0 ? (delayedTasks / totalTasks) * 100 : 0;
-
-  const load = async () => {
-    const response = await fetch(`/api/projects/${clientId}`, { headers });
-
+  const load = async (signal?: AbortSignal) => {
+    const response = await fetch(`/api/projects/${clientId}`, {
+      headers: headers(),
+      signal,
+    });
     const body = await response.json();
-
     if (response.status === 403) {
       setAccessDenied(true);
       setMessage(body.message || "Project access denied.");
       return;
     }
-
-    if (!response.ok)
-      throw new Error(body.message || "Unable to load project.");
+    if (!response.ok) throw new Error(body.message || "Unable to load project.");
 
     setAccessDenied(false);
     setProject(body.project);
+    setTasks(body.tasks || []);
+    setDocuments(body.documents || []);
+    setUpdates(body.updates || []);
+    setRisks(body.risks || []);
+
     const currencyCode = body.project.currency_code?.trim().toUpperCase() || "INR";
     setCurrencyRateError("");
     if (currencyCode === "INR") {
@@ -401,7 +330,7 @@ export default function ProjectPage({
       try {
         const rateResponse = await fetch(
           `/api/rfp/rates/currency/${Number(body.project.year) || new Date().getFullYear()}`,
-          { headers },
+          { headers: headers(), signal },
         );
         const rateBody = await rateResponse.json();
         if (!rateResponse.ok) {
@@ -416,6 +345,7 @@ export default function ProjectPage({
           setCurrencyRateError(`No ${currencyCode}/INR rate is configured for ${body.project.year}.`);
         }
       } catch (error) {
+        if (signal?.aborted) return;
         setCurrencyRateError(
           error instanceof Error ? error.message : "Unable to load currency rates for INR display.",
         );
@@ -424,7 +354,7 @@ export default function ProjectPage({
 
     const temporaryAccessResponse = await fetch(
       `/api/projects/${clientId}/temporary-access`,
-      { headers },
+      { headers: headers(), signal },
     );
     const temporaryAccessBody = await temporaryAccessResponse.json();
     if (!temporaryAccessResponse.ok) {
@@ -434,10 +364,7 @@ export default function ProjectPage({
     setTemporaryAccess(accessEntries);
 
     const currentName = `${user.firstName || ""} ${user.lastName || ""}`.trim().toLowerCase();
-    const assignedIdentities = [
-      body.project.project_manager,
-      body.project.account_manager,
-    ]
+    const assignedIdentities = [body.project.project_manager, body.project.account_manager]
       .filter(Boolean)
       .flatMap((value: string) => value.split(/[,;/|]+/))
       .map((value: string) => value.trim().toLowerCase());
@@ -445,7 +372,7 @@ export default function ProjectPage({
       (identity: string) => identity === currentName || identity === user.email.toLowerCase(),
     );
     if (user.roles.includes("Admin") || (user.roles.includes("Manager") && isAssignedManager)) {
-      const usersResponse = await fetch("/api/users", { headers });
+      const usersResponse = await fetch("/api/users", { headers: headers(), signal });
       const usersBody = await usersResponse.json();
       if (!usersResponse.ok) {
         throw new Error(usersBody.message || "Unable to load project managers.");
@@ -464,37 +391,40 @@ export default function ProjectPage({
     } else {
       setProjectManagers([]);
     }
-
-    setTasks(body.tasks || []);
-
-    setDocuments(body.documents || []);
-
-    setUpdates(body.updates || []);
-
-    setRisks(body.risks || []);
-
-    setTask((current) =>
-      current.assignedTo
-        ? current
-        : {
-            ...current,
-            assignedTo:
-              body.project.project_manager ||
-              body.project.account_manager ||
-              "",
-          },
-    );
   };
 
   useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
     setProject(null);
+    setTasks([]);
+    setDocuments([]);
+    setUpdates([]);
+    setRisks([]);
+    setTemporaryAccess([]);
+    setProjectManagers([]);
+    setShowTemporaryAccessForm(false);
+    setSelectedTemporaryManager("");
+    setTemporaryAccessReason("");
+    setActiveTab("Overview");
+    setLoading(true);
+    setMessage("");
     setAccessDenied(false);
     setAccessRequestSent(false);
-    setMessage("");
-    void load().catch((error) => {
-      setMessage(error.message);
-      showCloudOrbixAlert(error.message, "error");
-    });
+    void load(controller.signal)
+      .catch((error: unknown) => {
+        if (!active) return;
+        const errorMessage = error instanceof Error ? error.message : "Unable to load project.";
+        setMessage(errorMessage);
+        showCloudOrbixAlert(errorMessage, "error");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [clientId]);
 
   const requestProjectAccess = async () => {
@@ -502,18 +432,12 @@ export default function ProjectPage({
     try {
       const response = await fetch(`/api/clients/${clientId}/access-request`, {
         method: "POST",
-        headers,
+        headers: headers(),
       });
       const body = await response.json();
-      if (!response.ok) {
-        throw new Error(body.message || "Unable to request project access.");
-      }
-
+      if (!response.ok) throw new Error(body.message || "Unable to request project access.");
       setAccessRequestSent(true);
-      showCloudOrbixAlert(
-        "Your access request was sent to all administrators.",
-        "success",
-      );
+      showCloudOrbixAlert("Your access request was sent to all administrators.", "success");
     } catch (error) {
       showCloudOrbixAlert(
         error instanceof Error ? error.message : "Unable to request project access.",
@@ -533,14 +457,16 @@ export default function ProjectPage({
     try {
       const response = await fetch(`/api/projects/${clientId}/temporary-access`, {
         method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
+        headers: { ...headers(), "Content-Type": "application/json" },
         body: JSON.stringify({
           managerId: Number(selectedTemporaryManager),
           reason: temporaryAccessReason.trim(),
         }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.message || "Unable to assign temporary manager access.");
+      if (!response.ok) {
+        throw new Error(payload.message || "Unable to assign temporary manager access.");
+      }
       setShowTemporaryAccessForm(false);
       setSelectedTemporaryManager("");
       setTemporaryAccessReason("");
@@ -562,15 +488,15 @@ export default function ProjectPage({
   };
 
   const revokeTemporaryAccess = async (entry: TemporaryAccessEntry) => {
-    const action = entry.status === "pending" ? "withdraw this request" : "revoke this manager's access";
-    if (!window.confirm(`Are you sure you want to ${action}?`)) return;
     try {
       const response = await fetch(
         `/api/projects/${clientId}/temporary-access/${entry.id}`,
-        { method: "DELETE", headers },
+        { method: "DELETE", headers: headers() },
       );
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.message || "Unable to revoke temporary access.");
+      if (!response.ok) {
+        throw new Error(payload.message || "Unable to revoke temporary access.");
+      }
       showCloudOrbixAlert("Temporary project access revoked.", "success");
       await load();
     } catch (error) {
@@ -582,257 +508,184 @@ export default function ProjectPage({
   };
 
   const saveTask = async () => {
-    setMessage("");
-
-    const path = editingTaskId
-      ? `/api/projects/${clientId}/tasks/${editingTaskId}`
-      : `/api/projects/${clientId}/tasks`;
-
-    const response = await fetch(path, {
-      method: editingTaskId ? "PUT" : "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(task),
-    });
-
-    const body = await response.json();
-
-    if (!response.ok) {
-      const errorMessage = body.message || "Unable to save task.";
-      setMessage(errorMessage);
-      showCloudOrbixAlert(errorMessage, "error");
+    if (!task.taskTitle.trim()) {
+      showCloudOrbixAlert("Task title is required.", "warning");
       return;
     }
-
-    setEditingTaskId(null);
-
-    setTask({
-      ...emptyTask,
-      assignedTo: project?.project_manager || project?.account_manager || "",
-    });
-
-    await load();
-  };
-
-  const editTask = (item: Task) => {
-    setEditingTaskId(item.id);
-    setTask(toDraft(item));
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-  };
-
-  const cancelEdit = () => {
-    setEditingTaskId(null);
-    setTask({
-      ...emptyTask,
-      assignedTo: project?.project_manager || project?.account_manager || "",
-    });
+    setSavingTask(true);
+    try {
+      const path = editingTaskId
+        ? `/api/projects/${clientId}/tasks/${editingTaskId}`
+        : `/api/projects/${clientId}/tasks`;
+      const response = await fetch(path, {
+        method: editingTaskId ? "PUT" : "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify(task),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "Unable to save task.");
+      setEditingTaskId(null);
+      setShowTaskForm(false);
+      setTask(emptyTask);
+      await load();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to save task.";
+      setMessage(errorMessage);
+      showCloudOrbixAlert(errorMessage, "error");
+    } finally {
+      setSavingTask(false);
+    }
   };
 
   const deleteTask = async (taskId: number) => {
-    const response = await fetch(`/api/projects/${clientId}/tasks/${taskId}`, {
-      method: "DELETE",
-      headers,
-    });
-
-    const body = await response.json();
-
-    if (!response.ok)
-      return (
-        setMessage(body.message || "Unable to delete task."),
-        showCloudOrbixAlert(body.message || "Unable to delete task.", "error")
-      );
-
-    await load();
+    try {
+      const response = await fetch(`/api/projects/${clientId}/tasks/${taskId}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "Unable to delete task.");
+      await load();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to delete task.";
+      setMessage(errorMessage);
+      showCloudOrbixAlert(errorMessage, "error");
+    }
   };
 
-  const requestTaskDeletion = (taskId: number) => {
-    setConfirmDialog({
-      message: "This task is about to be deleted. Do you want to continue?",
-      onConfirm: () => {
-        setConfirmDialog(null);
-        void deleteTask(taskId);
-      },
-    });
+  const importTasks = async (file: File) => {
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch(`/api/projects/${clientId}/tasks/import`, {
+        method: "POST",
+        headers: headers(),
+        body: form,
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "Unable to import tasks.");
+      setMessage(`${body.imported} tasks imported successfully.`);
+      showCloudOrbixAlert(`${body.imported} tasks imported successfully.`, "success");
+      await load();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to import tasks.";
+      setMessage(errorMessage);
+      showCloudOrbixAlert(errorMessage, "error");
+    }
   };
 
   const addUpdate = async () => {
     if (!updateText.trim()) return;
-
-    const response = await fetch(`/api/projects/${clientId}/updates`, {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ updateText }),
-    });
-
-    const body = await response.json();
-
-    if (!response.ok) {
-      const errorMessage = body.message || "Unable to add update.";
+    try {
+      const response = await fetch(`/api/projects/${clientId}/updates`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ updateText }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "Unable to add update.");
+      setUpdates((current) => [body.update, ...current]);
+      setUpdateText("");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to add update.";
       setMessage(errorMessage);
       showCloudOrbixAlert(errorMessage, "error");
-      return;
     }
-
-    setUpdates((current) => [body.update, ...current]);
-
-    setUpdateText("");
   };
 
   const deleteUpdate = async (updateId: number) => {
-    const response = await fetch(
-      `/api/projects/${clientId}/updates/${updateId}`,
-      { method: "DELETE", headers },
-    );
-    const body = await response.json();
-    if (!response.ok) {
-      const errorMessage = body.message || "Unable to delete update.";
+    try {
+      const response = await fetch(`/api/projects/${clientId}/updates/${updateId}`, {
+        method: "DELETE",
+        headers: headers(),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "Unable to delete update.");
+      setUpdates((current) => current.filter((update) => update.id !== updateId));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to delete update.";
       setMessage(errorMessage);
       showCloudOrbixAlert(errorMessage, "error");
-      return;
     }
-    setUpdates((current) => current.filter((update) => update.id !== updateId));
   };
 
-  const requestUpdateDeletion = (updateId: number) => {
-    setConfirmDialog({
-      message: "This project update will be permanently deleted. Continue?",
-      onConfirm: () => {
-        setConfirmDialog(null);
-        void deleteUpdate(updateId);
-      },
-    });
+  const downloadFile = async (url: string, fileName: string) => {
+    const response = await fetch(url, { headers: headers() });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || `Unable to download file (HTTP ${response.status}).`);
+    }
+    const blobUrl = URL.createObjectURL(await response.blob());
+    const link = window.document.createElement("a");
+    link.href = blobUrl;
+    link.download = fileName;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
   };
 
   const downloadUpdates = async () => {
-    if (!project) return;
     try {
-      const response = await fetch(`/api/projects/${clientId}/export`, {
-        headers,
-      });
-      if (!response.ok) {
-        const responseText = await response.text();
-        let responseMessage = "";
-        if (response.headers.get("content-type")?.includes("application/json")) {
-          try {
-            responseMessage = JSON.parse(responseText).message || "";
-          } catch {
-            responseMessage = "";
-          }
-        }
-        if (response.status === 404 && !responseMessage) {
-          throw new Error(
-            "The project export route is not available on the running API server. Restart the backend so it loads the latest server/routes/projects.js.",
-          );
-        }
-        throw new Error(
-          responseMessage ||
-            `Unable to download project updates (HTTP ${response.status}).`,
-        );
-      }
-      const contentType = response.headers.get("content-type") || "";
-      if (
-        !contentType.includes(
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-      ) {
-        throw new Error(
-          "The server did not return an Excel workbook. Restart the backend and try again.",
-        );
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = window.document.createElement("a");
-      link.href = url;
-      link.download = `${project.client_id}-project-updates.xlsx`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      await downloadFile(
+        `/api/projects/${clientId}/export`,
+        `${project?.client_id || clientId}-project-updates.xlsx`,
+      );
     } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Unable to download project updates.";
+      const errorMessage = error instanceof Error ? error.message : "Unable to download project updates.";
       setMessage(errorMessage);
       showCloudOrbixAlert(errorMessage, "error");
     }
   };
 
   const addRisk = async () => {
-    if (!risk.description.trim())
-      return (
-        setMessage("Risk description is required."),
-        showCloudOrbixAlert("Risk description is required.", "warning")
-      );
-
-    const response = await fetch(`/api/projects/${clientId}/risks`, {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(risk),
-    });
-
-    const body = await response.json();
-
-    if (!response.ok) {
-      const errorMessage = body.message || "Unable to add risk.";
-      setMessage(errorMessage);
-      showCloudOrbixAlert(errorMessage, "error");
+    if (!risk.description.trim()) {
+      showCloudOrbixAlert("Risk description is required.", "warning");
       return;
     }
-
-    setRisks((current) => [body.risk, ...current]);
-
-    setRisk(emptyRisk);
+    setSavingRisk(true);
+    try {
+      const response = await fetch(`/api/projects/${clientId}/risks`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify(risk),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "Unable to add risk.");
+      setRisks((current) => [body.risk, ...current]);
+      setRisk(emptyRisk(project, user));
+      setShowRiskForm(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to add risk.";
+      setMessage(errorMessage);
+      showCloudOrbixAlert(errorMessage, "error");
+    } finally {
+      setSavingRisk(false);
+    }
   };
 
-  const updateRisk = async (
-    riskId: number,
-    fieldName: string,
-    value: string,
-  ) => {
-    const response = await fetch(`/api/projects/${clientId}/risks/${riskId}`, {
-      method: "PUT",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ [fieldName]: value }),
-    });
-
-    const body = await response.json();
-
-    if (!response.ok)
-      return (
-        setMessage(body.message || "Unable to update risk."),
-        showCloudOrbixAlert(body.message || "Unable to update risk.", "error")
-      );
-
-    setRisks((current) =>
-      current.map((item) => (item.id === riskId ? body.risk : item)),
-    );
+  const updateRisk = async (riskId: number, status: string) => {
+    try {
+      const response = await fetch(`/api/projects/${clientId}/risks/${riskId}`, {
+        method: "PUT",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ status }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "Unable to update risk.");
+      setRisks((current) => current.map((item) => item.id === riskId ? body.risk : item));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to update risk.";
+      setMessage(errorMessage);
+      showCloudOrbixAlert(errorMessage, "error");
+    }
   };
 
   const downloadProjectRisks = async () => {
     setDownloadingRisks(true);
     try {
-      const response = await fetch(`/api/projects/${clientId}/risks/export`, { headers });
-      if (!response.ok) {
-        const responseText = await response.text();
-        let responseMessage = "";
-        if (response.headers.get("content-type")?.includes("application/json")) {
-          try {
-            responseMessage = JSON.parse(responseText).message || "";
-          } catch {
-            responseMessage = "";
-          }
-        }
-        throw new Error(responseMessage || `Unable to download project risks (HTTP ${response.status}).`);
-      }
-      if (!response.headers.get("content-type")?.includes(
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      )) {
-        throw new Error("The server did not return an Excel workbook. Restart the backend and try again.");
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = window.document.createElement("a");
-      link.href = url;
-      link.download = `${project?.client_id || clientId}-risks.xlsx`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      await downloadFile(
+        `/api/projects/${clientId}/risks/export`,
+        `${project?.client_id || clientId}-risks.xlsx`,
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unable to download project risks.";
       setMessage(errorMessage);
@@ -842,119 +695,85 @@ export default function ProjectPage({
     }
   };
 
-  const importTasks = async (file: File) => {
-    const form = new FormData();
-
-    form.append("file", file);
-
-    const response = await fetch(`/api/projects/${clientId}/tasks/import`, {
-      method: "POST",
-      headers,
-      body: form,
-    });
-
-    const body = await response.json();
-
-    if (!response.ok)
-      return setMessage(body.message || "Unable to import tasks.");
-
-    setMessage(`${body.imported} tasks imported successfully.`);
-    showCloudOrbixAlert(
-      `${body.imported} tasks imported successfully.`,
-      "success",
-    );
-
-    await load();
-  };
-
-  const mandatoryDocumentTypes = MANDATORY_DOCUMENTS.map(
-    (document) => document.id,
-  );
-
-  const uploadedMandatoryDocuments = mandatoryDocumentTypes.filter(
-    (documentType) =>
-      documents.some((document) => document.document_type === documentType),
+  const completedTasks = tasks.filter((item) => item.status?.toLowerCase() === "completed").length;
+  const progress = tasks.length
+    ? Math.round(tasks.reduce((total, item) => total + Number(item.progress || 0), 0) / tasks.length)
+    : Math.round(Number(project?.completion || project?.project_progress || 0));
+  const openRisks = risks.filter(
+    (item) => !["completed", "cancelled", "canceled"].includes(item.status?.toLowerCase()),
   ).length;
-
-  const documentProgress = Math.round(
-    (uploadedMandatoryDocuments / mandatoryDocumentTypes.length) * 100,
+  const uploadedMandatoryTypes = new Set(
+    documents.map((document) => document.document_type).filter(Boolean),
   );
-
-  const openRisks = risks.filter((item) => item.status === "On Track").length;
+  const uploadedMandatoryDocuments = MANDATORY_DOCUMENTS.filter((item) =>
+    uploadedMandatoryTypes.has(item.id),
+  ).length;
+  const documentProgress = Math.round(
+    (uploadedMandatoryDocuments / MANDATORY_DOCUMENTS.length) * 100,
+  );
+  const attentionItems = useMemo(() => {
+    const today = new Date();
+    const items: { kind: "task" | "risk" | "document"; text: string; detail: string }[] = [];
+    tasks.forEach((item) => {
+      const status = item.status?.toLowerCase();
+      if (status === "blocked") {
+        items.push({ kind: "task", text: item.task_title, detail: "Task is blocked" });
+      } else if (
+        item.expected_end_date &&
+        new Date(item.expected_end_date) < today &&
+        status !== "completed"
+      ) {
+        items.push({ kind: "task", text: item.task_title, detail: "Task is past its expected end date" });
+      }
+    });
+    risks
+      .filter((item) => item.level === "High" && !["completed", "cancelled", "canceled"].includes(item.status?.toLowerCase()))
+      .forEach((item) => items.push({
+        kind: "risk",
+        text: item.risk_title || item.description,
+        detail: `${item.level} priority risk · ${item.status || "Open"}`,
+      }));
+    MANDATORY_DOCUMENTS.filter((item) => !uploadedMandatoryTypes.has(item.id))
+      .slice(0, 3)
+      .forEach((item) => items.push({
+        kind: "document",
+        text: item.name,
+        detail: "Mandatory document not uploaded",
+      }));
+    return items.slice(0, 5);
+  }, [tasks, risks, documents]);
 
   const riskColor = (value: string) =>
-    value === "High" ? "#DC2626" : value === "Medium" ? "#D97706" : "#CA8A04";
+    value === "High" ? "#DC2626" : value === "Medium" ? "#D97706" : "#64748B";
+  const statusColor = (value: string) => {
+    const status = normalizeProjectStatus(value);
+    if (status === "Completed" || status === "On Track") return "#16A34A";
+    if (status.toLowerCase().includes("delay") || status === "Blocked") return "#DC2626";
+    if (status === "At Risk" || status === "On Hold") return "#D97706";
+    return accent;
+  };
+  const formatCurrency = (amount: number) => {
+    if (currencyRateToInr === null) {
+      return currencyRateError
+        ? `Conversion unavailable (${currencyRateError})`
+        : "Loading INR conversion…";
+    }
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 2,
+    }).format(convertCurrencyAmount(amount, currencyRateToInr, 1));
+  };
+  const sectionStyle = { background: bg, borderColor: border };
+  const labelStyle = { color: muted };
+  const inputStyle = { background: soft, borderColor: border, color: text };
+  const inputClass = "w-full rounded-lg border px-3 py-2 text-xs outline-none";
+  const tabs: Tab[] = ["Overview", "Tasks", "Risks", "Documents", "RFP"];
 
-  const riskField = (label: string, key: keyof RiskDraft, type = "text") => (
-    <label className="space-y-1">
-      <span
-        className="block text-[10px] font-semibold"
-        style={{ color: muted }}
-      >
-        {label}
-      </span>
-      <input
-        type={type}
-        value={
-          label === "Customer Name"
-            ? project?.client_name || ""
-            : label === "Raised By"
-              ? `${user.firstName} ${user.lastName}`.trim() || user.email
-              : label === "PM"
-                ? project?.project_manager ||
-                  project?.account_manager ||
-                  "Unassigned"
-                : risk[key]
-        }
-        readOnly={
-          label === "Customer Name" || label === "Raised By" || label === "PM"
-        }
-        onChange={(event) =>
-          setRisk((current) => ({ ...current, [key]: event.target.value }))
-        }
-        className="w-full rounded-lg border px-3 py-2 text-xs"
-        style={{
-          background: inputBg,
-          borderColor: border,
-          color: text,
-          colorScheme: type === "date" && dark ? "dark" : "light",
-        }}
-      />
-    </label>
-  );
-
-  const field = (label: string, key: keyof TaskDraft, type = "text") => (
-    <label className="space-y-1">
-      <span
-        className="block text-[10px] font-semibold"
-        style={{ color: muted }}
-      >
-        {label}
-      </span>
-      <input
-        type={type}
-        value={task[key]}
-        onChange={(event) =>
-          setTask((current) => ({ ...current, [key]: event.target.value }))
-        }
-        className="w-full rounded-lg border px-3 py-2 text-xs"
-        style={{
-          background: inputBg,
-          borderColor: border,
-          color: text,
-          colorScheme: type === "date" && dark ? "dark" : "light",
-        }}
-      />
-    </label>
-  );
-
-  if (!project && accessDenied)
+  if (!project && accessDenied) {
     return (
       <div className="p-6" style={{ color: text }}>
-        <div
-          className="max-w-2xl rounded-xl border p-6"
-          style={{ background: bg, borderColor: border }}
-        >
+        <section className="max-w-2xl rounded-xl border p-6" style={sectionStyle}>
           <p className="text-sm" style={{ color: muted }}>
             {message === "Project access denied."
               ? "Project access denied. Only the assigned project manager or an administrator can access this project."
@@ -965,31 +784,34 @@ export default function ProjectPage({
               type="button"
               onClick={() => void requestProjectAccess()}
               disabled={sendingAccessRequest || accessRequestSent}
-              className="mt-5 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ background: "#1E40AF" }}
+              className="mt-5 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              style={{ background: accent }}
             >
-              {accessRequestSent
-                ? "Access request sent"
-                : sendingAccessRequest
-                  ? "Sending request..."
-                  : "Request access"}
+              {accessRequestSent ? "Access request sent" : sendingAccessRequest ? "Sending request…" : "Request access"}
             </button>
           )}
-        </div>
+        </section>
       </div>
     );
+  }
 
-  if (!project)
+  if (!project) {
     return (
       <div className="p-6 text-sm" style={{ color: muted }}>
-        {message || "Loading project..."}
+        {message || (loading ? "Loading project…" : "Project could not be loaded.")}
       </div>
     );
+  }
 
+  const revenue = Number(project.revenue || 0);
+  const recoveryPercentage = Number(project.revenue_recovery_percentage || 0);
+  const recovery = calculateRevenueRecovery(revenue, recoveryPercentage);
+  const manager = project.project_manager || project.account_manager || "Unassigned";
+  const projectStatus = normalizeProjectStatus(project.current_status);
   const currentUserName = `${user.firstName || ""} ${user.lastName || ""}`.trim().toLowerCase();
   const primaryManagerIdentities = [project.project_manager, project.account_manager]
     .filter(Boolean)
-    .flatMap((value) => String(value).split(/[,;/|]+/))
+    .flatMap((value) => value.split(/[,;/|]+/))
     .map((value) => value.trim().toLowerCase());
   const isPrimaryProjectManager = primaryManagerIdentities.some(
     (identity) => identity === currentUserName || identity === user.email.toLowerCase(),
@@ -998,100 +820,261 @@ export default function ProjectPage({
   const canManageTemporaryAccess = isAdmin ||
     (user.roles.includes("Manager") && isPrimaryProjectManager);
   const availableTemporaryManagers = projectManagers.filter(
-    (manager) => !temporaryAccess.some((entry) => entry.managerId === manager.id),
+    (candidate) => !temporaryAccess.some((entry) => entry.managerId === candidate.id),
+  );
+  const taskField = (
+    label: string,
+    key: keyof TaskDraft,
+    type = "text",
+  ) => (
+    <label key={key} className="space-y-1">
+      <span className="block text-[10px] font-semibold" style={labelStyle}>{label}</span>
+      <input
+        type={type}
+        value={task[key]}
+        onChange={(event) => setTask((current) => ({ ...current, [key]: event.target.value }))}
+        className={inputClass}
+        style={{ ...inputStyle, colorScheme: type === "date" && dark ? "dark" : "light" }}
+      />
+    </label>
   );
 
-  const revenue = Number(project.revenue || 0);
-  const revenueRecoveryPercentage = Number(
-    project.revenue_recovery_percentage || 0,
+  const requestDelete = (message: string, onConfirm: () => void) => {
+    setConfirmDialog({ message, onConfirm });
+  };
+
+  const renderProjectDetails = (compact = false) => {
+    const groups = [
+      {
+        title: "Project information",
+        fields: [
+          ["Project ID", project.client_id],
+          ["Project name", project.client_name],
+          ["Project type", project.project_type || "—"],
+          ["Service category", project.service_category || "—"],
+          ["Services", project.services?.join(", ") || "—"],
+          ["Hyperscaler", normalizeHyperscaler(project.hyperscaler) || "—"],
+          ["Billing code", project.project_billing_code || "—"],
+          ["Year", project.year || "—"],
+        ],
+      },
+      {
+        title: "Ownership & commercial",
+        fields: [
+          ["Project manager", manager],
+          ["Account manager", project.account_manager || "—"],
+          ["Region", project.region || "—"],
+          ["Industry", project.industry || "—"],
+          ["Revenue", formatCurrency(revenue)],
+          ["Revenue recovery", `${recoveryPercentage}%`],
+          ["Recovered revenue", formatCurrency(recovery.recoveredRevenue)],
+          ["Pending revenue", formatCurrency(recovery.pendingRevenue)],
+        ],
+      },
+      {
+        title: "Schedule & delivery",
+        fields: [
+          ["Estimated start", dateLabel(project.estimated_start_date)],
+          ["Estimated end", dateLabel(project.estimated_end_date)],
+          ["Actual start", dateLabel(project.actual_start_date)],
+          ["Actual end", dateLabel(project.actual_end_date)],
+          ["Contract start", dateLabel(project.contract_start_date)],
+          ["Contract end", dateLabel(project.contract_end_date)],
+          ["Resources", project.resources?.map((resource) => resource.resourceName).filter(Boolean).join(", ") || "—"],
+          ["Total FTE", project.resources?.length
+            ? project.resources.reduce((total, resource) => total + (Number(resource.fte) || 0), 0).toFixed(2)
+            : "—"],
+          ["Volumetric", project.voumetric ?? "—"],
+        ],
+      },
+    ];
+    return (
+      <div className={`grid divide-y ${compact ? "" : "lg:grid-cols-3 lg:divide-x lg:divide-y-0"}`} style={{ borderColor: border }}>
+        {groups.map((group) => (
+          <div key={group.title} className="p-5">
+            <h3 className="mb-4 text-[10px] font-bold uppercase tracking-[0.13em]" style={{ color: accent }}>
+              {group.title}
+            </h3>
+            <dl className="space-y-3">
+              {group.fields.map(([label, value]) => (
+                <div key={label} className="flex items-start justify-between gap-4">
+                  <dt className="text-[11px]" style={labelStyle}>{label}</dt>
+                  <dd className="max-w-[62%] whitespace-pre-wrap text-right text-[11px] font-semibold">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderTaskForm = () => (
+    <div className="grid gap-3 border-t p-5 sm:grid-cols-2 xl:grid-cols-4" style={{ borderColor: border }}>
+      {taskField("Task title", "taskTitle")}
+      {taskField("Assigned to", "assignedTo")}
+      {taskField("Expected start", "expectedStartDate", "date")}
+      {taskField("Expected end", "expectedEndDate", "date")}
+      {taskField("Actual start", "actualStartDate", "date")}
+      {taskField("Actual end", "actualEndDate", "date")}
+      {taskField("Progress %", "progress", "number")}
+      <label className="space-y-1">
+        <span className="block text-[10px] font-semibold" style={labelStyle}>Status</span>
+        <select
+          value={task.status}
+          onChange={(event) => setTask((current) => ({ ...current, status: event.target.value }))}
+          className={inputClass}
+          style={inputStyle}
+        >
+          {!PROJECT_STATUSES.includes(task.status) && <option value={task.status}>{task.status}</option>}
+          {PROJECT_STATUSES.map((status: string) => <option key={status}>{status}</option>)}
+        </select>
+      </label>
+      <label className="space-y-1 sm:col-span-2">
+        <span className="block text-[10px] font-semibold" style={labelStyle}>Notes</span>
+        <input
+          value={task.remark}
+          onChange={(event) => setTask((current) => ({ ...current, remark: event.target.value }))}
+          className={inputClass}
+          style={inputStyle}
+        />
+      </label>
+      <div className="flex items-end gap-2">
+        <button
+          type="button"
+          onClick={() => void saveTask()}
+          disabled={savingTask}
+          className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+          style={{ background: accent }}
+        >
+          {editingTaskId ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+          {savingTask ? "Saving…" : editingTaskId ? "Update task" : "Add task"}
+        </button>
+        {editingTaskId && (
+          <button
+            type="button"
+            onClick={() => { setEditingTaskId(null); setTask(emptyTask); setShowTaskForm(false); }}
+            className="rounded-lg border p-2"
+            style={{ borderColor: border, color: muted }}
+            aria-label="Cancel task edit"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
   );
-  const recoveryAmounts = calculateRevenueRecovery(
-    revenue,
-    revenueRecoveryPercentage,
+
+  const renderTaskTable = (items: Task[], showActions: boolean) => (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[760px] text-left">
+        <thead>
+          <tr className="border-b text-[10px] font-bold uppercase tracking-[0.1em]" style={{ borderColor: border, color: muted }}>
+            <th className="px-5 py-3">Task</th>
+            <th className="px-5 py-3">Owner</th>
+            <th className="px-5 py-3">Due date</th>
+            <th className="px-5 py-3">Progress</th>
+            <th className="px-5 py-3">Status</th>
+            {showActions && <th className="px-5 py-3 text-right">Actions</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.id} className="border-b last:border-0" style={{ borderColor: border }}>
+              <td className="px-5 py-4 text-xs font-semibold">{item.task_title}</td>
+              <td className="px-5 py-4 text-xs" style={{ color: muted }}>
+                {item.assigned_to || manager}
+              </td>
+              <td className="px-5 py-4 text-xs" style={{ color: muted }}>
+                {dateLabel(item.expected_end_date)}
+              </td>
+              <td className="px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-20 overflow-hidden rounded-full" style={{ background: dark ? "#334155" : "#E2E8F0" }}>
+                    <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, Number(item.progress) || 0))}%`, background: accent }} />
+                  </div>
+                  <span className="w-8 text-[10px] font-semibold" style={{ color: muted }}>{Number(item.progress || 0)}%</span>
+                </div>
+              </td>
+              <td className="px-5 py-4">
+                <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ color: statusColor(item.status), background: `${statusColor(item.status)}18` }}>
+                  {normalizeProjectStatus(item.status)}
+                </span>
+              </td>
+              {showActions && (
+                <td className="px-5 py-4">
+                  <div className="flex justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => { setTask(taskDraftFromTask(item)); setEditingTaskId(item.id); setShowTaskForm(true); }}
+                      className="rounded-md p-1.5 hover:bg-blue-50"
+                      style={{ color: accent }}
+                      title="Edit task"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => requestDelete("Delete this project task?", () => { setConfirmDialog(null); void deleteTask(item.id); })}
+                      className="rounded-md p-1.5 text-red-500 hover:bg-red-50"
+                      title="Delete task"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </td>
+              )}
+            </tr>
+          ))}
+          {!items.length && (
+            <tr>
+              <td colSpan={showActions ? 6 : 5} className="px-5 py-10 text-center text-xs" style={{ color: muted }}>
+                No project tasks have been recorded yet.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
-  const formatCurrency = (amount: number) =>
-    currencyRateToInr === null
-      ? `INR conversion unavailable${currencyRateError ? `: ${currencyRateError}` : ""}`
-      : new Intl.NumberFormat("en-IN", {
-          style: "currency",
-          currency: "INR",
-          maximumFractionDigits: 2,
-        }).format(convertCurrencyAmount(amount, currencyRateToInr, 1));
+
+  const riskDraftFields: [string, keyof RiskDraft, string?][] = [
+    ["Risk title", "riskTitle"],
+    ["Category", "riskCategory"],
+    ["Raised by", "raisedBy"],
+    ["Risk owner", "owner"],
+    ["Date raised", "dateRaised", "date"],
+    ["Description", "description"],
+    ["Impact description", "impactDescription"],
+    ["Mitigation plan", "mitigation"],
+    ["Comments / actions", "commentsActions"],
+  ];
 
   return (
-    <div
-      className="project-page p-6 space-y-5 flex flex-col"
-      style={{ color: text }}
-    >
+    <div className="project-page flex flex-col gap-5 p-5 md:p-6" style={{ color: text }}>
       {confirmDialog && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
-          <div
-            className="w-full max-w-md overflow-hidden rounded-2xl border shadow-2xl"
-            style={{
-              background: bg,
-              borderColor: border,
-              boxShadow: dark
-                ? "0 25px 50px rgba(0,0,0,.45)"
-                : "0 25px 50px rgba(15,23,42,.2)",
-            }}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-task-title"
-          >
-            <div className="h-1.5" style={{ background: "#1E40AF" }} />
-            <div className="p-6">
-              <div
-                className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ color: "#1E40AF" }}
-              >
-                CloudOrbix Alert
-              </div>
-              <h2
-                id="delete-task-title"
-                className="text-base font-bold"
-                style={{ color: text }}
-              >
-                Please confirm
-              </h2>
-              <p
-                className="mt-2 text-sm leading-6"
-                style={{ color: muted }}
-              >
-                {confirmDialog.message}
-              </p>
-              <div className="mt-6 flex justify-end gap-2">
-                <button
-                  onClick={() => {
-                    setConfirmDialog(null);
-                    showCloudOrbixAlert("Task deletion cancelled.", "info");
-                  }}
-                  className="rounded-lg border px-4 py-2 text-xs font-semibold"
-                  style={{ borderColor: border, color: muted }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDialog.onConfirm}
-                  className="rounded-lg px-4 py-2 text-xs font-semibold text-white"
-                  style={{ background: "#1E40AF" }}
-                >
-                  Delete task
-                </button>
-              </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 p-4">
+          <section className="w-full max-w-md rounded-xl border p-5 shadow-2xl" style={sectionStyle} role="dialog" aria-modal="true">
+            <h2 className="text-sm font-bold">Confirm action</h2>
+            <p className="mt-2 text-xs" style={{ color: muted }}>{confirmDialog.message}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setConfirmDialog(null)} className="rounded-lg border px-3 py-2 text-xs font-semibold" style={{ borderColor: border, color: muted }}>Cancel</button>
+              <button type="button" onClick={confirmDialog.onConfirm} className="rounded-lg px-3 py-2 text-xs font-semibold text-white" style={{ background: accent }}>Confirm</button>
             </div>
-          </div>
+          </section>
         </div>
       )}
+
       {showTemporaryAccessForm && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
-          <div
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/40 p-4">
+          <section
             className="w-full max-w-lg rounded-xl border p-5 shadow-2xl"
-            style={{ background: bg, borderColor: border }}
+            style={sectionStyle}
             role="dialog"
             aria-modal="true"
             aria-labelledby="temporary-access-title"
           >
-            <h2 id="temporary-access-title" className="text-base font-bold">
+            <h2 id="temporary-access-title" className="text-sm font-bold">
               Add temporary manager
             </h2>
             <p className="mt-1 text-xs" style={{ color: muted }}>
@@ -1103,14 +1086,14 @@ export default function ProjectPage({
               Project manager
               <select
                 className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                style={{ background: inputBg, borderColor: border, color: text }}
+                style={inputStyle}
                 value={selectedTemporaryManager}
                 onChange={(event) => setSelectedTemporaryManager(event.target.value)}
               >
                 <option value="">Select a manager</option>
-                {availableTemporaryManagers.map((manager) => (
-                  <option key={manager.id} value={manager.id}>
-                    {manager.fullName} ({manager.email})
+                {availableTemporaryManagers.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.fullName} ({candidate.email})
                   </option>
                 ))}
               </select>
@@ -1124,7 +1107,7 @@ export default function ProjectPage({
               Reason
               <textarea
                 className="mt-1 min-h-24 w-full rounded-lg border px-3 py-2 text-sm"
-                style={{ background: inputBg, borderColor: border, color: text }}
+                style={inputStyle}
                 maxLength={1000}
                 value={temporaryAccessReason}
                 onChange={(event) => setTemporaryAccessReason(event.target.value)}
@@ -1146,1369 +1129,558 @@ export default function ProjectPage({
                 disabled={savingTemporaryAccess || !selectedTemporaryManager || !temporaryAccessReason.trim()}
                 onClick={() => void submitTemporaryAccess()}
                 className="rounded-lg px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: "#1E40AF" }}
+                style={{ background: accent }}
               >
-                {savingTemporaryAccess ? "Submitting..." : isAdmin ? "Grant access" : "Send for approval"}
+                {savingTemporaryAccess ? "Submitting…" : isAdmin ? "Grant access" : "Send for approval"}
               </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      <button type="button" onClick={onBack} className="inline-flex w-fit items-center gap-2 text-xs font-semibold" style={{ color: accent }}>
+        <ArrowLeft className="h-4 w-4" /> Back to Projects
+      </button>
+
+      <header className="flex flex-col justify-between gap-5 xl:flex-row xl:items-center">
+        <div className="flex items-start gap-4">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-sm font-bold text-white" style={{ background: accent }}>
+            {initialsFor(project.client_name)}
+          </div>
+          <div className="min-w-0">
+            <div className="mb-1.5 flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight md:text-2xl">{project.client_name}</h1>
+              <span className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ color: statusColor(projectStatus), background: `${statusColor(projectStatus)}18` }}>
+                {projectStatus}
+              </span>
+            </div>
+            <p className="text-xs" style={{ color: muted }}>
+              {project.client_id}
+              {project.service_category ? ` · ${project.service_category}` : ""}
+              {normalizeHyperscaler(project.hyperscaler) ? ` · ${normalizeHyperscaler(project.hyperscaler)}` : ""}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px]" style={{ color: muted }}>
+              <span className="inline-flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5" />{manager}</span>
+              <span className="inline-flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" />{dateLabel(project.estimated_start_date)} – {dateLabel(project.estimated_end_date)}</span>
+              {project.project_type && <span className="inline-flex items-center gap-1.5"><Target className="h-3.5 w-3.5" />{project.project_type}</span>}
             </div>
           </div>
         </div>
-      )}
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-xs font-semibold"
-        style={{ color: "#1E40AF" }}
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to Projects
-      </button>
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-bold">{project.client_name}</h1>
-          <p className="text-xs mt-1" style={{ color: muted }}>
-            {project.client_id} · PM:{" "}
-            {project.project_manager || project.account_manager || "Unassigned"}{" "}
-            · {normalizeHyperscaler(project.hyperscaler) || "No hyperscaler"}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onEditProject}
-            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white"
-            style={{ background: "#1E40AF" }}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Edit Project
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => void downloadUpdates()} className="inline-flex h-9 items-center gap-2 rounded-lg border px-3.5 text-xs font-semibold" style={{ borderColor: border, background: bg }}>
+            <Download className="h-4 w-4" /> Export
           </button>
-          {(() => {
-            const progress = overallProgress;
-            const radius = 42;
-
-            const circumference = 2 * Math.PI * radius;
-
-            const offset = circumference * (1 - progress / 100);
-
-            const alerts: string[] = [];
-
-            tasks.forEach((task) => {
-              const today = new Date();
-
-              const startDate = task.expected_start_date
-                ? new Date(task.expected_start_date)
-                : null;
-
-              const endDate = task.expected_end_date
-                ? new Date(task.expected_end_date)
-                : null;
-
-              const status = task.status?.toLowerCase();
-
-              // Start delayed
-
-              if (startDate && today > startDate && status === "not started") {
-                const daysLate = Math.floor(
-                  (today.getTime() - startDate.getTime()) /
-                    (1000 * 60 * 60 * 24),
-                );
-
-                alerts.push(
-                  `⚠️ ${task.task_title}: Start delayed by ${daysLate} day${
-                    daysLate > 1 ? "s" : ""
-                  }`,
-                );
-              }
-
-              // End delayed
-
-              if (
-                endDate &&
-                today > endDate &&
-                status !== "completed" &&
-                status !== "closed"
-              ) {
-                const daysLate = Math.floor(
-                  (today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24),
-                );
-
-                alerts.push(
-                  `🔴 ${task.task_title}: End delayed by ${daysLate} day${
-                    daysLate > 1 ? "s" : ""
-                  }`,
-                );
-              }
-
-              // Blocked task
-
-              if (status === "blocked") {
-                alerts.push(`⛔ ${task.task_title}: is currently blocked`);
-              }
-            });
-
-            return (
-              <div className="relative w-32 h-32">
-                <svg className="w-32 h-32 -rotate-90" viewBox="0 0 100 100">
-                  {/* Background */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r={radius}
-                    fill="none"
-                    stroke="#E5E7EB"
-                    strokeWidth="10"
-                  />
-
-                  {/* Progress */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r={radius}
-                    fill="none"
-                    stroke="#1E40AF"
-                    strokeWidth="10"
-                    strokeLinecap="round"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={offset}
-                  />
-                </svg>
-
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <div
-                    className="text-3xl font-bold"
-                    style={{ color: "#1E40AF" }}
-                  >
-                    {progress}%
-                  </div>
-
-                  <div className="text-[11px]" style={{ color: muted }}>
-                    Progress
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
+          <button type="button" onClick={onEditProject} className="inline-flex h-9 items-center gap-2 rounded-lg px-4 text-xs font-semibold text-white" style={{ background: accent }}>
+            <Pencil className="h-3.5 w-3.5" /> Edit project
+          </button>
         </div>
-      </div>
+      </header>
+
       {message && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div role="status" className="rounded-lg border px-3 py-2 text-xs" style={{ borderColor: border, background: bg, color: muted }}>
           {message}
         </div>
       )}
-      {(canManageTemporaryAccess || temporaryAccess.length > 0) && (
-        <section
-          className="rounded-xl border p-4"
-          style={{ background: bg, borderColor: border }}
-          aria-label="Temporary project manager access"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold">Temporary manager access</h2>
-              <p className="mt-1 text-xs" style={{ color: muted }}>
-                Approved managers can access this project until their access is revoked.
-              </p>
-            </div>
-            {canManageTemporaryAccess && (
-              <button
-                type="button"
-                onClick={() => setShowTemporaryAccessForm(true)}
-                className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white"
-                style={{ background: "#1E40AF" }}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add temporary manager
-              </button>
-            )}
-          </div>
-          {temporaryAccess.length > 0 ? (
-            <div className="mt-3 divide-y" style={{ borderColor: border }}>
-              {temporaryAccess.map((entry) => {
-                const canRevoke = isAdmin ||
-                  isPrimaryProjectManager ||
-                  entry.managerEmail.toLowerCase() === user.email.toLowerCase();
-                return (
-                  <div
-                    key={entry.id}
-                    className="flex flex-wrap items-center justify-between gap-3 py-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold">
-                        {entry.managerName} ({entry.managerEmail})
-                        <span
-                          className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            entry.status === "approved"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-amber-100 text-amber-800"
-                          }`}
-                        >
-                          {entry.status === "approved" ? "Active" : "Pending approval"}
+
+      <nav className="border-b" style={{ borderColor: border }} aria-label="Project details sections">
+        <div className="flex gap-6 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              aria-current={activeTab === tab ? "page" : undefined}
+              className="relative shrink-0 pb-3 text-xs font-semibold"
+              style={{ color: activeTab === tab ? accent : muted }}
+            >
+              {tab}
+              {tab === "Tasks" && <span className="ml-1.5 text-[10px] opacity-70">{tasks.length}</span>}
+              {tab === "Risks" && <span className="ml-1.5 text-[10px] opacity-70">{risks.length}</span>}
+              {tab === "Documents" && <span className="ml-1.5 text-[10px] opacity-70">{documents.length}</span>}
+              {activeTab === tab && <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full" style={{ background: accent }} />}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {activeTab === "Overview" && (
+        <div className="space-y-5">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_290px]">
+            <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: border }}>
+                <div>
+                  <h2 className="text-sm font-bold">Project details</h2>
+                  <p className="mt-1 text-[11px]" style={{ color: muted }}>Ownership, commercial, and delivery information</p>
+                </div>
+                <span className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ color: statusColor(projectStatus), background: `${statusColor(projectStatus)}18` }}>
+                  {projectStatus}
+                </span>
+              </div>
+              {renderProjectDetails()}
+              <div className="border-t px-5 py-4" style={{ borderColor: border }}>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: muted }}>Project brief</p>
+                <p className="mt-2 min-h-[96px] whitespace-pre-wrap text-xs leading-5" style={{ color: text }}>
+                  {project.project_brief || "No project brief has been added."}
+                </p>
+              </div>
+            </section>
+
+            <aside className="space-y-5">
+              <section className="flex flex-col items-center rounded-xl border p-5 text-center" style={sectionStyle}>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: muted }}>Overall progress</p>
+                <div className="relative my-4 h-28 w-28">
+                  <svg className="h-28 w-28 -rotate-90" viewBox="0 0 100 100" aria-label={`${progress}% complete`}>
+                    <circle cx="50" cy="50" r="42" fill="none" stroke={dark ? "#334155" : "#E2E8F0"} strokeWidth="8" />
+                    <circle cx="50" cy="50" r="42" fill="none" stroke={accent} strokeWidth="8" strokeLinecap="round" strokeDasharray={2 * Math.PI * 42} strokeDashoffset={2 * Math.PI * 42 * (1 - progress / 100)} />
+                  </svg>
+                  <div className="absolute inset-0 grid place-content-center">
+                    <strong className="text-2xl">{progress}%</strong>
+                    <span className="text-[9px] uppercase tracking-wider" style={{ color: muted }}>complete</span>
+                  </div>
+                </div>
+                <p className="text-xs font-semibold">Project completion</p>
+                <p className="mt-1 text-[10px]" style={{ color: muted }}>{completedTasks} of {tasks.length} tasks completed</p>
+                <button type="button" onClick={() => setActiveTab("Tasks")} className="mt-4 inline-flex items-center gap-1 text-[11px] font-semibold" style={{ color: accent }}>
+                  View project tasks <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </section>
+
+              <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
+                <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: border }}>
+                  <h2 className="text-sm font-bold">Attention needed</h2>
+                  {attentionItems.length > 0 && <span className="h-2 w-2 rounded-full bg-amber-500" />}
+                </div>
+                <div className="space-y-1 p-2">
+                  {attentionItems.length ? attentionItems.map((item, index) => {
+                    const ItemIcon = item.kind === "task" ? Clock3 : item.kind === "risk" ? AlertTriangle : FileText;
+                    return (
+                      <button
+                        key={`${item.kind}-${item.text}-${index}`}
+                        type="button"
+                        onClick={() => setActiveTab(item.kind === "task" ? "Tasks" : item.kind === "risk" ? "Risks" : "Documents")}
+                        className="flex w-full items-start gap-3 rounded-lg p-3 text-left hover:bg-slate-50"
+                      >
+                        <ItemIcon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: item.kind === "risk" ? "#DC2626" : "#D97706" }} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-[11px] font-semibold">{item.text}</span>
+                          <span className="mt-1 block text-[10px]" style={{ color: muted }}>{item.detail}</span>
                         </span>
+                      </button>
+                    );
+                  }) : <p className="px-3 py-5 text-center text-xs" style={{ color: muted }}>No outstanding items need attention.</p>}
+                </div>
+              </section>
+
+              <section className="rounded-xl border p-4" style={sectionStyle}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-bold">Mandatory documents</h2>
+                  <span className="text-[10px] font-bold" style={{ color: documentProgress === 100 ? "#16A34A" : accent }}>
+                    {uploadedMandatoryDocuments}/{MANDATORY_DOCUMENTS.length}
+                  </span>
+                </div>
+                <div className="mb-4 h-1.5 overflow-hidden rounded-full" style={{ background: dark ? "#334155" : "#E2E8F0" }}>
+                  <div className="h-full rounded-full" style={{ width: `${documentProgress}%`, background: documentProgress === 100 ? "#16A34A" : accent }} />
+                </div>
+                <div className="space-y-2">
+                  {MANDATORY_DOCUMENTS.slice(0, 5).map((item) => {
+                    const uploaded = uploadedMandatoryTypes.has(item.id);
+                    return (
+                      <div key={item.id} className="flex items-center gap-2 text-[10px]">
+                        {uploaded ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Circle className="h-3.5 w-3.5" style={{ color: muted }} />}
+                        <span className="flex-1 truncate" style={{ color: uploaded ? text : muted }}>{item.name}</span>
                       </div>
-                      <p className="mt-1 text-xs" style={{ color: muted }}>
-                        Reason: {entry.reason}
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => setActiveTab("Documents")} className="mt-4 w-full rounded-lg py-2 text-[10px] font-bold" style={{ color: accent, background: `${accent}12` }}>
+                  View all documents
+                </button>
+              </section>
+
+              {(canManageTemporaryAccess || temporaryAccess.length > 0) && (
+                <section className="rounded-xl border p-4" style={sectionStyle} aria-label="Temporary project manager access">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-bold">Temporary manager access</h2>
+                      <p className="mt-1 text-[10px]" style={{ color: muted }}>
+                        Approved managers can access this project until their access is revoked.
                       </p>
-                      {entry.status === "pending" && (
-                        <p className="mt-1 text-[11px]" style={{ color: muted }}>
-                          Requested by {entry.requesterName} · {new Date(entry.createdAt).toLocaleString()}
-                        </p>
-                      )}
                     </div>
-                    {canRevoke && (
+                    {canManageTemporaryAccess && (
                       <button
                         type="button"
-                        onClick={() => void revokeTemporaryAccess(entry)}
-                        className="rounded-lg border px-3 py-2 text-xs font-semibold text-red-600"
-                        style={{ borderColor: "#FECACA" }}
+                        onClick={() => setShowTemporaryAccessForm(true)}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[10px] font-semibold text-white"
+                        style={{ background: accent }}
                       >
-                        {entry.status === "pending" ? "Withdraw request" : "Revoke access"}
+                        <Plus className="h-3.5 w-3.5" />
+                        Add manager
                       </button>
                     )}
+                  </div>
+                  {temporaryAccess.length > 0 ? (
+                    <div className="mt-3 divide-y" style={{ borderColor: border }}>
+                      {temporaryAccess.map((entry) => {
+                        const canRevoke = isAdmin ||
+                          isPrimaryProjectManager ||
+                          entry.managerEmail.toLowerCase() === user.email.toLowerCase();
+                        const action = entry.status === "pending"
+                          ? "withdraw this request"
+                          : "revoke this manager's access";
+                        return (
+                          <div key={entry.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold">
+                                {entry.managerName}
+                                <span className="ml-1 font-normal" style={{ color: muted }}>
+                                  ({entry.managerEmail})
+                                </span>
+                              </p>
+                              <span
+                                className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-semibold ${
+                                  entry.status === "approved"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-amber-100 text-amber-800"
+                                }`}
+                              >
+                                {entry.status === "approved" ? "Active" : "Pending approval"}
+                              </span>
+                              <p className="mt-1 text-[10px]" style={{ color: muted }}>
+                                Reason: {entry.reason}
+                              </p>
+                              {entry.status === "pending" && (
+                                <p className="mt-1 text-[10px]" style={{ color: muted }}>
+                                  Requested by {entry.requesterName} · {new Date(entry.createdAt).toLocaleString()}
+                                </p>
+                              )}
+                            </div>
+                            {canRevoke && (
+                              <button
+                                type="button"
+                                onClick={() => requestDelete(
+                                  `Are you sure you want to ${action}?`,
+                                  () => {
+                                    setConfirmDialog(null);
+                                    void revokeTemporaryAccess(entry);
+                                  },
+                                )}
+                                className="rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold text-red-600"
+                                style={{ borderColor: "#FECACA" }}
+                              >
+                                {entry.status === "pending" ? "Withdraw" : "Revoke"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-[10px]" style={{ color: muted }}>
+                      No temporary managers have been assigned.
+                    </p>
+                  )}
+                </section>
+              )}
+            </aside>
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: border }}>
+                <div>
+                  <h2 className="text-sm font-bold">Tasks</h2>
+                  <p className="mt-1 text-[11px]" style={{ color: muted }}>Current project tasks and due dates</p>
+                </div>
+                <button type="button" onClick={() => { setActiveTab("Tasks"); setShowTaskForm(true); setEditingTaskId(null); setTask({ ...emptyTask, assignedTo: manager === "Unassigned" ? "" : manager }); }} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold" style={{ borderColor: border }}>
+                  <Plus className="h-3.5 w-3.5" /> Add task
+                </button>
+              </div>
+              {renderTaskTable(tasks.slice(0, 3), false)}
+              {tasks.length > 3 && (
+                <button type="button" onClick={() => setActiveTab("Tasks")} className="border-t px-5 py-3 text-xs font-semibold" style={{ borderColor: border, color: accent }}>
+                  View all {tasks.length} tasks
+                </button>
+              )}
+            </section>
+
+            <section className="rounded-xl border p-5" style={sectionStyle}>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-bold">Daily updates</h2>
+                  <p className="mt-1 text-[11px]" style={{ color: muted }}>Project activity and handover trail</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold" style={{ color: accent }}>{updates.length}</span>
+                  <button type="button" onClick={() => void downloadUpdates()} title="Export updates" aria-label="Export updates" className="rounded-lg border p-1.5" style={{ borderColor: border, color: muted }}>
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-end gap-2 rounded-lg border p-2" style={{ borderColor: border, background: soft }}>
+                <textarea
+                  value={updateText}
+                  onChange={(event) => setUpdateText(event.target.value)}
+                  rows={2}
+                  placeholder="Share a project update…"
+                  className="min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-xs outline-none"
+                  style={{ color: text }}
+                />
+                <button type="button" onClick={() => void addUpdate()} disabled={!updateText.trim()} aria-label="Post update" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-white disabled:opacity-40" style={{ background: accent }}>
+                  <Send className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-4 max-h-72 space-y-4 overflow-y-auto">
+                {updates.length ? updates.map((item) => (
+                  <div key={item.id} className="flex gap-3">
+                    <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[9px] font-bold" style={{ color: accent, background: `${accent}14` }}>
+                      {initialsFor(item.updated_by || "Project")}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="whitespace-pre-wrap text-xs leading-5">{item.update_text}</p>
+                      <p className="mt-1 text-[10px]" style={{ color: muted }}>{item.updated_by || "Project team"} · {new Date(item.created_at).toLocaleString()}</p>
+                    </div>
+                    <button type="button" onClick={() => requestDelete("Permanently delete this project update?", () => { setConfirmDialog(null); void deleteUpdate(item.id); })} title="Delete update" aria-label="Delete update" className="h-fit rounded-md p-1 text-red-500 hover:bg-red-50">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )) : <p className="py-5 text-center text-xs" style={{ color: muted }}>No project updates recorded yet.</p>}
+              </div>
+            </section>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "Tasks" && (
+        <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: border }}>
+            <div>
+              <h2 className="text-sm font-bold">Project tasks</h2>
+              <p className="mt-1 text-[11px]" style={{ color: muted }}>{tasks.length} tasks · {completedTasks} completed</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold" style={{ borderColor: border }}>
+                <Upload className="h-3.5 w-3.5" /> Import tasks
+                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void importTasks(file);
+                  event.currentTarget.value = "";
+                }} />
+              </label>
+              <button type="button" onClick={() => {
+                if (showTaskForm) {
+                  setShowTaskForm(false);
+                  setEditingTaskId(null);
+                  setTask(emptyTask);
+                } else {
+                  setShowTaskForm(true);
+                  setEditingTaskId(null);
+                  setTask({ ...emptyTask, assignedTo: manager === "Unassigned" ? "" : manager });
+                }
+              }} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white" style={{ background: accent }}>
+                {showTaskForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                {showTaskForm ? "Close form" : "Add task"}
+              </button>
+            </div>
+          </div>
+          {showTaskForm && renderTaskForm()}
+          {renderTaskTable(tasks, true)}
+        </section>
+      )}
+
+      {activeTab === "Risks" && (
+        <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: border }}>
+            <div>
+              <h2 className="text-sm font-bold">Project risk register</h2>
+              <p className="mt-1 text-[11px]" style={{ color: muted }}>{openRisks} open risks · {risks.length} total</p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => void downloadProjectRisks()} disabled={downloadingRisks} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold disabled:opacity-50" style={{ borderColor: border }}>
+                <Download className="h-3.5 w-3.5" /> {downloadingRisks ? "Downloading…" : "Export"}
+              </button>
+              <button type="button" onClick={() => setShowRiskForm((current) => !current)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white" style={{ background: accent }}>
+                {showRiskForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                {showRiskForm ? "Close form" : "Add risk"}
+              </button>
+            </div>
+          </div>
+          {showRiskForm && (
+            <div className="grid gap-3 border-b p-5 sm:grid-cols-2 xl:grid-cols-3" style={{ borderColor: border }}>
+              {riskDraftFields.map(([label, key, type]) => (
+                <label key={key} className="space-y-1">
+                  <span className="block text-[10px] font-semibold" style={labelStyle}>{label}</span>
+                  <input
+                    type={type || "text"}
+                    value={risk[key]}
+                    readOnly={key === "raisedBy"}
+                    onChange={(event) => setRisk((current) => ({ ...current, [key]: event.target.value }))}
+                    className={inputClass}
+                    style={inputStyle}
+                  />
+                </label>
+              ))}
+              {(["probability", "level", "impact", "status"] as const).map((key) => (
+                <label key={key} className="space-y-1">
+                  <span className="block text-[10px] font-semibold capitalize" style={labelStyle}>{key}</span>
+                  <select value={risk[key]} onChange={(event) => setRisk((current) => ({ ...current, [key]: event.target.value }))} className={inputClass} style={inputStyle}>
+                    {(key === "status" ? PROJECT_STATUSES : ["Low", "Medium", "High"]).map((value: string) => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+              ))}
+              <button type="button" onClick={() => void addRisk()} disabled={savingRisk} className="self-end rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50" style={{ background: accent }}>
+                {savingRisk ? "Saving…" : "Save risk"}
+              </button>
+            </div>
+          )}
+          {risks.length ? (
+            <div className="divide-y" style={{ borderColor: border }}>
+              {risks.map((item) => (
+                <article key={item.id} className="grid gap-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_130px_150px] md:items-center">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-xs font-semibold">{item.risk_title || item.description || "Untitled risk"}</h3>
+                      <span className="rounded-full px-2 py-0.5 text-[9px] font-bold" style={{ color: riskColor(item.level), background: `${riskColor(item.level)}18` }}>{item.level || "Unrated"}</span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-[11px]" style={{ color: muted }}>{item.description || "No additional description."}</p>
+                    <p className="mt-1 text-[10px]" style={{ color: muted }}>
+                      Owner: {item.owner || "Unassigned"} · Raised {dateLabel(item.date_raised)}
+                    </p>
+                  </div>
+                  <span className="text-[10px]" style={{ color: muted }}>{item.mitigation || "No mitigation plan"}</span>
+                  <label className="text-[10px] font-semibold" style={{ color: muted }}>
+                    Status
+                    <select value={item.status} onChange={(event) => void updateRisk(item.id, event.target.value)} className="mt-1 w-full rounded-lg border px-2 py-1.5 text-xs" style={inputStyle}>
+                      {!PROJECT_STATUSES.includes(item.status) && <option value={item.status}>{item.status}</option>}
+                      {PROJECT_STATUSES.map((status: string) => <option key={status}>{status}</option>)}
+                    </select>
+                  </label>
+                </article>
+              ))}
+            </div>
+          ) : <p className="px-5 py-12 text-center text-xs" style={{ color: muted }}>No project risks have been recorded.</p>}
+        </section>
+      )}
+
+      {activeTab === "Documents" && (
+        <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: border }}>
+            <div>
+              <h2 className="text-sm font-bold">Project documents</h2>
+              <p className="mt-1 text-[11px]" style={{ color: muted }}>
+                {uploadedMandatoryDocuments} of {MANDATORY_DOCUMENTS.length} mandatory documents uploaded · {documents.length} files total
+              </p>
+            </div>
+            <button type="button" onClick={onOpenDocuments} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white" style={{ background: accent }}>
+              <Upload className="h-3.5 w-3.5" /> Manage documents
+            </button>
+          </div>
+          <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
+            {documents.map((document) => (
+              <article key={document.id} className="rounded-xl border p-4" style={{ borderColor: border }}>
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <span className="grid h-10 w-10 place-items-center rounded-lg" style={{ color: accent, background: `${accent}14` }}>
+                    <FileText className="h-5 w-5" />
+                  </span>
+                  <a href={document.blob_url} target="_blank" rel="noreferrer" className="rounded-md p-1.5" style={{ color: accent }} aria-label={`Open ${document.file_name}`}>
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+                <h3 className="break-words text-xs font-semibold">{document.file_name}</h3>
+                <p className="mt-1.5 text-[10px]" style={{ color: muted }}>
+                  {MANDATORY_DOCUMENTS.find((item) => item.id === document.document_type)?.name || "Project file"}
+                  {document.created_at ? ` · ${dateLabel(document.created_at)}` : ""}
+                </p>
+              </article>
+            ))}
+            {!documents.length && (
+              <p className="col-span-full py-10 text-center text-xs" style={{ color: muted }}>No project documents have been uploaded.</p>
+            )}
+          </div>
+          <div className="border-t px-5 py-4" style={{ borderColor: border }}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-xs font-bold">Mandatory document checklist</h3>
+              <span className="text-[10px] font-semibold" style={{ color: documentProgress === 100 ? "#16A34A" : accent }}>{documentProgress}% complete</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {MANDATORY_DOCUMENTS.map((item) => {
+                const uploaded = uploadedMandatoryTypes.has(item.id);
+                return (
+                  <div key={item.id} className="flex items-center gap-2 text-[10px]">
+                    {uploaded ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Circle className="h-3.5 w-3.5" style={{ color: muted }} />}
+                    <span style={{ color: uploaded ? text : muted }}>{item.name}</span>
                   </div>
                 );
               })}
             </div>
-          ) : (
-            <p className="mt-3 text-xs" style={{ color: muted }}>
-              No temporary managers have been assigned.
-            </p>
-          )}
+          </div>
         </section>
       )}
-      <div
-        className={
-          showRiskForm ? "risk-form-primary rounded-xl border p-5" : "hidden"
-        }
-        style={{ background: bg, borderColor: border }}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="font-semibold text-sm">Add risk</h2>
-            <p className="text-xs mt-1" style={{ color: muted }}>
-              Capture the full risk register record.
-            </p>
-          </div>
-          <span className="text-xs font-semibold" style={{ color: "#64748B" }}>
-            Risk ID: Generated on save
-          </span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {riskField("Customer Name", "customerName")}{" "}
-          {riskField("Initiative Name", "initiativeName")}{" "}
-          {riskField("Raised By", "raisedBy")}{" "}
-          {riskField("Risk category", "riskCategory")}{" "}
-          {riskField("Date Raised", "dateRaised", "date")}{" "}
-          {riskField("Risk Owner", "owner")}{" "}
-          {riskField("Risk Description", "description")}{" "}
-          {riskField("Impact Description", "impactDescription")}{" "}
-          {riskField("Mitigation plan", "mitigation")}{" "}
-          {riskField("Comments/Actions", "commentsActions")}
-          <label className="space-y-1">
-            <span
-              className="block text-[10px] font-semibold"
-              style={{ color: muted }}
-            >
-              Probability of converting into Issue
-            </span>
-            <select
-              value={risk.probability}
-              onChange={(event) =>
-                setRisk((current) => ({
-                  ...current,
-                  probability: event.target.value,
-                }))
-              }
-              className="w-full rounded-lg border px-3 py-2 text-xs"
-              style={{
-                background: inputBg,
-                borderColor: riskColor(risk.probability),
-                color: riskColor(risk.probability),
-              }}
-            >
-              {riskLevels.map((value) => (
-                <option key={value}>{value}</option>
-              ))}
-            </select>
-          </label>
-          {(["level", "impact", "status"] as const).map((key) => (
-            <label key={key} className="space-y-1">
-              <span
-                className="block text-[10px] font-semibold capitalize"
-                style={{ color: muted }}
-              >
-                {key}
-              </span>
-              <select
-                value={risk[key]}
-                onChange={(event) =>
-                  setRisk((current) => ({
-                    ...current,
-                    [key]: event.target.value,
-                  }))
-                }
-                className="w-full rounded-lg border px-3 py-2 text-xs"
-                style={{
-                  background: inputBg,
-                  borderColor: key === "status" ? border : riskColor(risk[key]),
-                  color: key === "status" ? text : riskColor(risk[key]),
-                }}
-              >
-                {(key === "status" ? riskStatuses : riskLevels).map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
-              </select>
-            </label>
-          ))}
-          <div className="flex items-end">
-            <button
-              onClick={() => void addRisk()}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-white"
-              style={{ background: "#1E40AF" }}
-            >
-              <Plus className="w-3.5 h-3.5" /> Save risk
-            </button>
-          </div>
-        </div>
-      </div>
-      <div
-        className="rounded-xl border overflow-hidden"
-        style={{ background: bg, borderColor: border }}
-      >
-        <div className="flex items-center justify-between gap-4 border-b px-5 py-4" style={{ borderColor: border }}>
-          <div>
-            <h2 className="font-semibold text-sm">Project Details</h2>
-            <p className="mt-1 text-xs" style={{ color: muted }}>
-              Overview of the project information available to the editor.
-            </p>
-          </div>
-          <button
-            type="button"
-            aria-expanded={showProjectDetails}
-            aria-controls="project-details-content"
-            onClick={() => setShowProjectDetails((show) => !show)}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold"
-            style={{ borderColor: border, color: text }}
-          >
-            {showProjectDetails ? (
-              <>
-                <ChevronUp className="h-3.5 w-3.5" />
-                Hide details
-              </>
-            ) : (
-              <>
-                <ChevronDown className="h-3.5 w-3.5" />
-                View all details
-              </>
-            )}
-          </button>
-        </div>
-        {showProjectDetails && <div id="project-details-content" className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <tbody>
-              {[
-                ["Project ID", project.client_id],
-                ["Project Name", project.client_name],
-                ["Project Manager", project.project_manager || "-"],
-                ["Account Manager", project.account_manager || "-"],
-                ["Region", project.region || "-"],
-                ["Industry", project.industry || "-"],
-                ["Project Status", project.current_status || "-"],
-                ["Project Type", project.project_type || "-"],
-                ["Service Category", project.service_category || "-"],
-                ["Services", project.services?.join(", ") || "-"],
-                ["Hyperscaler", normalizeHyperscaler(project.hyperscaler) || "-"],
-                ["Project Billing Code", project.project_billing_code || "-"],
-                ["ISOW", project.isow || "-"],
-                ["Year", project.year || "-"],
-                ["Revenue", project.revenue == null ? "-" : formatCurrency(revenue)],
-                ["Revenue Recovery Percentage", `${revenueRecoveryPercentage}%`],
-                ["Recovered Revenue", formatCurrency(recoveryAmounts.recoveredRevenue)],
-                ["Pending Revenue", formatCurrency(recoveryAmounts.pendingRevenue)],
-                ["Completion", `${Number(project.completion || 0)}%`],
-                ["Volumetric", project.voumetric ?? "-"],
-                ["Estimated Start", project.estimated_start_date || "-"],
-                ["Estimated End", project.estimated_end_date || "-"],
-                ["Actual Start", project.actual_start_date || "-"],
-                ["Actual End", project.actual_end_date || "-"],
-                ["Contract Start", project.contract_start_date || "-"],
-                ["Contract End", project.contract_end_date || "-"],
-                ["Resources", project.resources?.map((resource) => resource.resourceName).filter(Boolean).join(", ") || "-"],
-                ["Project Brief", project.project_brief || "-"],
-                ["Project Overview", project.project_overview || ""],
-                ["In Scope", project.in_scope || ""],
-                ["Out of Scope", project.out_of_scope || ""],
-                ["Assumptions", project.assumption || ""],
-                ["Notes", project.remarks || "-"],
-              ].map(([label, value]) => (
-                <tr
-                  key={label}
-                  className="border-b last:border-b-0"
-                  style={{ borderColor: border }}
-                >
-                  <th
-                    scope="row"
-                    className="w-1/4 min-w-36 px-5 py-3 font-medium"
-                    style={{ color: muted }}
-                  >
-                    {label}
-                  </th>
-                  <td className="whitespace-pre-wrap px-5 py-3" style={{ color: text }}>
-                    {value}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>}
-      </div>
-      <div className="grid grid-cols-1 gap-4">
-        <div
-          className="rounded-xl border p-5"
-          style={{ background: bg, borderColor: border }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h2 className="font-semibold text-sm">Daily updates</h2>
-              <p className="text-xs mt-1" style={{ color: muted }}>
-                Latest project activity and handover trail
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span
-                className="text-xs font-semibold"
-                style={{ color: "#1E40AF" }}
-              >
-                {updates.length} updates
-              </span>
-              <button
-                onClick={downloadUpdates}
-                className="p-1.5 rounded-lg border"
-                style={{ borderColor: border, color: muted }}
-                title="Export project details"
-                aria-label="Export project details"
-              >
-                <Download className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <textarea
-              value={updateText}
-              onChange={(event) => setUpdateText(event.target.value)}
-              rows={2}
-              placeholder="Add today's project update..."
-              className="flex-1 rounded-lg border px-3 py-2 text-xs resize-none"
-              style={{ background: inputBg, borderColor: border, color: text }}
-            />
-            <button
-              onClick={() => void addUpdate()}
-              className="self-end px-3 py-2 rounded-lg text-xs font-semibold text-white"
-              style={{ background: "#1E40AF" }}
-            >
-              Add update
-            </button>
-          </div>
-          <div className="mt-4 space-y-3 max-h-40 overflow-y-auto pr-1">
-            {updates.length ? (
-              updates.map((update) => (
-                <div
-                  key={update.id}
-                  className="flex items-start justify-between gap-3 border-l-2 pl-3"
-                  style={{ borderColor: "#3B82F6" }}
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs">{update.update_text}</p>
-                    <p className="text-[10px] mt-1" style={{ color: muted }}>
-                      {update.updated_by} ·{" "}
-                      {new Date(update.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => requestUpdateDeletion(update.id)}
-                    className="shrink-0 rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700"
-                    title="Delete update"
-                    aria-label="Delete update"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs" style={{ color: muted }}>
-                No daily updates recorded yet.
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-      <div
-        className="rounded-xl border p-5"
-        style={{ background: bg, borderColor: border }}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <div
-              className="text-xs uppercase font-semibold mb-3"
-              style={{ color: muted }}
-            >
-              Project Summary
-            </div>
 
-            <div className="space-y-3 text-sm">
-              <div>
-                <span style={{ color: muted }}>Project Manager:</span>{" "}
-                <strong>
-                  {project.project_manager || project.account_manager || "-"}
-                </strong>
-              </div>
-
-              <div>
-                <span style={{ color: muted }}>Project Billing Code:</span>{" "}
-                <strong>{project.project_billing_code || "-"}</strong>
-              </div>
-
-              <div>
-                <div style={{ color: muted }}>Resources:</div>
-                {project.resources?.length ? (
-                  <>
-                    <div
-                      className="mt-2 max-h-[180px] space-y-1.5 overflow-y-auto pr-1"
-                      aria-label="Project resources"
-                    >
-                      {project.resources.map((resource, index) => (
-                        <div
-                          key={`${resource.resourceName}-${index}`}
-                          className="flex justify-between gap-4 rounded-md px-2 py-1"
-                          style={{
-                            background: inputBg,
-                            color: text,
-                          }}
-                        >
-                          <div>
-                            <div>{resource.resourceName}</div>
-                            {resource.roleForProject && (
-                              <div className="text-[10px]" style={{ color: muted }}>
-                                {resource.roleForProject}
-                              </div>
-                            )}
-                            {resource.infrastructureAccess && (
-                              <div className="text-[10px] font-medium text-blue-500">
-                                Infrastructure Access
-                              </div>
-                            )}
-                          </div>
-                          <strong>
-                            {resource.fte === null || resource.fte === undefined
-                              ? "-"
-                              : Number(resource.fte).toFixed(2)}
-                          </strong>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-2 flex justify-between gap-4 px-2 text-xs">
-                      <span style={{ color: muted }}>Total FTE</span>
-                      <strong>
-                        {project.resources
-                          .reduce(
-                            (total, resource) =>
-                              total + (Number(resource.fte) || 0),
-                            0,
-                          )
-                          .toFixed(2)}
-                      </strong>
-                    </div>
-                  </>
-                ) : (
-                  <strong>-</strong>
-                )}
-              </div>
-
-              <div>
-                <span style={{ color: muted }}>Volumetric:</span>{" "}
-                <strong>{project.voumetric ?? "-"}</strong>
-              </div>
-
-              <div>
-                <span style={{ color: muted }}>Current Status:</span>{" "}
-                <span
-                  className="px-2 py-1 rounded-full text-white text-xs font-semibold"
-                  style={{ background: "#1E40AF" }}
-                >
-                  {project.current_status}
-                </span>
-              </div>
-
-              <div>
-                <span style={{ color: muted }}>Hyperscaler:</span>{" "}
-                {normalizeHyperscaler(project.hyperscaler) || "-"}
-              </div>
+      {activeTab === "RFP" && (
+        <div className="space-y-5">
+          <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
+            <div className="border-b px-5 py-4" style={{ borderColor: border }}>
+              <h2 className="text-sm font-bold">RFP overview & scope</h2>
+              <p className="mt-1 text-[11px]" style={{ color: muted }}>Commercial context and scope saved with this project</p>
             </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex justify-between">
-              <span>Total Tasks</span>
-              <strong>{totalTasks}</strong>
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span>Completed</span>
-                <span>{completedTasks}</span>
+            <div className="grid divide-y lg:grid-cols-[1.4fr_1fr] lg:divide-x lg:divide-y-0" style={{ borderColor: border }}>
+              <div className="p-5">
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: accent }}>Opportunity overview</h3>
+                <p className="mt-3 whitespace-pre-wrap text-xs leading-6" style={{ color: project.project_overview ? text : muted }}>
+                  {project.project_overview || "No RFP overview has been saved for this project."}
+                </p>
               </div>
-              <div className="h-2 bg-slate-200 rounded-full">
-                <div
-                  className="h-2 rounded-full bg-green-500"
-                  style={{ width: `${completedPercent}%` }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span>In Progress</span>
-                <span>{inProgressTasks}</span>
-              </div>
-              <div className="h-2 bg-slate-200 rounded-full">
-                <div
-                  className="h-2 rounded-full bg-blue-600"
-                  style={{ width: `${inProgressPercent}%` }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span>Not Started</span>
-                <span>{notStartedTasks}</span>
-              </div>
-              <div className="h-2 bg-slate-200 rounded-full">
-                <div
-                  className="h-2 rounded-full bg-slate-500"
-                  style={{ width: `${notStartedPercent}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* <div className="flex flex-col items-center justify-center">
-      <div
-        className="text-5xl font-bold"
-        style={{ color: "#1E40AF" }}
-      >
-        {overallProgress}%
-      </div>
-
-      <div
-        className="text-xs mt-2"
-        style={{ color: muted }}
-      >
-        Overall Progress
-      </div>
-    </div> */}
-          <div
-            className="rounded-xl border overflow-hidden"
-            style={{
-              background: dark ? "#2A1518" : "#FEF2F2",
-              borderColor: dark ? "#7F1D1D" : "#FECACA",
-            }}
-          >
-            <div
-              className="px-4 py-2 text-xs font-semibold"
-              style={{
-                background: dark ? "#7F1D1D" : "#DC2626",
-                color: "white",
-              }}
-            >
-              CloudOrbix Alert
-            </div>
-
-            <div className="alert-container">
-              <div className="alert-list">
-                {alerts.length ? (
-                  alerts.map((alert, index) => (
-                    <div
-                      key={index}
-                      className="alert-item"
-                      style={{
-                        color: dark ? "#FECACA" : "#7F1D1D",
-                        borderColor: dark ? "#7F1D1D" : "#FECACA",
-                      }}
-                    >
-                      {alert}
-                    </div>
-                  ))
-                ) : (
-                  <div
-                    className="alert-item"
-                    style={{
-                      color: dark ? "#BBF7D0" : "#166534",
-                      borderColor: dark ? "#14532D" : "#BBF7D0",
-                    }}
-                  >
-                    ✅ No project risks detected
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div
-        className="rounded-xl border p-5"
-        style={{ background: bg, borderColor: border }}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold text-sm">On Track risks</h2>
-            <p className="text-xs mt-1" style={{ color: muted }}>
-              Current risk tracker
-            </p>
-          </div>
-          <div
-            className="text-3xl font-bold"
-            style={{ color: openRisks ? "#DC2626" : "#16A34A" }}
-          >
-            {openRisks}
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-2 mt-5">
-          {riskLevels.map((level) => (
-            <div
-              key={level}
-              className="rounded-lg p-3 text-center"
-              style={{ background: `${riskColor(level)}18` }}
-            >
-              <div
-                className="text-lg font-bold"
-                style={{ color: riskColor(level) }}
-              >
-                {
-                  risks.filter(
-                    (item) => item.status === "On Track" && item.level === level,
-                  ).length
-                }
-              </div>
-              <div className="text-[10px]" style={{ color: muted }}>
-                {level}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div
-          className="lg:col-span-2 rounded-xl border p-5"
-          style={{ background: bg, borderColor: border }}
-        >
-          <h2 className="font-semibold text-sm mb-3">Project lifecycle</h2>
-          <div className="grid grid-cols-2 gap-4 text-xs">
-            <div>
-              <span style={{ color: muted }}>Status</span>
-              <div className="font-semibold mt-1">{project.current_status}</div>
-            </div>
-            <div>
-              <span style={{ color: muted }}>Project type</span>
-              <div className="font-semibold mt-1">
-                {project.project_type || "-"}
-              </div>
-            </div>
-            <div className="col-span-2">
-              <span style={{ color: muted }}>Brief</span>
-              <div className="mt-1">{project.project_brief || "-"}</div>
-            </div>
-          </div>
-        </div>
-        <div
-          className="rounded-xl border p-5"
-          style={{ background: bg, borderColor: border }}
-        >
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="font-semibold text-sm">Mandatory documents</h2>
-            <span
-              className="text-xs font-semibold"
-              style={{
-                color: documentProgress === 100 ? "#16A34A" : "#1E40AF",
-              }}
-            >
-              {uploadedMandatoryDocuments}/{mandatoryDocumentTypes.length}
-            </span>
-          </div>
-          <div
-            className="h-2 rounded-full mb-3"
-            style={{ background: dark ? "#334155" : "#E2E8F0" }}
-          >
-            <div
-              className="h-2 rounded-full"
-              style={{
-                width: `${documentProgress}%`,
-                background: documentProgress === 100 ? "#16A34A" : "#1E40AF",
-              }}
-            />
-          </div>
-          <button
-            onClick={onOpenDocuments}
-            className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-white"
-            style={{ background: "#1E40AF" }}
-          >
-            View project documents
-          </button>
-        </div>
-      </div>
-      <div
-        className="rounded-xl border overflow-hidden"
-        style={{ background: bg, borderColor: border }}
-      >
-        <div
-          className="px-5 py-4 border-b flex justify-between"
-          style={{ borderColor: border }}
-        >
-          <div>
-            <h2 className="font-semibold text-sm">Task manager</h2>
-            <span className="text-xs" style={{ color: muted }}>
-              {tasks.length} tasks
-            </span>
-          </div>
-          <button
-            onClick={() => setShowTaskForm((current) => !current)}
-            className="px-3 py-2 rounded-lg text-xs font-semibold text-white"
-            style={{ background: "#1E40AF" }}
-          >
-            {showTaskForm ? "Close task form" : "Add task"}
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] text-xs">
-            <thead>
-              <tr className="border-b" style={{ borderColor: border }}>
-                <th className="p-3 text-left">Task</th>
-                <th className="p-3 text-left">Assigned to</th>
-                <th className="p-3 text-left">Expected dates</th>
-                <th className="p-3 text-left">Actual dates</th>
-                <th className="p-3 text-left">Progress</th>
-                <th className="p-3 text-left">Status</th>
-                <th className="p-3 text-left">Remark</th>
-                <th className="p-3 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.slice(0, showAllTasks ? tasks.length : 3).map((item) => (
-                <tr
-                  key={item.id}
-                  className="border-b"
-                  style={{ borderColor: border }}
-                >
-                  <td className="p-3 font-semibold">{item.task_title}</td>
-                  <td className="p-3">
-                    {item.assigned_to ||
-                      project.project_manager ||
-                      project.account_manager ||
-                      "-"}
-                  </td>
-                  <td className="p-3">
-                    {item.expected_start_date || "-"} to{" "}
-                    {item.expected_end_date || "-"}
-                  </td>
-                  <td className="p-3">
-                    {item.actual_start_date || "-"} to{" "}
-                    {item.actual_end_date || "-"}
-                  </td>
-                  <td className="p-3">{item.progress}%</td>
-                  <td className="p-3">{item.status}</td>
-                  <td className="p-3">{item.remark || "-"}</td>
-                  <td className="p-3 flex gap-1">
-                    <button
-                      onClick={() => editTask(item)}
-                      className="p-1.5 rounded-md hover:bg-blue-50"
-                      style={{ color: "#1E40AF" }}
-                      title="Edit task"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => requestTaskDeletion(item.id)}
-                      className="p-1.5 rounded-md hover:bg-red-50 text-red-600"
-                      title="Delete task"
-                    >
-                      X
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div
-          className={
-            showTaskForm
-              ? "grid grid-cols-2 lg:grid-cols-4 gap-3 p-5 border-t"
-              : "hidden"
-          }
-          style={{ borderColor: border }}
-        >
-          {field("Task title", "taskTitle")}
-          {field("Assigned to", "assignedTo")}
-          {field("Expected start", "expectedStartDate", "date")}
-          {field("Expected end", "expectedEndDate", "date")}
-          {field("Actual start", "actualStartDate", "date")}
-          {field("Actual end", "actualEndDate", "date")}
-          {field("Progress %", "progress", "number")}
-          <label className="space-y-1">
-            <span
-              className="block text-[10px] font-semibold"
-              style={{ color: muted }}
-            >
-              Status
-            </span>
-            <select
-              value={task.status}
-              onChange={(event) =>
-                setTask((current) => ({
-                  ...current,
-                  status: event.target.value,
-                }))
-              }
-              className="w-full rounded-lg border px-3 py-2 text-xs"
-              style={{ background: inputBg, borderColor: border, color: text }}
-            >
-              {!statuses.includes(task.status) && (
-                <option value={task.status}>{task.status}</option>
-              )}
-              {statuses.map((status) => (
-                <option key={status}>{status}</option>
-              ))}
-            </select>
-          </label>
-          {field("Remark", "remark")}
-          <div className="flex items-end gap-2">
-            <button
-              onClick={() => void saveTask()}
-              className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-white"
-              style={{ background: "#1E40AF" }}
-            >
-              {editingTaskId ? (
-                <Check className="w-3.5 h-3.5" />
-              ) : (
-                <Plus className="w-3.5 h-3.5" />
-              )}
-              {editingTaskId ? "Update task" : "Add task"}
-            </button>
-            {editingTaskId && (
-              <button
-                onClick={cancelEdit}
-                className="p-2 rounded-lg border"
-                style={{ borderColor: border, color: muted }}
-                title="Cancel edit"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="task-list-toggle">
-        {tasks.length > 3 && (
-          <button
-            onClick={() => setShowAllTasks((current) => !current)}
-            className="px-5 py-3 text-xs font-semibold"
-            style={{ color: "#1E40AF" }}
-          >
-            {showAllTasks
-              ? "Show fewer tasks"
-              : `View all ${tasks.length} tasks`}
-          </button>
-        )}
-      </div>
-      <div
-        className="rounded-xl border p-4 flex items-center justify-between"
-        style={{ background: bg, borderColor: border }}
-      >
-        <div>
-          <h2 className="font-semibold text-sm">Task manager import</h2>
-          <p className="text-xs mt-1" style={{ color: muted }}>
-            Import tasks from an Excel workbook.
-          </p>
-        </div>
-        <label
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-white cursor-pointer"
-          style={{ background: "#1E40AF" }}
-        >
-          <Upload className="w-3.5 h-3.5" /> Import tasks
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void importTasks(file);
-              event.currentTarget.value = "";
-            }}
-          />
-        </label>
-      </div>
-      <div
-        className="risk-details rounded-xl border overflow-hidden"
-        style={{ background: bg, borderColor: border }}
-      >
-        <div
-          className="sticky top-0 z-10 px-5 py-4 border-b flex items-center justify-between"
-          style={{ borderColor: border, background: bg }}
-        >
-          <h2 className="font-semibold text-sm">Risk details</h2>
-          <div className="flex gap-2">
-            <button
-              onClick={() => void downloadProjectRisks()}
-              disabled={downloadingRisks}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold disabled:opacity-50"
-              style={{ borderColor: border, color: text }}
-            >
-              <Download className="w-3.5 h-3.5" /> {downloadingRisks ? "Downloading…" : "Download Excel"}
-            </button>
-            <button
-              onClick={() => setShowRiskForm((current) => !current)}
-              className="px-3 py-2 rounded-lg text-xs font-semibold text-white"
-              style={{ background: "#1E40AF" }}
-            >
-              {showRiskForm ? "Close risk form" : "Add risk"}
-            </button>
-          </div>
-        </div>
-        {risks.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1500px] text-[10px] border-collapse">
-            <thead>
-              <tr style={{ background: "#E6370F", color: "#FFFFFF" }}>
+              <dl className="space-y-3.5 p-5">
                 {[
-                  "Risk ID",
-                  "Customer Name",
-                  "Initiative Name",
-                  "Status",
-                  "Risk category",
-                  "PM",
-                  "Date Raised",
-                  "Raised By",
-                  "Risk Description",
-                  "Probability of converting into Issue",
-                  "Impact",
-                  "Impact Description",
-                  "Mitigation plan",
-                  "Risk Owner",
-                  "Comments/Actions",
-                ].map((heading) => (
-                  <th
-                    key={heading}
-                    className="p-2 text-left border"
-                    style={{ borderColor: "#111827" }}
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {risks.slice(0, showAllRisks ? risks.length : 3).map((item) => (
-                <tr
-                  key={item.id}
-                  className="border-b align-top"
-                  style={{
-                    borderColor: border,
-                    background: dark ? "#334155" : "#E5E7EB",
-                  }}
-                >
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    R{item.id}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {item.customer_name || project.client_name}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {item.initiative_name || "-"}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    <select
-                      value={item.status}
-                      onChange={(event) =>
-                        void updateRisk(item.id, "status", event.target.value)
-                      }
-                      className="bg-transparent"
-                      style={{ color: text }}
-                    >
-                      {!riskStatuses.includes(item.status) && (
-                        <option value={item.status}>{item.status}</option>
-                      )}
-                      {riskStatuses.map((value) => (
-                        <option key={value}>{value}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {item.risk_category || "-"}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {project.project_manager || project.account_manager || "-"}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {item.date_raised || "-"}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {item.raised_by || "-"}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {item.risk_title || item.description}
-                  </td>
-                  <td
-                    className="p-2 border"
-                    style={{
-                      borderColor: border,
-                      color: riskColor(item.probability),
-                    }}
-                  >
-                    {item.probability || "-"}
-                  </td>
-                  <td
-                    className="p-2 border"
-                    style={{
-                      borderColor: border,
-                      color: riskColor(item.impact),
-                    }}
-                  >
-                    {item.impact || "-"}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {item.impact_description || "-"}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {item.mitigation || "-"}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {item.owner || "-"}
-                  </td>
-                  <td className="p-2 border" style={{ borderColor: border }}>
-                    {item.comments_actions || "-"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="p-5 text-xs" style={{ color: muted }}>
-            No risks recorded yet.
-          </p>
-        )}
-        {risks.length > 3 && (
-          <button
-            onClick={() => setShowAllRisks((current) => !current)}
-            className="px-5 py-3 text-xs font-semibold"
-            style={{ color: "#1E40AF" }}
-          >
-            {showAllRisks
-              ? "Show fewer risks"
-              : `View all ${risks.length} risks`}
-          </button>
-        )}
-      </div>
-      <div
-        className="risk-register rounded-xl border p-5"
-        style={{ background: bg, borderColor: border }}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="font-semibold text-sm">Risk register</h2>
-            <p className="text-xs mt-1" style={{ color: muted }}>
-              Track, assign, and resolve project risks
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <label
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white cursor-pointer"
-              style={{ background: "#1E40AF" }}
-            >
-              <Upload className="w-3.5 h-3.5" /> Import tasks
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void importTasks(file);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </label>
-            <span
-              className="text-xs font-semibold"
-              style={{ color: openRisks ? "#DC2626" : "#16A34A" }}
-            >
-              {openRisks} on-track
-            </span>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {(["Risk title", "Description", "Owner", "Mitigation"] as const).map(
-            (label) => {
-              const key = (
-                {
-                  "Risk title": "riskTitle",
-                  Description: "description",
-                  Owner: "owner",
-                  Mitigation: "mitigation",
-                } as const
-              )[label];
-              return (
-                <label key={label} className="space-y-1">
-                  <span
-                    className="block text-[10px] font-semibold"
-                    style={{ color: muted }}
-                  >
-                    {label}
-                  </span>
-                  <input
-                    value={risk[key]}
-                    onChange={(event) =>
-                      setRisk((current) => ({
-                        ...current,
-                        [key]: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-lg border px-3 py-2 text-xs"
-                    style={{
-                      background: inputBg,
-                      borderColor: border,
-                      color: text,
-                    }}
-                  />
-                </label>
-              );
-            },
-          )}
-          {(["level", "impact", "status"] as const).map((key) => (
-            <label key={key} className="space-y-1">
-              <span
-                className="block text-[10px] font-semibold capitalize"
-                style={{ color: muted }}
-              >
-                {key}
-              </span>
-              <select
-                value={risk[key]}
-                onChange={(event) =>
-                  setRisk((current) => ({
-                    ...current,
-                    [key]: event.target.value,
-                  }))
-                }
-                className="w-full rounded-lg border px-3 py-2 text-xs"
-                style={{
-                  background: inputBg,
-                  borderColor: border,
-                  color: key === "status" ? text : riskColor(risk[key]),
-                }}
-              >
-                {(key === "status" ? riskStatuses : riskLevels).map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
-              </select>
-            </label>
-          ))}
-          <div className="flex items-end">
-            <button
-              onClick={() => void addRisk()}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-white"
-              style={{ background: "#1E40AF" }}
-            >
-              <Plus className="w-3.5 h-3.5" /> Add risk
-            </button>
-          </div>
-        </div>
-        <div className="mt-5 space-y-2">
-          {risks.length ? (
-            risks.map((item) => (
-              <div
-                key={item.id}
-                className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-3 items-center border-t pt-3"
-                style={{ borderColor: border }}
-              >
-                <div>
-                  <div className="text-xs font-semibold">{item.risk_title}</div>
-                  <div className="text-[10px] mt-1" style={{ color: muted }}>
-                    {item.owner || "Unassigned"}{" "}
-                    {item.description ? `· ${item.description}` : ""}
+                  ["RFP reference", project.rfp_project_id || "—"],
+                  ["Project type", project.project_type || "—"],
+                  ["Service category", project.service_category || "—"],
+                  ["Hyperscaler", normalizeHyperscaler(project.hyperscaler) || "—"],
+                  ["Proposal owner", project.account_manager || "—"],
+                  ["Revenue", formatCurrency(revenue)],
+                  ["Status", projectStatus],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-start justify-between gap-4">
+                    <dt className="text-[11px]" style={{ color: muted }}>{label}</dt>
+                    <dd className="text-right text-[11px] font-semibold">{value}</dd>
                   </div>
+                ))}
+              </dl>
+            </div>
+          </section>
+          <div className="grid gap-5 lg:grid-cols-2">
+            {[
+              { title: "In scope", content: project.in_scope, icon: Check, color: "#16A34A" },
+              { title: "Out of scope", content: project.out_of_scope, icon: X, color: "#DC2626" },
+            ].map((item) => (
+              <section key={item.title} className="rounded-xl border p-5" style={sectionStyle}>
+                <h3 className="text-sm font-bold">{item.title}</h3>
+                <div className="mt-4 space-y-3">
+                  {item.content?.trim() ? item.content.split(/\r?\n/).filter(Boolean).map((line, index) => (
+                    <p key={`${item.title}-${index}`} className="flex gap-2 text-xs leading-5" style={{ color: text }}>
+                      <item.icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: item.color }} />
+                      {line.replace(/^\s*[-•]\s*/, "")}
+                    </p>
+                  )) : <p className="text-xs" style={{ color: muted }}>No {item.title.toLowerCase()} details have been saved.</p>}
                 </div>
-                <select
-                  value={item.level}
-                  onChange={(event) =>
-                    void updateRisk(item.id, "level", event.target.value)
-                  }
-                  className="rounded border px-2 py-1 text-[10px]"
-                  style={{
-                    borderColor: riskColor(item.level),
-                    color: riskColor(item.level),
-                    background: bg,
-                  }}
-                >
-                  {riskLevels.map((value) => (
-                    <option key={value}>{value}</option>
-                  ))}
-                </select>
-                <select
-                  value={item.impact}
-                  onChange={(event) =>
-                    void updateRisk(item.id, "impact", event.target.value)
-                  }
-                  className="rounded border px-2 py-1 text-[10px]"
-                  style={{
-                    borderColor: riskColor(item.impact),
-                    color: riskColor(item.impact),
-                    background: bg,
-                  }}
-                >
-                  {riskLevels.map((value) => (
-                    <option key={value}>{value}</option>
-                  ))}
-                </select>
-                <select
-                  value={item.status}
-                  onChange={(event) =>
-                    void updateRisk(item.id, "status", event.target.value)
-                  }
-                  className="rounded border px-2 py-1 text-[10px]"
-                  style={{
-                    borderColor,
-                    color: text,
-                    background: bg,
-                  }}
-                >
-                  {!riskStatuses.includes(item.status) && (
-                    <option value={item.status}>{item.status}</option>
-                  )}
-                  {riskStatuses.map((value) => (
-                    <option key={value}>{value}</option>
-                  ))}
-                </select>
-              </div>
-            ))
-          ) : (
-            <p className="text-xs" style={{ color: muted }}>
-              No risks recorded yet.
-            </p>
-          )}
+              </section>
+            ))}
+          </div>
+          <section className="rounded-xl border p-5" style={sectionStyle}>
+            <h3 className="text-sm font-bold">Assumptions</h3>
+            <div className="mt-4 space-y-3">
+              {project.assumption?.trim()
+                ? project.assumption.split(/\r?\n/).filter(Boolean).map((line, index) => (
+                    <p key={index} className="flex gap-3 rounded-lg p-3 text-xs leading-5" style={{ background: soft, color: text }}>
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[9px] font-bold" style={{ color: accent, background: `${accent}18` }}>{index + 1}</span>
+                      {line.replace(/^\s*[-•]\s*/, "")}
+                    </p>
+                  ))
+                : <p className="text-xs" style={{ color: muted }}>No assumptions have been saved for this project.</p>}
+            </div>
+          </section>
         </div>
-      </div>
-      <section>
-        <h2 className="mb-3 text-sm font-semibold">RFP Overview & Scope</h2>
-        <div className="grid grid-cols-1 gap-4">
-          {([
-            ["Overview", project.project_overview],
-            ["In Scope", project.in_scope],
-            ["Out of Scope", project.out_of_scope],
-            ["Assumptions", project.assumption],
-          ] as const).map(([title, content]) => (
-            <article key={title} className="rounded-xl border p-5" style={{ background: bg, borderColor: border }}>
-              <h3 className="mb-2 text-xs font-semibold">{title}</h3>
-              <p className="whitespace-pre-wrap text-xs leading-5" style={{ color: muted }}>{content || ""}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+      )}
     </div>
   );
 }

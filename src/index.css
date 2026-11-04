@@ -100,6 +100,16 @@ body {
   order: 5;
 }
 
+.project-page [class~="text-[9px]"] { font-size: calc(9px * 1.1); }
+.project-page [class~="text-[10px]"] { font-size: calc(10px * 1.1); }
+.project-page [class~="text-[11px]"] { font-size: calc(11px * 1.1); }
+.project-page [class~="text-xs"] { font-size: calc(0.75rem * 1.1); }
+.project-page [class~="text-sm"] { font-size: calc(0.875rem * 1.1); }
+.project-page [class~="text-xl"],
+.project-page [class~="md:text-xl"] { font-size: calc(1.25rem * 1.1); }
+.project-page [class~="text-2xl"],
+.project-page [class~="md:text-2xl"] { font-size: calc(1.5rem * 1.1); }
+
 .project-page > .risk-register > .mt-5 {
   display: none;
 }
