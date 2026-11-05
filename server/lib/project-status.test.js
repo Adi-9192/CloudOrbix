@@ -6,25 +6,23 @@ import {
   PROJECT_STATUSES,
 } from './project-status.js';
 
-test('normalizes legacy statuses and preserves the current workflow statuses', () => {
+test('normalizes legacy statuses to the canonical project status set', () => {
   assert.equal(normalizeProjectStatus('Open'), 'On Track');
   assert.equal(normalizeProjectStatus('On-track'), 'On Track');
   assert.equal(normalizeProjectStatus('On Hold'), 'On Hold');
   assert.equal(normalizeProjectStatus('Closed'), 'Completed');
-  assert.equal(normalizeProjectStatus('Delayed (External)'), 'Delayed(External)');
-  assert.equal(normalizeProjectStatus('Delayed-Internal'), 'Delayed(Internal)');
+  assert.equal(normalizeProjectStatus('Delayed (External)'), 'Off Track (External)');
+  assert.equal(normalizeProjectStatus('Delayed-Internal'), 'Off Track (Internal)');
   assert.deepEqual(PROJECT_STATUSES, [
     'On Track',
     'At Risk',
-    'On Hold',
-    'Scope Finalisation',
-    'Awaiting Approval',
+    'Off Track (External)',
+    'Off Track (Internal)',
     'Completed',
-    'Delayed(External)',
-    'Delayed(Internal)',
-    'Awaiting Sign off',
+    'On Hold',
+    'Cancelled',
   ]);
-  assert.equal(isProjectStatus('Delayed'), false);
-  assert.equal(isProjectStatus('Open'), false);
+  assert.equal(isProjectStatus('Delayed'), true);
+  assert.equal(isProjectStatus('Open'), true);
   assert.equal(isProjectStatus('Delayed(External)'), true);
 });

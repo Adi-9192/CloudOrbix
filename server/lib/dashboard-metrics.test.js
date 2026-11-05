@@ -7,15 +7,15 @@ import {
 
 test('groups approved projects for the dashboard pie chart', () => {
   const projects = [
-    { approval_status: 'approved', current_status: 'On Track', region: 'EMEA', hyperscaler: 'Azure', project_type: 'Standard' },
-    { approval_status: 'approved', current_status: 'On Track', region: 'EMEA', hyperscaler: 'AWS', project_type: 'Standard' },
-    { approval_status: 'approved', current_status: 'Delayed', region: 'APAC', hyperscaler: 'Azure', project_type: 'Non-Standard' },
-    { approval_status: 'pending', current_status: 'On Track', region: 'EMEA', hyperscaler: 'Azure', project_type: 'Standard' },
+    { approval_status: 'approved', current_status: 'On Track', region: 'EMEA', hyperscaler: 'Azure' },
+    { approval_status: 'approved', current_status: 'On Track', region: 'EMEA', hyperscaler: 'AWS' },
+    { approval_status: 'approved', current_status: 'Delayed', region: 'APAC', hyperscaler: 'Azure' },
+    { approval_status: 'pending', current_status: 'On Track', region: 'EMEA', hyperscaler: 'Azure' },
   ];
 
   assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'status'), [
     { name: 'On Track', value: 2 },
-    { name: 'Delayed', value: 1 },
+    { name: 'At Risk', value: 1 },
   ]);
   assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'region'), [
     { name: 'EMEA', value: 2 },
@@ -24,10 +24,6 @@ test('groups approved projects for the dashboard pie chart', () => {
   assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'hyperscaler'), [
     { name: 'AZURE', value: 2 },
     { name: 'AWS', value: 1 },
-  ]);
-  assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'projectType'), [
-    { name: 'Standard', value: 2 },
-    { name: 'Non-Standard', value: 1 },
   ]);
   assert.throws(
     () => calculateDashboardProjectBreakdown(projects, 'year'),

@@ -45,7 +45,7 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
       title: "Dashboards",
       steps: [
         "Open the Dashboard navbar dropdown and choose Project Dashboard, Risk Dashboard, or RFP Dashboard.",
-        "Use each dashboard's Group by control to change the breakdown, such as project status, type, or region.",
+        "Use each dashboard's Group by control to change the breakdown, such as project status or region.",
         "Adjust the available period or year filters to review the corresponding metrics and activity.",
       ],
     },
@@ -149,6 +149,10 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 };
 
 const releaseNotes = [
+  {
+    title: "Project statuses and phases",
+    detail: "Projects now use seven canonical statuses and a Phase dropdown. Excel imports normalize status and phase variants, and Project Type has been removed from active project and RFP screens.",
+  },
   {
     title: "Dashboard project totals",
     detail:

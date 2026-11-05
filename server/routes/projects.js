@@ -31,6 +31,9 @@ async function projectFor(clientId) {
   `, [clientId]);
   const project = result.rows[0];
   if (!project) return null;
+  project.current_status = normalizeProjectStatus(project.current_status);
+  delete project.project_type;
+  delete project.projectType;
 
   const [resources, services] = await Promise.all([
     pool.query(

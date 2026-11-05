@@ -8,6 +8,7 @@ import { appState, createAuditEntry, createImportLog, getPool } from "../db.js"
 
 import { protectRoute, requireRole } from "../middleware/auth.js"
 import { normalizeHyperscaler } from "../../shared/hyperscalers.js"
+import { normalizeProjectPhase } from "../../shared/project-phase.js"
 
 import {
   createProjectIdAllocator,
@@ -40,8 +41,6 @@ const required = [
   "% Completion",
 
   "Hyperscaler",
-
-  "Project Type",
 
   "Brief about the Project",
 
@@ -163,8 +162,14 @@ router.post(
       )
 
       const missing = required.filter(
-        (column) => column !== "PM Name" && !headers.includes(column),
+        (column) =>
+          !["PM Name", "Current Status"].includes(column) &&
+          !headers.includes(column),
       )
+
+      if (!hasSourceColumn(headers, "Current Status", "Status")) {
+        missing.push("Current Status (or Status)")
+      }
 
       if (
         !["PM Name", "Manager", "Project Manager", "Account Manager"].some(
@@ -188,7 +193,7 @@ router.post(
       const existingClients = pool
         ? (
             await pool.query(
-              "SELECT id,client_id AS clientId,client_name AS clientName,[year] AS year,isow,region,revenue,project_billing_code AS projectBillingCode,voumetric,completion,current_status AS currentStatus,project_manager AS projectManager,hyperscaler,project_type AS projectType,project_brief AS projectBrief,estimated_start_date AS estimatedStart,estimated_end_date AS estimatedEnd,actual_start_date AS actualStart,actual_end_date AS actualEnd FROM clients",
+              "SELECT id,client_id AS clientId,client_name AS clientName,[year] AS year,isow,region,revenue,project_billing_code AS projectBillingCode,voumetric,completion,current_status AS currentStatus,phase,project_manager AS projectManager,hyperscaler,project_brief AS projectBrief,estimated_start_date AS estimatedStart,estimated_end_date AS estimatedEnd,actual_start_date AS actualStart,actual_end_date AS actualEnd FROM clients",
             )
           ).rows
         : appState.clients.map((client) => ({
@@ -221,9 +226,8 @@ router.post(
 
             hyperscaler: normalizeHyperscaler(client.hyperscaler),
 
-            projectType: client.projectType || client.project_type,
-
             projectBrief: client.projectBrief || client.project_brief,
+            phase: client.phase,
 
             estimatedStart: client.estimatedStartDate || client.estimatedStart,
 
@@ -609,8 +613,6 @@ router.post(
 
           hyperscaler: normalizeHyperscaler(value(record, "Hyperscaler")),
 
-          projectType: String(value(record, "Project Type")),
-
           projectBrief: String(value(record, "Brief about the Project")),
 
           projectManager: managerName(record),
@@ -625,8 +627,10 @@ router.post(
           voumetric,
 
           currentStatus: normalizeProjectStatus(
-            value(record, "Current Status"),
+            value(record, "Current Status", "Status"),
           ),
+
+          phase: normalizeProjectPhase(value(record, "Phase", "Project Phase")) || null,
 
           estimatedStart,
 
@@ -701,7 +705,10 @@ router.post(
             )
           }
 
-          if (hasFormulaIssue(record, "Current Status")) {
+          if (
+            hasFormulaIssue(record, "Current Status") ||
+            hasFormulaIssue(record, "Status")
+          ) {
             data.currentStatus =
               existingTarget.currentStatus || data.currentStatus
           }
@@ -874,6 +881,7 @@ router.post(
               completion: data.completion,
 
               currentStatus: data.currentStatus,
+              phase: data.phase,
 
               estimatedStart: dateForPreview(data.estimatedStart),
 
@@ -922,8 +930,6 @@ router.post(
 
             data.hyperscaler,
 
-            data.projectType,
-
             data.projectBrief,
 
             data.projectManager,
@@ -941,6 +947,7 @@ router.post(
             data.projectBillingCode,
 
             data.voumetric,
+            data.phase,
           ]
 
           let clientDbId
@@ -949,7 +956,7 @@ router.post(
             clientDbId = existingTarget.id
 
             await pool.query(
-              `UPDATE clients SET client_id=$1,client_name=$2,account_manager=$3,region=$4,industry=$5,revenue=$6,current_status=$7,remarks=$8,planned_onboard_date=$9,actual_onboard_date=$10,planned_offboard_date=$11,actual_offboard_date=$12,contract_start_date=$13,contract_end_date=$14,year=$15,completion=$16,hyperscaler=$17,project_type=$18,project_brief=$19,project_manager=$20,isow=$21,estimated_start_date=$22,estimated_end_date=$23,actual_start_date=$24,actual_end_date=$25,project_billing_code=$26,voumetric=$27,updated_at=CURRENT_TIMESTAMP WHERE client_id=$28`,
+              `UPDATE clients SET client_id=$1,client_name=$2,account_manager=$3,region=$4,industry=$5,revenue=$6,current_status=$7,remarks=$8,planned_onboard_date=$9,actual_onboard_date=$10,planned_offboard_date=$11,actual_offboard_date=$12,contract_start_date=$13,contract_end_date=$14,year=$15,completion=$16,hyperscaler=$17,project_brief=$18,project_manager=$19,isow=$20,estimated_start_date=$21,estimated_end_date=$22,actual_start_date=$23,actual_end_date=$24,project_billing_code=$25,voumetric=$26,phase=$27,updated_at=CURRENT_TIMESTAMP WHERE client_id=$28`,
 
               [...params, existingTarget.clientId],
             )
@@ -963,7 +970,7 @@ router.post(
             if (isDuplicate) duplicates += 1
           } else {
             const inserted = await pool.query(
-              `INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_type,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date,project_billing_code,voumetric) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27) RETURNING id`,
+              `INSERT INTO clients(client_id,client_name,account_manager,region,industry,revenue,current_status,remarks,planned_onboard_date,actual_onboard_date,planned_offboard_date,actual_offboard_date,contract_start_date,contract_end_date,year,completion,hyperscaler,project_brief,project_manager,isow,estimated_start_date,estimated_end_date,actual_start_date,actual_end_date,project_billing_code,voumetric,phase) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27) RETURNING id`,
 
               params,
             )
@@ -996,6 +1003,7 @@ router.post(
               completion: data.completion,
 
               currentStatus: data.currentStatus,
+              phase: data.phase,
 
               estimatedStart: data.estimatedStart,
 
@@ -1047,13 +1055,12 @@ router.post(
 
           hyperscaler: data.hyperscaler,
 
-          projectType: data.projectType,
-
           projectBrief: data.projectBrief,
 
           isow: data.isow,
 
           currentStatus: data.currentStatus,
+          phase: data.phase || "",
 
           estimatedStart: data.estimatedStart,
 

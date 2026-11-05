@@ -2,6 +2,7 @@ import {
   isProjectStatus,
   normalizeProjectStatus as normalizeSharedProjectStatus,
 } from "../../shared/project-status.js"
+import { normalizeProjectPhase } from "../../shared/project-phase.js"
 
 const cellText = (value) => {
   if (value instanceof Date) {
@@ -341,6 +342,8 @@ const exactProjectFields = [
 
   "currentStatus",
 
+  "phase",
+
   "completion",
 
   "projectBillingCode",
@@ -350,8 +353,6 @@ const exactProjectFields = [
   "revenue",
 
   "hyperscaler",
-
-  "projectType",
 
   "projectBrief",
 
@@ -395,9 +396,13 @@ const normalizeExactProjectValue = (field, value) => {
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
 
-  return field === "currentStatus"
-    ? normalizeProjectStatus(normalized).toLowerCase()
-    : normalized
+  if (field === "currentStatus") {
+    return normalizeProjectStatus(normalized).toLowerCase()
+  }
+  if (field === "phase") {
+    return normalizeProjectPhase(normalized).toLowerCase()
+  }
+  return normalized
 }
 
 export const findExactDuplicateProject = (project, existingProjects) =>

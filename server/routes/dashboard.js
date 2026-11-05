@@ -13,11 +13,9 @@ const projectBreakdownColumns = {
   status: 'current_status',
   region: 'region',
   hyperscaler: 'hyperscaler',
-  projectType: 'project_type',
 };
 const rfpBreakdownColumns = {
   status: 'project_status',
-  projectType: 'project_type',
   region: 'region',
 };
 
@@ -118,8 +116,8 @@ router.get('/', protectRoute, async (req, res, next) => {
           CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) = 'completed' THEN 1 END) AS int) AS completed_projects,
           CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) NOT IN ('completed','cancelled','canceled','offboarded')
             AND COALESCE(completion,0) < 100 THEN 1 END) AS int) AS active_projects,
-          CAST(COUNT(CASE WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(current_status)), ' ', ''), '-', ''), '(', ''), ')', '')) = 'delayedexternal' THEN 1 END) AS int) AS delayed_projects_external,
-          CAST(COUNT(CASE WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(current_status)), ' ', ''), '-', ''), '(', ''), ')', '')) = 'delayedinternal' THEN 1 END) AS int) AS delayed_projects_internal,
+          CAST(COUNT(CASE WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(current_status)), ' ', ''), '-', ''), '(', ''), ')', '')) IN ('delayedexternal','offtrackexternal') THEN 1 END) AS int) AS delayed_projects_external,
+          CAST(COUNT(CASE WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(current_status)), ' ', ''), '-', ''), '(', ''), ')', '')) IN ('delayedinternal','offtrackinternal') THEN 1 END) AS int) AS delayed_projects_internal,
           CAST(COALESCE(SUM(revenue), 0) AS numeric(18,2)) AS total_revenue,
           CAST(COALESCE(AVG(revenue), 0) AS numeric(18,2)) AS average_revenue,
           CAST(COALESCE(AVG(completion), 0) AS numeric(18,2)) AS average_completion

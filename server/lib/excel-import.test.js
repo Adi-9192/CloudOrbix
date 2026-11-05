@@ -29,6 +29,8 @@ test("matches exact imported project rows across every imported data field", () 
 
     currentStatus: "On Track",
 
+    phase: "Execution",
+
     completion: 50,
 
     projectBillingCode: "BILL-1",
@@ -38,8 +40,6 @@ test("matches exact imported project rows across every imported data field", () 
     revenue: 15000,
 
     hyperscaler: "Azure",
-
-    projectType: "Migration",
 
     projectBrief: "Move workloads",
 
@@ -70,6 +70,10 @@ test("matches exact imported project rows across every imported data field", () 
 
   assert.equal(
     exactProjectMatch(imported, { ...existing, voumetric: 3 }),
+    false,
+  )
+  assert.equal(
+    exactProjectMatch(imported, { ...existing, phase: "Deployment" }),
     false,
   )
 
@@ -289,11 +293,11 @@ test("converts Excel percentage fractions and source status values", () => {
 
   assert.equal(normalizeProjectStatus("On Track "), "On Track")
 
-  assert.equal(normalizeProjectStatus("Delayed(External)"), "Delayed(External)")
+  assert.equal(normalizeProjectStatus("Delayed(External)"), "Off Track (External)")
 
   assert.equal(normalizeProjectStatus("On Hold"), "On Hold")
 
-  assert.equal(normalizeProjectStatus("Delayed(Internal)"), "Delayed(Internal)")
+  assert.equal(normalizeProjectStatus("Delayed(Internal)"), "Off Track (Internal)")
 })
 
 test("matches imported projects without risking row-index ID overwrites", () => {

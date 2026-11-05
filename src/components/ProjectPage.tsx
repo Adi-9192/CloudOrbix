@@ -25,6 +25,7 @@ import {
   normalizeProjectStatus,
   PROJECT_STATUSES,
 } from "../../shared/project-status.js";
+import { normalizeProjectPhase } from "../../shared/project-phase.js";
 import { calculateRevenueRecovery } from "../../shared/revenue-recovery.js";
 import { normalizeHyperscaler } from "../../shared/hyperscalers.js";
 import { convertCurrencyAmount } from "../../shared/currency-conversion.js";
@@ -50,7 +51,7 @@ type Project = {
   current_status: string;
   completion: number;
   hyperscaler: string;
-  project_type: string;
+  phase?: string | null;
   service_category?: string | null;
   project_billing_code?: string | null;
   year?: number | null;
@@ -850,7 +851,7 @@ export default function ProjectPage({
         fields: [
           ["Project ID", project.client_id],
           ["Project name", project.client_name],
-          ["Project type", project.project_type || "—"],
+          ["Phase", normalizeProjectPhase(project.phase) || "—"],
           ["Service category", project.service_category || "—"],
           ["Services", project.services?.join(", ") || "—"],
           ["Hyperscaler", normalizeHyperscaler(project.hyperscaler) || "—"],
@@ -1184,7 +1185,7 @@ export default function ProjectPage({
             <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px]" style={{ color: muted }}>
               <span className="inline-flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5" />{manager}</span>
               <span className="inline-flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" />{dateLabel(project.estimated_start_date)} – {dateLabel(project.estimated_end_date)}</span>
-              {project.project_type && <span className="inline-flex items-center gap-1.5"><Target className="h-3.5 w-3.5" />{project.project_type}</span>}
+              {normalizeProjectPhase(project.phase) && <span className="inline-flex items-center gap-1.5"><Target className="h-3.5 w-3.5" />{normalizeProjectPhase(project.phase)}</span>}
             </div>
           </div>
         </div>
@@ -1655,7 +1656,7 @@ export default function ProjectPage({
               <dl className="space-y-3.5 p-5">
                 {[
                   ["RFP reference", project.rfp_project_id || "—"],
-                  ["Project type", project.project_type || "—"],
+                  ["Phase", normalizeProjectPhase(project.phase) || "—"],
                   ["Service category", project.service_category || "—"],
                   ["Hyperscaler", normalizeHyperscaler(project.hyperscaler) || "—"],
                   ["Proposal owner", project.account_manager || "—"],

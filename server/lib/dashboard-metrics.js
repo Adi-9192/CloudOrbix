@@ -8,7 +8,9 @@ const normalizedStatus = (value) =>
     .replace(/[_\s]+/g, '-');
 
 const delayedCategory = (value) =>
-  normalizedStatus(value).replace(/[^a-z]/g, '').match(/^delayed(external|internal)$/)?.[1];
+  normalizedStatus(value)
+    .replace(/[^a-z]/g, '')
+    .match(/^(?:delayed|offtrack)(external|internal)$/)?.[1];
 
 const isCancelledProject = (client) =>
   ['cancelled', 'canceled'].includes(
@@ -19,7 +21,6 @@ const projectBreakdownFields = {
   status: (client) => client.current_status ?? client.currentStatus,
   region: (client) => client.region,
   hyperscaler: (client) => normalizeHyperscaler(client.hyperscaler) || 'Unspecified',
-  projectType: (client) => client.project_type ?? client.projectType,
 };
 
 export function calculateDashboardProjectBreakdown(clients = [], groupBy = 'status') {
