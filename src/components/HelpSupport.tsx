@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Daily update import",
+    detail:
+      "Project Daily Updates can be imported from pasted dated notes or an Excel workbook. Review parsed updates before saving; recognized dates, including dates without a year using the selected year, are stored as each update's timestamp.",
+  },
+  {
     title: "Excel import validation review",
     detail:
       "The review shows how many rows are ready, saved, or still need review. Validation failures stay in the table with row-level issues and inline corrections; accepted duplicates and corrected rows still require confirmation. Only rows with an explicit server save result are removed. Invalid workbooks appear as rejectable file-level failures, and project table headers are detected below report summaries.",
