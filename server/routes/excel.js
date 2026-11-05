@@ -12,6 +12,7 @@ import { normalizeProjectPhase } from "../../shared/project-phase.js"
 
 import {
   createProjectIdAllocator,
+  decideRepeatedWorkbookRow,
   exactProjectMatch,
   findExactDuplicateProject,
   findExistingProject,
@@ -30,24 +31,6 @@ const upload = multer({
 
   limits: { fileSize: 50 * 1024 * 1024 },
 })
-
-const required = [
-  "Year",
-
-  "Customer Name",
-
-  "Current Status",
-
-  "% Completion",
-
-  "Hyperscaler",
-
-  "Brief about the Project",
-
-  "PM Name",
-
-  "ISOW",
-]
 
 const clientIdFor = (record) =>
   String(value(record, "Project ID", "Client ID", "Customer ID")).trim()
@@ -75,6 +58,21 @@ const hasFormulaIssue = (record, header) =>
 const dateForPreview = (value) =>
   value instanceof Date ? value.toISOString().slice(0, 10) : value || null
 
+const setRecordValue = (record, aliases, value) => {
+  const keys = Object.keys(record)
+  const matchingKey = aliases
+    .map((alias) =>
+      keys.find(
+        (key) =>
+          key.replace(/\s+/g, " ").trim().toLowerCase() ===
+          alias.replace(/\s+/g, " ").trim().toLowerCase(),
+      ),
+    )
+    .find(Boolean)
+
+  record[matchingKey || aliases[0]] = value
+}
+
 const managerName = (record) =>
   String(
     value(record, "PM Name", "Manager", "Project Manager", "Account Manager") ||
@@ -92,24 +90,52 @@ router.post(
 
   async (req, res, next) => {
     if (!req.file) return res.status(400).json({ message: "No file uploaded." })
+    if (!/\.xlsx$/i.test(req.file.originalname)) {
+      return res.status(400).json({
+        message: "Invalid Excel file format. Please upload an .xlsx workbook.",
+      })
+    }
 
     try {
       const workbook = new ExcelJS.Workbook()
 
-      await workbook.xlsx.load(req.file.buffer)
+      try {
+        await workbook.xlsx.load(req.file.buffer)
+      } catch {
+        return res.status(400).json({
+          message: "Invalid Excel file format. Please upload a valid .xlsx workbook.",
+        })
+      }
 
-      const records = worksheetRecords(workbook.worksheets[0])
+      if (!workbook.worksheets[0]) {
+        return res.status(400).json({
+          message: "The workbook does not contain a worksheet with a project table.",
+        })
+      }
+
+      let records
+      try {
+        records = worksheetRecords(workbook.worksheets[0])
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("Could not find a project table header row.")) {
+          return res.status(400).json({ message: error.message })
+        }
+        throw error
+      }
       const previewOnly = req.body.preview === "true"
 
       let selectedRows = null
 
       let rejectedRows = new Set()
+      let acceptedRows = new Set()
+      let rowCorrections = {}
 
       if (!previewOnly) {
         try {
           const parsedSelectedRows = JSON.parse(req.body.selectedRows || "[]")
 
           const parsedRejectedRows = JSON.parse(req.body.rejectedRows || "[]")
+          const parsedAcceptedRows = JSON.parse(req.body.acceptedRows || "[]")
 
           if (
             !Array.isArray(parsedSelectedRows) ||
@@ -117,7 +143,9 @@ router.post(
               (rowNumber) => !Number.isInteger(rowNumber),
             ) ||
             !Array.isArray(parsedRejectedRows) ||
-            parsedRejectedRows.some((rowNumber) => !Number.isInteger(rowNumber))
+            parsedRejectedRows.some((rowNumber) => !Number.isInteger(rowNumber)) ||
+            !Array.isArray(parsedAcceptedRows) ||
+            parsedAcceptedRows.some((rowNumber) => !Number.isInteger(rowNumber))
           ) {
             return res
               .status(400)
@@ -127,13 +155,42 @@ router.post(
           selectedRows = new Set(parsedSelectedRows)
 
           rejectedRows = new Set(parsedRejectedRows)
+          acceptedRows = new Set(parsedAcceptedRows)
+
+          rowCorrections = JSON.parse(req.body.rowCorrections || "{}")
 
           if (
-            [...selectedRows].some((rowNumber) => rejectedRows.has(rowNumber))
+            !rowCorrections ||
+            typeof rowCorrections !== "object" ||
+            Array.isArray(rowCorrections) ||
+            Object.entries(rowCorrections).some(
+              ([rowNumber, correction]) =>
+                !Number.isInteger(Number(rowNumber)) ||
+                !correction ||
+                typeof correction !== "object" ||
+                Array.isArray(correction) ||
+                Object.entries(correction).some(
+                  ([field, value]) =>
+                    !["clientName", "manager", "estimatedStart", "voumetric"].includes(field) ||
+                    typeof value !== "string",
+                ),
+            )
           ) {
             return res
               .status(400)
-              .json({ message: "A row cannot be both accepted and rejected." })
+              .json({ message: "Corrected import values are invalid." })
+          }
+
+          if (
+            [...selectedRows].some((rowNumber) => rejectedRows.has(rowNumber)) ||
+            [...acceptedRows].some(
+              (rowNumber) =>
+                rejectedRows.has(rowNumber) || !selectedRows.has(rowNumber),
+            )
+          ) {
+            return res
+              .status(400)
+              .json({ message: "Import row decisions are inconsistent." })
           }
         } catch {
           return res
@@ -149,6 +206,32 @@ router.post(
 
           .json({ message: "Uploaded file is empty or invalid." })
 
+      const correctionAliases = {
+        clientName: ["Customer Name", "Client Name"],
+        manager: ["PM Name", "Manager", "Project Manager", "Account Manager"],
+        estimatedStart: [
+          "Estimated/Planned Start Date",
+          "Estimated / Planned Start Date",
+          "Estimated/Planned Project Start Date",
+          "Estimated Start Date",
+          "Estimated Project Start date",
+          "Estimated Project Start Date",
+          "Planned Start Date",
+          "Project Start date",
+          "Project Start Date",
+        ],
+        voumetric: ["Volumetric", "Voumetric"],
+      }
+
+      for (const record of records) {
+        const correction = rowCorrections[record.rowNumber]
+        if (!correction) continue
+
+        for (const [field, correctedValue] of Object.entries(correction)) {
+          setRecordValue(record, correctionAliases[field], correctedValue)
+        }
+      }
+
       const headers = Object.keys(records[0])
 
       const hasProjectId = hasSourceColumn(
@@ -161,23 +244,22 @@ router.post(
         "Customer ID",
       )
 
-      const missing = required.filter(
-        (column) =>
-          !["PM Name", "Current Status"].includes(column) &&
-          !headers.includes(column),
-      )
-
-      if (!hasSourceColumn(headers, "Current Status", "Status")) {
-        missing.push("Current Status (or Status)")
-      }
-
-      if (
-        !["PM Name", "Manager", "Project Manager", "Account Manager"].some(
-          (column) => headers.includes(column),
-        )
-      ) {
-        missing.push("PM Name (or Manager / Project Manager / Account Manager)")
-      }
+      const requiredColumnAliases = [
+        ["Year", ["Year"]],
+        ["Customer Name", ["Customer Name", "Client Name"]],
+        ["Current Status", ["Current Status", "Status"]],
+        ["% Completion", ["% Completion", "Completion"]],
+        ["Hyperscaler", ["Hyperscaler"]],
+        ["Brief about the Project", ["Brief about the Project", "Project Brief"]],
+        [
+          "PM Name",
+          ["PM Name", "Manager", "Project Manager", "Account Manager"],
+        ],
+        ["ISOW", ["ISOW"]],
+      ]
+      const missing = requiredColumnAliases
+        .filter(([, aliases]) => !hasSourceColumn(headers, ...aliases))
+        .map(([label]) => label)
 
       if (missing.length)
         return res
@@ -438,7 +520,11 @@ router.post(
 
       for (let index = 0; index < records.length; index += 1) {
         const record = records[index]
-        if (!previewOnly && !selectedRows.has(record.rowNumber)) continue
+        if (
+          !previewOnly &&
+          !selectedRows.has(record.rowNumber) &&
+          !rejectedRows.has(record.rowNumber)
+        ) continue
 
         const sourceClientId = clientIdFor(record)
 
@@ -446,30 +532,27 @@ router.post(
           value(record, "Customer Name", "Client Name"),
         ).trim()
 
-        if (!originalClientName || managerName(record) === "Unassigned") {
-          failed += 1
-
-          continue
-        }
-
         if (duplicateInputRows.has(record.rowNumber)) {
-          duplicates += 1
-          if (previewOnly) {
-            importedRecords.push({
-              rowNumber: record.rowNumber,
-              clientId: sourceClientId,
-              clientName: String(value(record, "Customer Name", "Client Name")).trim(),
-              manager: managerName(record),
-              year: Number(value(record, "Year")) || new Date().getFullYear(),
-              isow: String(value(record, "ISOW")),
-              importKind: "Repeated in this workbook",
-              duplicateInFile: true,
+          const decision = decideRepeatedWorkbookRow({
+            selected: !previewOnly && selectedRows.has(record.rowNumber),
+            accepted: !previewOnly && acceptedRows.has(record.rowNumber),
+            rejected: !previewOnly && rejectedRows.has(record.rowNumber),
+          })
+          if (!previewOnly && decision === "reject") {
+            duplicates += 1
+            continue
+          }
+          if (!previewOnly && decision === "unconfirmed") {
+            return res.status(400).json({
+              message: `Row ${record.rowNumber} is repeated in this workbook. Accept it as new or reject it before confirming.`,
             })
           }
-          continue
+          if (!previewOnly && decision !== "import") continue
         }
 
-        let existingTarget = findExistingProject(
+        let existingTarget = duplicateInputRows.has(record.rowNumber)
+          ? null
+          : findExistingProject(
           {
             clientId: sourceClientId,
 
@@ -478,11 +561,124 @@ router.post(
 
           existingClients,
 
-          matchedExistingIds,
-        )
+            matchedExistingIds,
+          )
 
         if (existingTarget) {
           matchedExistingIds.add(existingTarget.clientId)
+        }
+
+        const { dates, invalidDates } = parsedDates.get(record)
+        const {
+          estimatedStart,
+          estimatedEnd,
+          actualStart,
+          actualEnd,
+        } = dates
+
+        const rawVoumetric = value(record, "Volumetric", "Voumetric")
+        const voumetric = rawVoumetric === "" ? null : Number(rawVoumetric)
+        const sourceIdCanBeUsed =
+          !existingTarget &&
+          !duplicateInputRows.has(record.rowNumber) &&
+          /^PS[A-Z]{3}\d{5}$/i.test(sourceClientId) &&
+          !reservedClientIds.has(sourceClientId.trim().toUpperCase())
+        const validationErrors = []
+
+        if (!originalClientName) {
+          validationErrors.push({
+            field: "clientName",
+            message: "Project name is required.",
+          })
+        }
+        if (!managerName(record) || managerName(record) === "Unassigned") {
+          validationErrors.push({
+            field: "manager",
+            message: "Project manager is required.",
+          })
+        }
+        if (!existingTarget && !sourceIdCanBeUsed && !estimatedStart) {
+          validationErrors.push({
+            field: "estimatedStart",
+            message: invalidDates.has("estimatedStart")
+              ? "Planned start date is invalid. Enter a valid date to generate a Project ID."
+              : "Planned start date is required to generate a Project ID.",
+          })
+        }
+        if (
+          voumetric !== null &&
+          (!Number.isInteger(voumetric) ||
+            voumetric < 0 ||
+            voumetric > 2147483647)
+        ) {
+          validationErrors.push({
+            field: "voumetric",
+            message: "Volumetric must be a whole number from 0 to 2,147,483,647.",
+          })
+        }
+
+        if (validationErrors.length) {
+          failed += 1
+
+          if (previewOnly) {
+            importedRecords.push({
+              rowNumber: record.rowNumber,
+              clientId: sourceClientId,
+              clientName: originalClientName,
+              year: Number(value(record, "Year")) || new Date().getFullYear(),
+              manager: managerName(record),
+              projectBillingCode:
+                String(value(record, "Project Billing Code", "Billing Code") || "") || null,
+              voumetric: rawVoumetric === "" ? null : rawVoumetric,
+              region: String(value(record, "Region", "Project Region") || "Unassigned"),
+              currentStatus: normalizeProjectStatus(value(record, "Current Status", "Status")),
+              phase: normalizeProjectPhase(value(record, "Phase", "Project Phase")) || "",
+              revenue: Number(value(record, "Revenue")) || 0,
+              completion: parseSpreadsheetPercentage(value(record, "% Completion")),
+              hyperscaler: normalizeHyperscaler(value(record, "Hyperscaler")),
+              projectBrief: String(value(record, "Brief about the Project")),
+              isow: String(value(record, "ISOW")),
+              estimatedStart: estimatedStart || null,
+              estimatedEnd: estimatedEnd || null,
+              actualStart: actualStart || null,
+              actualEnd: actualEnd || null,
+              importKind: duplicateInputRows.has(record.rowNumber)
+                ? "Repeated in this workbook"
+                : "Validation failed",
+              duplicateInFile: duplicateInputRows.has(record.rowNumber),
+              duplicateAction: duplicateInputRows.has(record.rowNumber)
+                ? "new"
+                : undefined,
+              validationErrors,
+              rowState: "Validation Failed",
+              imported: false,
+            })
+          } else if (rejectedRows.has(record.rowNumber)) {
+            continue
+          } else if (selectedRows.has(record.rowNumber)) {
+            importedRecords.push({
+              rowNumber: record.rowNumber,
+              clientId: sourceClientId,
+              clientName: originalClientName,
+              manager: managerName(record),
+              estimatedStart: estimatedStart || null,
+              estimatedEnd: estimatedEnd || null,
+              actualStart: actualStart || null,
+              actualEnd: actualEnd || null,
+              importKind: duplicateInputRows.has(record.rowNumber)
+                ? "Repeated in this workbook"
+                : "Validation failed",
+              duplicateInFile: duplicateInputRows.has(record.rowNumber),
+              duplicateAction: duplicateInputRows.has(record.rowNumber)
+                ? "new"
+                : undefined,
+              validationErrors,
+              rowState: "Validation Failed",
+              imported: false,
+            })
+          }
+
+          continue
         }
 
         const normalizedName = normalizeSourceIdentity(originalClientName)
@@ -513,24 +709,13 @@ router.post(
           occupiedNames.add(normalizeSourceIdentity(clientName))
         }
 
-        const { dates, invalidDates } = parsedDates.get(record)
-
-        const {
-          estimatedStart,
-
-          estimatedEnd,
-
-          actualStart,
-
-          actualEnd,
-        } = dates
-
         let clientId
 
         try {
           const normalizedSourceClientId = sourceClientId.trim().toUpperCase()
           const canUseSourceClientId =
             !existingTarget &&
+            !duplicateInputRows.has(record.rowNumber) &&
             /^PS[A-Z]{3}\d{5}$/i.test(sourceClientId) &&
             !reservedClientIds.has(normalizedSourceClientId)
 
@@ -540,13 +725,9 @@ router.post(
             clientId = sourceClientId
           } else {
             if (!estimatedStart) {
-              dateWarnings.push(
-                `Row ${record.rowNumber}: Estimated/Planned Project Start Date is required to generate a Project Code.`,
-              )
-
-              failed += 1
-
-              continue
+              return res.status(400).json({
+                message: `Row ${record.rowNumber} needs a planned start date to generate a Project ID.`,
+              })
             }
 
             clientId = resolveImportedProjectId({
@@ -564,30 +745,68 @@ router.post(
 
           clientIdAllocator.reserve(clientId)
         } catch (error) {
-          dateWarnings.push(
-            `Row ${record.rowNumber}: ${
-              error instanceof Error
-                ? error.message
-                : "Project ID could not be generated."
-            }`,
-          )
-
           failed += 1
 
-          continue
-        }
-
-        const rawVoumetric = value(record, "Volumetric", "Voumetric")
-
-        const voumetric = rawVoumetric === "" ? null : Number(rawVoumetric)
-
-        if (
-          voumetric !== null &&
-          (!Number.isInteger(voumetric) ||
-            voumetric < 0 ||
-            voumetric > 2147483647)
-        ) {
-          failed += 1
+          if (previewOnly) {
+            importedRecords.push({
+              rowNumber: record.rowNumber,
+              clientId: sourceClientId,
+              clientName: originalClientName,
+              year: Number(value(record, "Year")) || new Date().getFullYear(),
+              manager: managerName(record),
+              projectBillingCode: null,
+              voumetric,
+              region: String(value(record, "Region", "Project Region") || "Unassigned"),
+              currentStatus: normalizeProjectStatus(value(record, "Current Status", "Status")),
+              phase: normalizeProjectPhase(value(record, "Phase", "Project Phase")) || "",
+              revenue: Number(value(record, "Revenue")) || 0,
+              completion: parseSpreadsheetPercentage(value(record, "% Completion")),
+              hyperscaler: normalizeHyperscaler(value(record, "Hyperscaler")),
+              projectBrief: String(value(record, "Brief about the Project")),
+              isow: String(value(record, "ISOW")),
+              estimatedStart: estimatedStart || null,
+              estimatedEnd: estimatedEnd || null,
+              actualStart: actualStart || null,
+              actualEnd: actualEnd || null,
+              importKind: duplicateInputRows.has(record.rowNumber)
+                ? "Repeated in this workbook"
+                : "Validation failed",
+              duplicateInFile: duplicateInputRows.has(record.rowNumber),
+              duplicateAction: duplicateInputRows.has(record.rowNumber)
+                ? "new"
+                : undefined,
+              validationErrors: [{
+                field: "estimatedStart",
+                message: error instanceof Error
+                  ? error.message
+                  : "Project ID could not be generated.",
+              }],
+              rowState: "Validation Failed",
+              imported: false,
+            })
+          } else if (selectedRows.has(record.rowNumber)) {
+            importedRecords.push({
+              rowNumber: record.rowNumber,
+              clientId: sourceClientId,
+              clientName: originalClientName,
+              manager: managerName(record),
+              importKind: duplicateInputRows.has(record.rowNumber)
+                ? "Repeated in this workbook"
+                : "Validation failed",
+              duplicateInFile: duplicateInputRows.has(record.rowNumber),
+              duplicateAction: duplicateInputRows.has(record.rowNumber)
+                ? "new"
+                : undefined,
+              validationErrors: [{
+                field: "estimatedStart",
+                message: error instanceof Error
+                  ? error.message
+                  : "Project ID could not be generated.",
+              }],
+              rowState: "Validation Failed",
+              imported: false,
+            })
+          }
 
           continue
         }
@@ -608,7 +827,7 @@ router.post(
           year: Number(value(record, "Year")) || new Date().getFullYear(),
 
           completion: parseSpreadsheetPercentage(
-            value(record, "% Completion"),
+            value(record, "% Completion", "Completion"),
           ),
 
           hyperscaler: normalizeHyperscaler(value(record, "Hyperscaler")),
@@ -754,19 +973,16 @@ router.post(
 
         const exactDuplicate = exactExisting || exactWorkbookRow?.data || null
 
-        const isDuplicate = Boolean(exactDuplicate)
+        const isRepeatedInWorkbook = duplicateInputRows.has(record.rowNumber)
+        const isDuplicate = isRepeatedInWorkbook || Boolean(exactDuplicate)
 
         seenImportRows.push({
           rowNumber: record.rowNumber,
           data: comparisonData,
         })
 
-        if (
-          !previewOnly &&
-          isDuplicate &&
-          !selectedRows.has(record.rowNumber) &&
-          !rejectedRows.has(record.rowNumber)
-        ) {
+        if (!previewOnly && isDuplicate && !rejectedRows.has(record.rowNumber) &&
+          !acceptedRows.has(record.rowNumber)) {
           return res.status(400).json({
             message: `Row ${record.rowNumber} is an exact duplicate. Confirm whether to accept or reject it.`,
           })
@@ -795,7 +1011,9 @@ router.post(
 
             manager: data.accountManager,
 
-            importKind: isDuplicate
+            importKind: isRepeatedInWorkbook
+              ? "Repeated in this workbook"
+              : isDuplicate
               ? existingTarget
                 ? `Exact duplicate of project ${existingTarget.clientId}`
                 : `Exact duplicate of ${
@@ -809,9 +1027,14 @@ router.post(
                 : "Add as a new project",
 
             duplicateInFile: isDuplicate,
+            validationErrors: [],
+            rowState: "Valid",
+            imported: false,
 
             duplicateAction: isDuplicate
-              ? existingTarget
+              ? isRepeatedInWorkbook
+                ? "new"
+                : existingTarget
                 ? "update"
                 : "new"
               : undefined,
@@ -1035,6 +1258,8 @@ router.post(
         }
 
         importedRecords.push({
+          rowNumber: record.rowNumber,
+
           clientId,
 
           clientName,
@@ -1069,6 +1294,8 @@ router.post(
           actualStart: data.actualStart,
 
           actualEnd: data.actualEnd,
+
+          imported: true,
         })
       }
 
@@ -1102,6 +1329,10 @@ router.post(
         summary,
 
         records: importedRecords,
+
+        importedRowNumbers: importedRecords
+          .filter((record) => record.imported === true)
+          .map((record) => record.rowNumber),
 
         warnings: dateWarnings,
 

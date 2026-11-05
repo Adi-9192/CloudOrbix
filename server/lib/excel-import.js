@@ -188,19 +188,34 @@ export const parseSpreadsheetDate = (raw, yearHint) => {
   return { value: null, error: text }
 }
 
-export const worksheetRecords = (worksheet) => {
-  const firstHeader = worksheet.getRow(1)
+const requiredHeaderAliases = [
+  { label: "Year", aliases: ["Year"] },
+  { label: "Customer Name", aliases: ["Customer Name", "Client Name"] },
+  { label: "Current Status", aliases: ["Current Status", "Status"] },
+  { label: "% Completion", aliases: ["% Completion", "Completion"] },
+  { label: "Hyperscaler", aliases: ["Hyperscaler"] },
+  {
+    label: "Brief about the Project",
+    aliases: ["Brief about the Project", "Project Brief"],
+  },
+  {
+    label: "PM Name",
+    aliases: ["PM Name", "Manager", "Project Manager", "Account Manager"],
+  },
+  { label: "ISOW", aliases: ["ISOW"] },
+]
 
-  const secondHeader = worksheet.getRow(2)
+const normalizeHeader = (value) =>
+  String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
 
-  const hasGroupedDateHeaders = firstHeader.values.some((value) =>
-    /^(estimated|actual)$/i.test(cellText(value)),
-  )
-
-  const headerRowCount = hasGroupedDateHeaders ? 2 : 1
-
+const worksheetHeaders = (worksheet, headerRowNumber, headerRowCount) => {
+  const firstHeader = worksheet.getRow(headerRowNumber)
+  const secondHeader =
+    headerRowCount === 2 ? worksheet.getRow(headerRowNumber + 1) : null
   const headers = []
-
   let dateGroup = ""
 
   for (let column = 1; column <= worksheet.columnCount; column += 1) {
@@ -210,8 +225,9 @@ export const worksheetRecords = (worksheet) => {
 
       .trim()
 
-    const second =
-      headerRowCount === 2 ? cellText(secondHeader.getCell(column).value) : ""
+    const second = secondHeader
+      ? cellText(secondHeader.getCell(column).value)
+      : ""
 
     if (/^(estimated|actual)$/i.test(first)) dateGroup = first
 
@@ -222,7 +238,64 @@ export const worksheetRecords = (worksheet) => {
     }
   }
 
-  const firstDataRow = headerRowCount + 1
+  return headers
+}
+
+const isGroupedDateHeader = (row) =>
+  row.values.some((value) =>
+    /^(estimated|actual)$/i.test(cellText(value).trim()),
+  )
+
+const missingRequiredHeaders = (headers) => {
+  const normalizedHeaders = new Set(headers.map(normalizeHeader))
+
+  return requiredHeaderAliases
+    .filter(({ aliases }) =>
+      !aliases.some((alias) => normalizedHeaders.has(normalizeHeader(alias))),
+    )
+    .map(({ label }) => label)
+}
+
+export const worksheetRecords = (worksheet) => {
+  let detectedHeader = null
+  let bestCandidate = []
+
+  for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+    const row = worksheet.getRow(rowNumber)
+    const headerRowCount = isGroupedDateHeader(row) ? 2 : 1
+    if (
+      headerRowNumberOutOfBounds(
+        rowNumber,
+        headerRowCount,
+        worksheet.rowCount,
+      )
+    ) {
+      continue
+    }
+
+    const headers = worksheetHeaders(worksheet, rowNumber, headerRowCount)
+    const missing = missingRequiredHeaders(headers)
+    if (
+      !bestCandidate.length ||
+      missing.length < missingRequiredHeaders(bestCandidate).length
+    ) {
+      bestCandidate = headers
+    }
+    if (!missing.length) {
+      detectedHeader = { headers, headerRowNumber: rowNumber, headerRowCount }
+      break
+    }
+  }
+
+  if (!detectedHeader) {
+    const missing = missingRequiredHeaders(bestCandidate)
+    throw new Error(
+      `Could not find a project table header row. Missing required columns: ${missing.join(", ") || "required project columns"}.`,
+    )
+  }
+
+  const { headers, headerRowNumber, headerRowCount } = detectedHeader
+  const firstDataRow = headerRowNumber + headerRowCount
 
   const records = []
 
@@ -272,6 +345,14 @@ export const worksheetRecords = (worksheet) => {
   }
 
   return records
+}
+
+function headerRowNumberOutOfBounds(
+  rowNumber,
+  headerRowCount,
+  worksheetRowCount,
+) {
+  return rowNumber + headerRowCount - 1 > worksheetRowCount
 }
 
 export const spreadsheetValue = (record, ...keys) => {
@@ -442,6 +523,16 @@ export const exactProjectMatch = (left, right) =>
       )
     },
   )
+
+export const decideRepeatedWorkbookRow = ({
+  selected,
+  accepted,
+  rejected,
+}) => {
+  if (rejected) return "reject"
+  if (!selected) return "skip"
+  return accepted ? "import" : "unconfirmed"
+}
 
 export const findExistingProject = (
   { clientId, clientName, year, isow },
