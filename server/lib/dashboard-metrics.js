@@ -8,13 +8,19 @@ const normalizedStatus = (value) =>
     .replace(/[_\s]+/g, '-');
 
 const delayedCategory = (value) =>
-  normalizedStatus(value).replace(/[^a-z]/g, '').match(/^delayed(external|internal)$/)?.[1];
+  normalizedStatus(value)
+    .replace(/[^a-z]/g, '')
+    .match(/^(?:delayed|offtrack)(external|internal)$/)?.[1];
+
+const isCancelledProject = (client) =>
+  ['cancelled', 'canceled'].includes(
+    normalizedStatus(client.current_status ?? client.currentStatus),
+  );
 
 const projectBreakdownFields = {
   status: (client) => client.current_status ?? client.currentStatus,
   region: (client) => client.region,
   hyperscaler: (client) => normalizeHyperscaler(client.hyperscaler) || 'Unspecified',
-  projectType: (client) => client.project_type ?? client.projectType,
 };
 
 export function calculateDashboardProjectBreakdown(clients = [], groupBy = 'status') {
@@ -26,6 +32,7 @@ export function calculateDashboardProjectBreakdown(clients = [], groupBy = 'stat
     if (String(client.approval_status ?? client.approvalStatus ?? 'approved').toLowerCase() !== 'approved') {
       continue;
     }
+    if (isCancelledProject(client)) continue;
     const rawLabel = String(getValue(client) ?? '').trim();
     const label = rawLabel
       ? groupBy === 'status'
@@ -48,8 +55,7 @@ export function calculateDashboardSummary(clients = [], risks = []) {
   );
   const completedProjects = approved.filter((client) => {
     const status = normalizedStatus(client.current_status ?? client.currentStatus);
-    return status === 'completed' ||
-      (Number(client.completion || 0) >= 100 && !['cancelled', 'canceled', 'offboarded'].includes(status));
+    return status === 'completed';
   }).length;
   const activeProjects = approved.filter((client) => {
     const status = normalizedStatus(client.current_status ?? client.currentStatus);
@@ -71,7 +77,7 @@ export function calculateDashboardSummary(clients = [], risks = []) {
   );
 
   return {
-    totalClients: approved.length,
+    totalClients: approved.filter((client) => !isCancelledProject(client)).length,
     activeClients: approved.filter((client) =>
       ['on-track', 'in-progress', 'onboarded'].includes(
         normalizedStatus(client.current_status ?? client.currentStatus),

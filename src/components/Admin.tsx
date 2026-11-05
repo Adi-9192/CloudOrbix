@@ -84,7 +84,6 @@ type RfpApprovalRequest = {
     accountName?: string;
     year?: number;
     currency?: string;
-    projectType?: string;
     projectStatus?: string;
     requestFromBy?: string;
     requestorEmail?: string;
@@ -726,7 +725,6 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
                     <details className="text-xs">
                       <summary className="cursor-pointer font-semibold" style={{ color: "#1E40AF" }}>Review requested estimate</summary>
                       <div className="mt-2 grid gap-2 sm:grid-cols-3" style={{ color: muted }}>
-                        <span>Project type: {request.payload.projectType}</span>
                         <span>Year / currency: {request.payload.year} · {request.payload.currency}</span>
                         <span>Duration: {request.payload.durationMonths} months{request.payload.durationDays ? ` ${request.payload.durationDays} days` : ""}</span>
                         <span>Requested: {request.payload.requestedDate}</span>
@@ -905,7 +903,6 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
                 industry: project.industry,
                 revenue: project.revenue,
                 hyperscaler: normalizeHyperscaler(project.hyperscaler),
-                projectType: project.project_type,
                 serviceCategory: project.service_category,
                 projectBrief: project.project_brief,
                 projectBillingCode: project.project_billing_code,
@@ -923,7 +920,7 @@ export default function Admin({ dark, onOpenProject }: AdminProps) {
               const fields = [
                 ["Project name", "clientName"], ["Account manager", "accountManager"], ["Project managers", "projectManager"],
                 ["Project status", "currentStatus"], ["Region", "region"], ["Industry", "industry"], ["Revenue", "revenue"],
-                ["Hyperscaler", "hyperscaler"], ["Project type", "projectType"], ["Service Category", "serviceCategory"], ["Project brief", "projectBrief"], ["Project Billing Code", "projectBillingCode"], ["Resources", "resources"], ["FTE", "fte"], ["Volumetric", "voumetric"], ["ISOW", "isow"],
+                ["Hyperscaler", "hyperscaler"], ["Service Category", "serviceCategory"], ["Project brief", "projectBrief"], ["Project Billing Code", "projectBillingCode"], ["Resources", "resources"], ["FTE", "fte"], ["Volumetric", "voumetric"], ["ISOW", "isow"],
                 ["Estimated start", "estimatedStartDate"], ["Estimated end", "estimatedEndDate"], ["Actual start", "actualStartDate"], ["Actual end", "actualEndDate"],
                 ["Completion", "completion"], ["Remarks", "remarks"],
               ] as const;

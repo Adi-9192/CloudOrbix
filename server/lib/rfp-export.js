@@ -46,7 +46,7 @@ export async function buildRfpWorkbook({
   worksheet.getRow(1).height = 32;
 
   worksheet.addRow(["Account Name", project.project_name, "RFP ID", project.id, "Year", project.year]);
-  worksheet.addRow(["Currency", project.currency_code, "Project Type", project.project_type || "", "Project Status", project.project_status || ""]);
+  worksheet.addRow(["Currency", project.currency_code, "Project Status", project.project_status || ""]);
   worksheet.addRow(["Request From/By", project.request_from_by || "", "Requestor Email", project.requestor_email || "", "Requested Date", new Date(project.requested_date).toISOString().slice(0, 10)]);
   worksheet.addRow(["Region", project.region || "", "Cloud", project.cloud || "", "Duration", `${project.duration_months || 0} months${hasDailyPlan ? ` + ${project.duration_days} days` : ""}`]);
   for (const rowNumber of [2, 3, 4, 5]) {

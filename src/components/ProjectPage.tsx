@@ -25,6 +25,7 @@ import {
   normalizeProjectStatus,
   PROJECT_STATUSES,
 } from "../../shared/project-status.js";
+import { normalizeProjectPhase } from "../../shared/project-phase.js";
 import { calculateRevenueRecovery } from "../../shared/revenue-recovery.js";
 import { normalizeHyperscaler } from "../../shared/hyperscalers.js";
 import { convertCurrencyAmount } from "../../shared/currency-conversion.js";
@@ -50,7 +51,7 @@ type Project = {
   current_status: string;
   completion: number;
   hyperscaler: string;
-  project_type: string;
+  phase?: string | null;
   service_category?: string | null;
   project_billing_code?: string | null;
   year?: number | null;
@@ -850,7 +851,7 @@ export default function ProjectPage({
         fields: [
           ["Project ID", project.client_id],
           ["Project name", project.client_name],
-          ["Project type", project.project_type || "—"],
+          ["Phase", normalizeProjectPhase(project.phase) || "—"],
           ["Service category", project.service_category || "—"],
           ["Services", project.services?.join(", ") || "—"],
           ["Hyperscaler", normalizeHyperscaler(project.hyperscaler) || "—"],
@@ -913,10 +914,10 @@ export default function ProjectPage({
     <div className="grid gap-3 border-t p-5 sm:grid-cols-2 xl:grid-cols-4" style={{ borderColor: border }}>
       {taskField("Task title", "taskTitle")}
       {taskField("Assigned to", "assignedTo")}
-      {taskField("Expected start", "expectedStartDate", "date")}
-      {taskField("Expected end", "expectedEndDate", "date")}
-      {taskField("Actual start", "actualStartDate", "date")}
-      {taskField("Actual end", "actualEndDate", "date")}
+      {taskField("Planned Start Date", "expectedStartDate", "date")}
+      {taskField("Planned End Date", "expectedEndDate", "date")}
+      {taskField("Actual Start Date", "actualStartDate", "date")}
+      {taskField("Actual End Date", "actualEndDate", "date")}
       {taskField("Progress %", "progress", "number")}
       <label className="space-y-1">
         <span className="block text-[10px] font-semibold" style={labelStyle}>Status</span>
@@ -967,14 +968,18 @@ export default function ProjectPage({
 
   const renderTaskTable = (items: Task[], showActions: boolean) => (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] text-left">
+      <table className="w-full min-w-[1320px] text-left">
         <thead>
           <tr className="border-b text-[10px] font-bold uppercase tracking-[0.1em]" style={{ borderColor: border, color: muted }}>
-            <th className="px-5 py-3">Task</th>
-            <th className="px-5 py-3">Owner</th>
-            <th className="px-5 py-3">Due date</th>
+            <th className="px-5 py-3">Task Title</th>
+            <th className="px-5 py-3">Assigned To</th>
+            <th className="px-5 py-3">Planned Start Date</th>
+            <th className="px-5 py-3">Planned End Date</th>
+            <th className="px-5 py-3">Actual Start Date</th>
+            <th className="px-5 py-3">Actual End Date</th>
             <th className="px-5 py-3">Progress</th>
             <th className="px-5 py-3">Status</th>
+            <th className="px-5 py-3">Remarks</th>
             {showActions && <th className="px-5 py-3 text-right">Actions</th>}
           </tr>
         </thead>
@@ -986,7 +991,16 @@ export default function ProjectPage({
                 {item.assigned_to || manager}
               </td>
               <td className="px-5 py-4 text-xs" style={{ color: muted }}>
+                {dateLabel(item.expected_start_date)}
+              </td>
+              <td className="px-5 py-4 text-xs" style={{ color: muted }}>
                 {dateLabel(item.expected_end_date)}
+              </td>
+              <td className="px-5 py-4 text-xs" style={{ color: muted }}>
+                {dateLabel(item.actual_start_date)}
+              </td>
+              <td className="px-5 py-4 text-xs" style={{ color: muted }}>
+                {dateLabel(item.actual_end_date)}
               </td>
               <td className="px-5 py-4">
                 <div className="flex items-center gap-2">
@@ -1000,6 +1014,9 @@ export default function ProjectPage({
                 <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ color: statusColor(item.status), background: `${statusColor(item.status)}18` }}>
                   {normalizeProjectStatus(item.status)}
                 </span>
+              </td>
+              <td className="max-w-[280px] whitespace-pre-wrap px-5 py-4 text-xs" style={{ color: muted }}>
+                {item.remark || "—"}
               </td>
               {showActions && (
                 <td className="px-5 py-4">
@@ -1028,7 +1045,7 @@ export default function ProjectPage({
           ))}
           {!items.length && (
             <tr>
-              <td colSpan={showActions ? 6 : 5} className="px-5 py-10 text-center text-xs" style={{ color: muted }}>
+              <td colSpan={showActions ? 10 : 9} className="px-5 py-10 text-center text-xs" style={{ color: muted }}>
                 No project tasks have been recorded yet.
               </td>
             </tr>
@@ -1051,7 +1068,13 @@ export default function ProjectPage({
   ];
 
   return (
-    <div className="project-page flex flex-col gap-5 p-5 md:p-6" style={{ color: text }}>
+    <div
+      className="project-page flex select-none flex-col gap-5 p-5 md:p-6"
+      style={{ color: text }}
+      onCopy={(event) => event.preventDefault()}
+      onCut={(event) => event.preventDefault()}
+      onDragStart={(event) => event.preventDefault()}
+    >
       {confirmDialog && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 p-4">
           <section className="w-full max-w-md rounded-xl border p-5 shadow-2xl" style={sectionStyle} role="dialog" aria-modal="true">
@@ -1162,7 +1185,7 @@ export default function ProjectPage({
             <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px]" style={{ color: muted }}>
               <span className="inline-flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5" />{manager}</span>
               <span className="inline-flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" />{dateLabel(project.estimated_start_date)} – {dateLabel(project.estimated_end_date)}</span>
-              {project.project_type && <span className="inline-flex items-center gap-1.5"><Target className="h-3.5 w-3.5" />{project.project_type}</span>}
+              {normalizeProjectPhase(project.phase) && <span className="inline-flex items-center gap-1.5"><Target className="h-3.5 w-3.5" />{normalizeProjectPhase(project.phase)}</span>}
             </div>
           </div>
         </div>
@@ -1633,7 +1656,7 @@ export default function ProjectPage({
               <dl className="space-y-3.5 p-5">
                 {[
                   ["RFP reference", project.rfp_project_id || "—"],
-                  ["Project type", project.project_type || "—"],
+                  ["Phase", normalizeProjectPhase(project.phase) || "—"],
                   ["Service category", project.service_category || "—"],
                   ["Hyperscaler", normalizeHyperscaler(project.hyperscaler) || "—"],
                   ["Proposal owner", project.account_manager || "—"],

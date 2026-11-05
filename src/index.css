@@ -181,3 +181,10 @@ body {
 #projects-table th {
   font-weight: 700 !important;
 }
+
+.project-page input,
+.project-page textarea,
+.project-page select,
+.project-page [contenteditable="true"] {
+  user-select: text;
+}

@@ -40,7 +40,6 @@ type Estimate = {
   accountName: string;
   year: number;
   currency: string;
-  projectType: string;
   projectStatus: string;
   requestFromBy: string;
   requestorEmail: string;
@@ -107,7 +106,6 @@ export type RfpProjectPrefill = {
   accountName: string;
   revenue: number;
   currency: string;
-  projectType: string;
   projectStatus: string;
   requestFromBy: string;
   requestorEmail: string;
@@ -166,7 +164,6 @@ const emptyEstimate = (): Estimate => {
     accountName: "",
     year: new Date().getFullYear(),
     currency: "INR",
-    projectType: "Std",
     projectStatus: "Tentative",
     requestFromBy: "",
     requestorEmail: "",
@@ -262,7 +259,6 @@ const restoreEstimateDraft = (value: unknown): Estimate => {
     accountName: String(stored.accountName || stored.projectName || ""),
     year: Number(stored.year) || new Date().getFullYear(),
     currency: String(stored.currency || "INR"),
-    projectType: String(stored.projectType || "Std"),
     projectStatus: String(stored.projectStatus || "Tentative"),
     requestFromBy: String(stored.requestFromBy || ""),
     requestorEmail: String(stored.requestorEmail || ""),
@@ -322,7 +318,6 @@ export default function RfpEstimation({
       initiated_at: string | null;
       requested_date: string;
       region: string | null;
-      project_type: string | null;
       cloud: string | null;
       request_from_by: string | null;
       requestor_email: string | null;
@@ -820,7 +815,6 @@ export default function RfpEstimation({
         accountName: project.project_name,
         year: Number(project.year),
         currency: project.currency_code,
-        projectType: project.project_type || "Std",
         projectStatus: project.project_status || "Tentative",
         requestFromBy: project.request_from_by || "",
         requestorEmail: project.requestor_email || "",
@@ -1127,7 +1121,13 @@ export default function RfpEstimation({
   }, [estimate.year, estimateYearOptions]);
 
   return (
-    <div className="rfp-page min-h-full" style={{ color: ink }}>
+    <div
+      className="rfp-page min-h-full select-none"
+      style={{ color: ink }}
+      onCopy={(event) => event.preventDefault()}
+      onCut={(event) => event.preventDefault()}
+      onDragStart={(event) => event.preventDefault()}
+    >
       <div
         className="rfp-toolbar sticky top-0 z-20 border-b px-5 py-3 md:px-8"
         style={{ background: surface, borderColor: line }}
@@ -1529,7 +1529,6 @@ export default function RfpEstimation({
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <label className="text-xs font-semibold" style={labelStyle}>Account Name<input className={`${inputClass} mt-1`} style={inputStyle} value={estimate.accountName} onChange={(event) => patchEstimate({ accountName: event.target.value })} /></label>
-                    <label className="text-xs font-semibold" style={labelStyle}>Project Type<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.projectType} onChange={(event) => patchEstimate({ projectType: event.target.value })}><option>Std</option><option>Non Std</option></select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Status<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.projectStatus} onChange={(event) => patchEstimate({ projectStatus: event.target.value })}>{["Tentative", "Completed", "Project Initiated", "Cancelled", "In Discussion", "Firm"].map((status) => <option key={status}>{status}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Request From/By<input className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestFromBy} onChange={(event) => patchEstimate({ requestFromBy: event.target.value })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Requestor Email ID (optional)<input type="email" className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestorEmail} onChange={(event) => patchEstimate({ requestorEmail: event.target.value })} /></label>
@@ -2052,7 +2051,6 @@ export default function RfpEstimation({
                                         accountName: item.project_name,
                                         revenue: Number(item.selected_currency_total || 0),
                                         currency: item.currency_code || "INR",
-                                        projectType: item.project_type || "Std",
                                         projectStatus: item.project_status,
                                         requestFromBy: item.request_from_by || "",
                                         requestorEmail: item.requestor_email || "",
@@ -2169,6 +2167,7 @@ export default function RfpEstimation({
       .rfp-grid-scroll{max-height:min(58vh,680px)}
       .rfp-grid thead{position:sticky;top:0;z-index:5}
       .rfp-page{--portfolio-primary:#93C5FD}
+      .rfp-page input,.rfp-page textarea,.rfp-page select,.rfp-page [contenteditable="true"]{user-select:text}
       .rfp-grid th,.rfp-grid td{background:${surface}}
       .rfp-grid thead th{background:${panel}}
       .rfp-grid .rfp-sticky-1,.rfp-grid .rfp-sticky-2,.rfp-grid .rfp-sticky-3{position:sticky;z-index:3;background:${surface}}

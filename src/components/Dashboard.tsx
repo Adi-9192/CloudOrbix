@@ -18,13 +18,11 @@ const projectBreakdownOptions = [
   { value: "status", label: "Status" },
   { value: "region", label: "Region" },
   { value: "hyperscaler", label: "Hyperscaler" },
-  { value: "projectType", label: "Project Type" },
 ] as const;
 const pieColorsByGroup = {
   status: ["#15803D", "#D97706", "#DC2626", "#7C3AED", "#2563EB", "#64748B", "#DB2777", "#0F766E"],
   region: ["#1D4ED8", "#0891B2", "#0F766E", "#65A30D", "#CA8A04", "#EA580C", "#C026D3", "#475569"],
   hyperscaler: ["#2563EB", "#F97316", "#7C3AED", "#059669", "#DB2777", "#64748B", "#CA8A04", "#0F766E"],
-  projectType: ["#9333EA", "#0891B2", "#4D7C0F", "#C2410C", "#2563EB", "#BE185D", "#475569", "#0D9488"],
 };
 
 const CustomTooltip = ({ active, payload, label, dark }: any) => {
@@ -212,8 +210,8 @@ export default function Dashboard({
     { title: "Total Projects", value: String(summary.totalClients), subtitle: "Approved project records", accent: "#1E40AF", icon: Users, action: () => onNavigate("projects", "All") },
     { title: "Active Projects", value: String(summary.activeProjects), subtitle: "Approved projects", accent: "#1E40AF", icon: FolderKanban, action: () => onNavigate("projects", "Active") },
     { title: "Completed Projects", value: String(summary.completedProjects), subtitle: "Completed approved projects", accent: "#15803D", icon: CheckCircle2, action: () => onNavigate("projects", "Completed") },
-    { title: "Delayed (External)", value: String(summary.delayedProjectsExternal), subtitle: "Externally delayed projects", accent: "#C2410C", icon: AlertTriangle, action: () => onNavigate("projects", "Delayed(External)") },
-    { title: "Delayed (Internal)", value: String(summary.delayedProjectsInternal), subtitle: "Internally delayed projects", accent: "#BE185D", icon: Clock, action: () => onNavigate("projects", "Delayed(Internal)") },
+    { title: "Off Track (External)", value: String(summary.delayedProjectsExternal), subtitle: "Externally off-track projects", accent: "#C2410C", icon: AlertTriangle, action: () => onNavigate("projects", "Off Track (External)") },
+    { title: "Off Track (Internal)", value: String(summary.delayedProjectsInternal), subtitle: "Internally off-track projects", accent: "#BE185D", icon: Clock, action: () => onNavigate("projects", "Off Track (Internal)") },
     { title: "Total Risks", value: String(summary.totalRisks), subtitle: "All project risks", accent: "#7C3AED", icon: ShieldAlert, action: () => onNavigate("risks") },
     { title: "Open Risks", value: String(summary.openRisks), subtitle: "Risks not completed or cancelled", accent: "#D97706", icon: AlertCircle, action: () => onNavigate("risks") },
   ], [summary, onNavigate]);

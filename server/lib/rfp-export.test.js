@@ -10,7 +10,6 @@ test("exports an RFP workbook with explicit month labels and scope sections", as
       project_name: "Cloud migration",
       year: 2026,
       currency_code: "EUR",
-      project_type: "Std",
       project_status: "Project Initiated",
       request_from_by: "Alex",
       requestor_email: "alex@example.com",
@@ -49,6 +48,8 @@ test("exports an RFP workbook with explicit month labels and scope sections", as
   assert.equal(worksheet.getCell("E17").value, "M1\n2026-03");
   assert.equal(worksheet.getCell("F17").value, "M2\n2026-04");
   assert.equal(worksheet.getCell("A8").value, "Modernize cloud platform");
+  assert.equal(worksheet.getCell("C3").value, "Project Status");
+  assert.equal(worksheet.getCell("D3").value, "Project Initiated");
   assert.equal(worksheet.getCell("A10").value, "Landing zone");
   assert.equal(worksheet.getCell("A12").value, "Application refactoring");
   assert.equal(worksheet.getCell("A14").value, "Client provides access");

@@ -31,6 +31,9 @@ async function projectFor(clientId) {
   `, [clientId]);
   const project = result.rows[0];
   if (!project) return null;
+  project.current_status = normalizeProjectStatus(project.current_status);
+  delete project.project_type;
+  delete project.projectType;
 
   const [resources, services] = await Promise.all([
     pool.query(
@@ -600,7 +603,21 @@ router.post('/:clientId/tasks/import', protectRoute, upload.single('file'), asyn
     for (const record of records) {
       const title = String(record['Task Title'] || '').trim();
       if (!title) continue;
-      const result = await getPool().query('INSERT INTO project_tasks(client_id,task_title,assigned_to,expected_start_date,expected_end_date,actual_start_date,actual_end_date,progress,status,remark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *', [project.id, title, record['Assigned To'] || project.project_manager || project.account_manager || null, record['Expected Start'] || null, record['Expected End'] || null, record['Actual Start'] || null, record['Actual End'] || null, Math.max(0, Math.min(100, Number(record.Progress) || 0)), record.Status || 'Not Started', record.Remark || null]);
+      const result = await getPool().query(
+        'INSERT INTO project_tasks(client_id,task_title,assigned_to,expected_start_date,expected_end_date,actual_start_date,actual_end_date,progress,status,remark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
+        [
+          project.id,
+          title,
+          record['Assigned To'] || project.project_manager || project.account_manager || null,
+          record['Planned Start Date'] || record['Expected Start'] || null,
+          record['Planned End Date'] || record['Expected End'] || null,
+          record['Actual Start Date'] || record['Actual Start'] || null,
+          record['Actual End Date'] || record['Actual End'] || null,
+          Math.max(0, Math.min(100, Number(record.Progress) || 0)),
+          record.Status || 'Not Started',
+          record.Remarks || record.Remark || null,
+        ],
+      );
       inserted.push(result.rows[0]);
     }
     await syncCompletion(project.id);

@@ -7,15 +7,15 @@ import {
 
 test('groups approved projects for the dashboard pie chart', () => {
   const projects = [
-    { approval_status: 'approved', current_status: 'On Track', region: 'EMEA', hyperscaler: 'Azure', project_type: 'Standard' },
-    { approval_status: 'approved', current_status: 'On Track', region: 'EMEA', hyperscaler: 'AWS', project_type: 'Standard' },
-    { approval_status: 'approved', current_status: 'Delayed', region: 'APAC', hyperscaler: 'Azure', project_type: 'Non-Standard' },
-    { approval_status: 'pending', current_status: 'On Track', region: 'EMEA', hyperscaler: 'Azure', project_type: 'Standard' },
+    { approval_status: 'approved', current_status: 'On Track', region: 'EMEA', hyperscaler: 'Azure' },
+    { approval_status: 'approved', current_status: 'On Track', region: 'EMEA', hyperscaler: 'AWS' },
+    { approval_status: 'approved', current_status: 'Delayed', region: 'APAC', hyperscaler: 'Azure' },
+    { approval_status: 'pending', current_status: 'On Track', region: 'EMEA', hyperscaler: 'Azure' },
   ];
 
   assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'status'), [
     { name: 'On Track', value: 2 },
-    { name: 'Delayed', value: 1 },
+    { name: 'At Risk', value: 1 },
   ]);
   assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'region'), [
     { name: 'EMEA', value: 2 },
@@ -24,10 +24,6 @@ test('groups approved projects for the dashboard pie chart', () => {
   assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'hyperscaler'), [
     { name: 'AZURE', value: 2 },
     { name: 'AWS', value: 1 },
-  ]);
-  assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'projectType'), [
-    { name: 'Standard', value: 2 },
-    { name: 'Non-Standard', value: 1 },
   ]);
   assert.throws(
     () => calculateDashboardProjectBreakdown(projects, 'year'),
@@ -43,6 +39,31 @@ test('normalizes equivalent on-track statuses in the dashboard breakdown', () =>
   ], 'status'), [
     { name: 'On Track', value: 3 },
   ]);
+});
+
+test('excludes cancelled projects from dashboard totals and breakdowns', () => {
+  const projects = [
+    { approval_status: 'approved', current_status: 'On Track' },
+    { approval_status: 'approved', current_status: 'Cancelled' },
+    { approval_status: 'approved', current_status: 'canceled' },
+    { approval_status: 'approved', current_status: 'Completed' },
+  ];
+
+  assert.equal(calculateDashboardSummary(projects).totalClients, 2);
+  assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'status'), [
+    { name: 'Completed', value: 1 },
+    { name: 'On Track', value: 1 },
+  ]);
+});
+
+test('counts completed projects by status instead of completion percentage', () => {
+  const summary = calculateDashboardSummary([
+    { current_status: 'On Track', completion: 100 },
+    { current_status: 'Completed', completion: 40 },
+    { current_status: 'Cancelled', completion: 100 },
+  ]);
+
+  assert.equal(summary.completedProjects, 1);
 });
 
 test('calculates dashboard project counts from approved status values only', () => {
@@ -61,7 +82,7 @@ test('calculates dashboard project counts from approved status values only', () 
     { status: 'At Risk', level: 'Low' },
   ]);
 
-  assert.equal(summary.totalClients, 7);
+  assert.equal(summary.totalClients, 6);
   assert.equal(summary.delayedProjectsExternal, 1);
   assert.equal(summary.delayedProjectsInternal, 1);
   assert.equal(summary.activeClients, 2);

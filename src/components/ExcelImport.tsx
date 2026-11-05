@@ -29,10 +29,10 @@ interface ImportPreviewRow {
   voumetric: number | null;
   region: string;
   currentStatus: string;
+  phase: string;
   revenue: number;
   completion: number;
   hyperscaler: string;
-  projectType: string;
   projectBrief: string;
   isow: string;
   estimatedStart: string | null;
@@ -53,10 +53,10 @@ const previewColumns: { key: keyof ImportPreviewRow; label: string }[] = [
   { key: "voumetric", label: "Volumetric" },
   { key: "region", label: "Region" },
   { key: "currentStatus", label: "Status" },
+  { key: "phase", label: "Phase" },
   { key: "revenue", label: "Revenue" },
   { key: "completion", label: "Completion" },
   { key: "hyperscaler", label: "Hyperscaler" },
-  { key: "projectType", label: "Project Type" },
   { key: "projectBrief", label: "Project Brief" },
   { key: "isow", label: "ISOW" },
   { key: "estimatedStart", label: "Planned Start Date" },

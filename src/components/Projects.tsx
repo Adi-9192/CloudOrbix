@@ -30,6 +30,7 @@ import {
   PROJECT_STATUSES,
   PROJECT_STATUS_COLORS,
 } from "../../shared/project-status.js"
+import { PROJECT_PHASES, normalizeProjectPhase } from "../../shared/project-phase.js"
 import { normalizeProjectName } from "../../shared/project-name.js"
 import { PROJECT_REGIONS } from "../../shared/regions.js"
 import { HYPERSCALERS, normalizeHyperscaler } from "../../shared/hyperscalers.js"
@@ -71,6 +72,8 @@ interface ApiClient {
 
   currentStatus: string
 
+  phase?: string | null
+
   plannedOnboardDate?: string | null
 
   actualOnboardDate?: string | null
@@ -100,8 +103,6 @@ interface ApiClient {
   completion?: number | null
 
   hyperscaler?: string | null
-
-  projectType?: string | null
 
   serviceCategory?: string | null
 
@@ -167,9 +168,8 @@ interface ClientRow {
 
   hyperscaler: string
 
-  projectType: string
-
   serviceCategory: string
+  phase: string
 
   projectBrief: string
 
@@ -357,7 +357,7 @@ const EMPTY_FORM = {
 
   hyperscaler: "",
 
-  projectType: "",
+  phase: "",
 
   serviceCategory: "",
 
@@ -583,9 +583,8 @@ export default function Projects({
 
         hyperscaler: normalizeHyperscaler(client.hyperscaler),
 
-        projectType: client.projectType || "",
-
         serviceCategory: client.serviceCategory || "",
+        phase: normalizeProjectPhase(client.phase),
 
         projectBrief: client.projectBrief || "",
 
@@ -699,7 +698,6 @@ export default function Projects({
       revenue: String(newProjectSeed.revenue),
       currencyCode: newProjectSeed.currency,
       hyperscaler: normalizeHyperscaler(newProjectSeed.cloud),
-      projectType: newProjectSeed.projectType === "Non Std" ? "Non-STD" : "STD",
       projectBrief: newProjectSeed.projectOverview,
       projectOverview: newProjectSeed.projectOverview,
       assumption: newProjectSeed.assumption,
@@ -784,8 +782,6 @@ export default function Projects({
           c.voumetric,
 
           c.hyperscaler,
-
-          c.projectType,
 
           c.projectBrief,
 
@@ -950,9 +946,8 @@ export default function Projects({
 
       hyperscaler: normalizeHyperscaler((client as any).hyperscaler),
 
-      projectType: (client as any).projectType || "",
-
       serviceCategory: (client as any).serviceCategory || "",
+      phase: normalizeProjectPhase(client.phase),
 
       projectBrief: (client as any).projectBrief || "",
 
@@ -1181,9 +1176,8 @@ export default function Projects({
 
       hyperscaler: form.hyperscaler || null,
 
-      projectType: form.projectType || null,
-
       serviceCategory: form.serviceCategory || null,
+      phase: normalizeProjectPhase(form.phase),
 
       projectBrief: form.projectBrief || null,
 
@@ -1291,6 +1285,7 @@ export default function Projects({
         industry: serverClient?.industry || payload.industry,
 
         status: serverClient?.currentStatus || payload.currentStatus,
+        phase: normalizeProjectPhase(serverClient?.phase ?? payload.phase),
 
         projectBillingCode:
           serverClient?.projectBillingCode || payload.projectBillingCode || "",
@@ -1349,8 +1344,6 @@ export default function Projects({
         ),
 
         hyperscaler: normalizeHyperscaler(serverClient?.hyperscaler),
-
-        projectType: serverClient?.projectType || "",
 
         serviceCategory: serverClient?.serviceCategory || "",
 
@@ -1467,8 +1460,11 @@ export default function Projects({
   return (
     <div
       data-theme={dark ? "dark" : undefined}
-      className="projects-page p-6"
+      className="projects-page select-none p-6"
       style={{ color: text }}
+      onCopy={(event) => event.preventDefault()}
+      onCut={(event) => event.preventDefault()}
+      onDragStart={(event) => event.preventDefault()}
     >
       {confirmDialog && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
@@ -1646,6 +1642,7 @@ export default function Projects({
                 <Th col="voumetric" label="Volumetric" />
                 <Th col="region" label="Region" />
                 <Th col="status" label="Status" />
+                <Th col="phase" label="Phase" />
                 <Th col="revenue" label="Revenue" />
                 <Th col="revenueRecoveryPercentage" label="Revenue Recovery %" />
                 <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: muted }}>
@@ -1665,12 +1662,6 @@ export default function Projects({
                   style={{ color: muted }}
                 >
                   Hyperscaler
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-xs font-semibold"
-                  style={{ color: muted }}
-                >
-                  Project Type
                 </th>
                 <th
                   className="px-4 py-3 text-left text-xs font-semibold"
@@ -1817,6 +1808,9 @@ export default function Projects({
                         {c.status}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-xs" style={{ color: text }}>
+                      {c.phase || "-"}
+                    </td>
                     <td
                       className="px-4 py-3 text-xs font-semibold"
                       style={{ color: text }}
@@ -1865,9 +1859,6 @@ export default function Projects({
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: text }}>
                       {normalizeHyperscaler(c.hyperscaler) || "-"}
-                    </td>
-                    <td className="px-4 py-3 text-xs" style={{ color: text }}>
-                      {c.projectType || "-"}
                     </td>
                     <td
                       className="px-4 py-3 text-xs max-w-[260px] whitespace-normal"
@@ -2189,6 +2180,18 @@ export default function Projects({
                     },
 
                     {
+                      label: "Phase",
+
+                      key: "phase",
+
+                      placeholder: "",
+
+                      type: "select",
+
+                      options: PROJECT_PHASES,
+                    },
+
+                    {
                       label: "Hyperscaler",
 
                       key: "hyperscaler",
@@ -2198,18 +2201,6 @@ export default function Projects({
                       type: "select",
 
                       options: HYPERSCALERS,
-                    },
-
-                    {
-                      label: "Project Type",
-
-                      key: "projectType",
-
-                      placeholder: "",
-
-                      type: "select",
-
-                      options: ["STD", "Non-STD"],
                     },
 
                     {

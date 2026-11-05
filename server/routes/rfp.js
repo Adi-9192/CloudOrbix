@@ -62,7 +62,6 @@ function validateProject(body, requireCompleteEffort = true) {
   const directEntry = body?.directEntry === true;
   const directBudget = Number(body?.directBudget ?? 0);
   const periods = buildPeriods(requestedDate, durationMonths, durationDays);
-  const projectType = String(body?.projectType || '');
   const projectStatus = String(body?.projectStatus || 'Tentative');
   const requestFromBy = String(body?.requestFromBy || '').trim();
   const requestorEmail = String(body?.requestorEmail || '').trim();
@@ -114,7 +113,6 @@ function validateProject(body, requireCompleteEffort = true) {
   if (!currencies.includes(currency)) return { error: 'Select a supported currency.' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDate) || Number.isNaN(Date.parse(`${requestedDate}T00:00:00Z`))) return { error: 'Enter a valid requested date.' };
   if (!Number.isInteger(durationMonths) || durationMonths < 0 || durationMonths > 120 || !Number.isInteger(durationDays) || durationDays < 0 || durationDays > 365 || durationMonths + (durationDays > 0 ? 1 : 0) === 0) return { error: 'Duration must include at least one month or 1 to 365 days.' };
-  if (projectType && !['Std', 'Non Std'].includes(projectType)) return { error: 'Select Std or Non Std project type.' };
   if (!['Tentative', 'Completed', 'Project Initiated', 'Cancelled', 'In Discussion', 'Firm'].includes(projectStatus)) return { error: 'Select a valid project status.' };
   if (requestorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requestorEmail)) return { error: 'Enter a valid requestor email address.' };
   if (body?.cloud && !HYPERSCALERS.includes(cloud)) return { error: 'Select AZURE, AWS, GCP, ORACLE, or MULTICLOUD.' };
@@ -147,7 +145,7 @@ function validateProject(body, requireCompleteEffort = true) {
       return { error: 'Complete the daily plan with man-days and FTE effort.' };
     }
   }
-  return { value: { accountName, clientName, year, currency, requestedDate, durationMonths, durationDays, directEntry, directBudget, periods, projectType, projectStatus, requestFromBy, requestorEmail, region, cloud, projectOverview, assumption, outOfScope, inScope, allowance, workingDays, resources: directEntry ? [] : resources } };
+  return { value: { accountName, clientName, year, currency, requestedDate, durationMonths, durationDays, directEntry, directBudget, periods, projectStatus, requestFromBy, requestorEmail, region, cloud, projectOverview, assumption, outOfScope, inScope, allowance, workingDays, resources: directEntry ? [] : resources } };
 }
 
 async function saveResourceVersion(pool, year, userId, rows) {
@@ -378,7 +376,7 @@ router.get('/projects', async (req, res, next) => {
   const pool = requireDatabase(res);
   if (!pool) return;
   try {
-    const result = await pool.query('SELECT p.id, p.project_name, p.client_name, p.[year], p.currency_code, p.status, p.project_status, p.initiated_at, p.requested_date, p.region, p.project_type, p.cloud, p.request_from_by, p.requestor_email, p.duration_months, p.duration_days, p.project_overview, p.assumption, p.out_of_scope, p.in_scope, p.updated_at, s.grand_total_inr, s.selected_currency_total FROM rfp_projects p LEFT JOIN rfp_cost_summary s ON s.project_id = p.id ORDER BY p.updated_at DESC');
+    const result = await pool.query('SELECT p.id, p.project_name, p.client_name, p.[year], p.currency_code, p.status, p.project_status, p.initiated_at, p.requested_date, p.region, p.cloud, p.request_from_by, p.requestor_email, p.duration_months, p.duration_days, p.project_overview, p.assumption, p.out_of_scope, p.in_scope, p.updated_at, s.grand_total_inr, s.selected_currency_total FROM rfp_projects p LEFT JOIN rfp_cost_summary s ON s.project_id = p.id ORDER BY p.updated_at DESC');
     return res.json({
       projects: result.rows.map((project) => ({
         ...project,
@@ -565,11 +563,11 @@ async function persistProject(pool, userId, data, status, existingId = null, exc
   const startMonth = data.periods[0].month;
   const endMonth = data.periods[data.periods.length - 1].month;
   const initiatedAt = data.projectStatus === 'Project Initiated' ? new Date() : null;
-  const values = [data.accountName, data.clientName, data.year, data.currency, monthDate(startMonth), monthDate(endMonth), data.allowance, data.workingDays, false, '', status, userId, data.projectType || null, data.projectStatus, data.requestFromBy || null, data.requestorEmail || null, data.requestedDate, data.region || null, data.cloud || null, data.projectOverview || null, data.assumption || null, data.outOfScope || null, data.inScope || null, data.durationMonths, data.durationDays, initiatedAt, data.directEntry, data.directEntry ? data.directBudget : 0];
+  const values = [data.accountName, data.clientName, data.year, data.currency, monthDate(startMonth), monthDate(endMonth), data.allowance, data.workingDays, false, '', status, userId, null, data.projectStatus, data.requestFromBy || null, data.requestorEmail || null, data.requestedDate, data.region || null, data.cloud || null, data.projectOverview || null, data.assumption || null, data.outOfScope || null, data.inScope || null, data.durationMonths, data.durationDays, initiatedAt, data.directEntry, data.directEntry ? data.directBudget : 0];
   const sql = [];
   if (existingId) {
     values.push(existingId);
-    sql.push('UPDATE rfp_projects SET project_name = $1, client_name = $2, [year] = $3, currency_code = $4, start_month = $5, end_month = $6, allowance_percent = $7, working_days_per_month = $8, end_month_half_month = $9, notes = $10, status = $11, updated_by = $12, project_type = $13, project_status = $14, request_from_by = $15, requestor_email = $16, requested_date = $17, region = $18, cloud = $19, project_overview = $20, assumption = $21, out_of_scope = $22, in_scope = $23, duration_months = $24, duration_days = $25, initiated_at = CASE WHEN $14 = N\'Project Initiated\' AND (project_status <> N\'Project Initiated\' OR initiated_at IS NULL) THEN COALESCE(initiated_at, $26) ELSE initiated_at END, direct_entry = $27, direct_budget = $28, updated_at = SYSUTCDATETIME() WHERE id = $29; IF @@ROWCOUNT = 0 THROW 50001, \'Estimate not found\', 1; DELETE FROM rfp_resources WHERE project_id = $29;');
+    sql.push('UPDATE rfp_projects SET project_name = $1, client_name = $2, [year] = $3, currency_code = $4, start_month = $5, end_month = $6, allowance_percent = $7, working_days_per_month = $8, end_month_half_month = $9, notes = $10, status = $11, updated_by = $12, project_type = COALESCE($13, project_type), project_status = $14, request_from_by = $15, requestor_email = $16, requested_date = $17, region = $18, cloud = $19, project_overview = $20, assumption = $21, out_of_scope = $22, in_scope = $23, duration_months = $24, duration_days = $25, initiated_at = CASE WHEN $14 = N\'Project Initiated\' AND (project_status <> N\'Project Initiated\' OR initiated_at IS NULL) THEN COALESCE(initiated_at, $26) ELSE initiated_at END, direct_entry = $27, direct_budget = $28, updated_at = SYSUTCDATETIME() WHERE id = $29; IF @@ROWCOUNT = 0 THROW 50001, \'Estimate not found\', 1; DELETE FROM rfp_resources WHERE project_id = $29;');
   } else {
     sql.push('DECLARE @newProjectId INT; INSERT INTO rfp_projects (project_name, client_name, [year], currency_code, start_month, end_month, allowance_percent, working_days_per_month, end_month_half_month, notes, status, created_by, updated_by, project_type, project_status, request_from_by, requestor_email, requested_date, region, cloud, project_overview, assumption, out_of_scope, in_scope, duration_months, duration_days, initiated_at, direct_entry, direct_budget) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28); SET @newProjectId = CAST(SCOPE_IDENTITY() AS INT);');
   }
@@ -666,7 +664,6 @@ router.post('/projects/:id/duplicate', async (req, res, next) => {
       accountName: `${source.project_name} (Copy)`,
       year: source.year,
       currency: source.currency_code,
-      projectType: source.project_type,
       projectStatus: source.project_status,
       requestFromBy: source.request_from_by,
       requestorEmail: source.requestor_email,
