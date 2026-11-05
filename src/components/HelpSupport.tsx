@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Project and RFP copy protection",
+    detail:
+      "Disabled text selection, copying, cutting, and dragging for project listings, project details, and RFP-page content across roles. Editable fields remain available for normal text entry and pasting; page routes and navigation are unchanged.",
+  },
+  {
     title: "Project page readability",
     detail:
       "Increased project-page typography by 10%, gave the project brief a one-inch minimum height that grows with its content, and renamed Priority tasks to Tasks.",

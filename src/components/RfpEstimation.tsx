@@ -1127,7 +1127,13 @@ export default function RfpEstimation({
   }, [estimate.year, estimateYearOptions]);
 
   return (
-    <div className="rfp-page min-h-full" style={{ color: ink }}>
+    <div
+      className="rfp-page min-h-full select-none"
+      style={{ color: ink }}
+      onCopy={(event) => event.preventDefault()}
+      onCut={(event) => event.preventDefault()}
+      onDragStart={(event) => event.preventDefault()}
+    >
       <div
         className="rfp-toolbar sticky top-0 z-20 border-b px-5 py-3 md:px-8"
         style={{ background: surface, borderColor: line }}
@@ -2169,6 +2175,7 @@ export default function RfpEstimation({
       .rfp-grid-scroll{max-height:min(58vh,680px)}
       .rfp-grid thead{position:sticky;top:0;z-index:5}
       .rfp-page{--portfolio-primary:#93C5FD}
+      .rfp-page input,.rfp-page textarea,.rfp-page select,.rfp-page [contenteditable="true"]{user-select:text}
       .rfp-grid th,.rfp-grid td{background:${surface}}
       .rfp-grid thead th{background:${panel}}
       .rfp-grid .rfp-sticky-1,.rfp-grid .rfp-sticky-2,.rfp-grid .rfp-sticky-3{position:sticky;z-index:3;background:${surface}}

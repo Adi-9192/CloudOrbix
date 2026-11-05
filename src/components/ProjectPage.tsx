@@ -1051,7 +1051,13 @@ export default function ProjectPage({
   ];
 
   return (
-    <div className="project-page flex flex-col gap-5 p-5 md:p-6" style={{ color: text }}>
+    <div
+      className="project-page flex select-none flex-col gap-5 p-5 md:p-6"
+      style={{ color: text }}
+      onCopy={(event) => event.preventDefault()}
+      onCut={(event) => event.preventDefault()}
+      onDragStart={(event) => event.preventDefault()}
+    >
       {confirmDialog && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 p-4">
           <section className="w-full max-w-md rounded-xl border p-5 shadow-2xl" style={sectionStyle} role="dialog" aria-modal="true">

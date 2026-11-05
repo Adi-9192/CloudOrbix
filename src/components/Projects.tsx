@@ -1467,8 +1467,11 @@ export default function Projects({
   return (
     <div
       data-theme={dark ? "dark" : undefined}
-      className="projects-page p-6"
+      className="projects-page select-none p-6"
       style={{ color: text }}
+      onCopy={(event) => event.preventDefault()}
+      onCut={(event) => event.preventDefault()}
+      onDragStart={(event) => event.preventDefault()}
     >
       {confirmDialog && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/30 px-4 backdrop-blur-sm">
