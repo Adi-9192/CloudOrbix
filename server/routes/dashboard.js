@@ -113,10 +113,9 @@ router.get('/', protectRoute, async (req, res, next) => {
 
     const [summaryResult, onboardingResult, revenueResult, servicesResult, risksResult, upcomingResult, regionResult, yearsResult, projectBreakdownResult, rfpBreakdownResult] = await Promise.all([
       pool.query(`
-        SELECT COUNT(*) AS total_clients,
+        SELECT CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) NOT IN ('cancelled','canceled') THEN 1 END) AS int) AS total_clients,
           CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) IN ('on-track','on track','in progress','onboarded') THEN 1 END) AS int) AS active_clients,
-          CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) = 'completed'
-            OR (completion >= 100 AND LOWER(LTRIM(RTRIM(current_status))) NOT IN ('cancelled','canceled','offboarded')) THEN 1 END) AS int) AS completed_projects,
+          CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) = 'completed' THEN 1 END) AS int) AS completed_projects,
           CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) NOT IN ('completed','cancelled','canceled','offboarded')
             AND COALESCE(completion,0) < 100 THEN 1 END) AS int) AS active_projects,
           CAST(COUNT(CASE WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(current_status)), ' ', ''), '-', ''), '(', ''), ')', '')) = 'delayedexternal' THEN 1 END) AS int) AS delayed_projects_external,
@@ -214,7 +213,9 @@ router.get('/', protectRoute, async (req, res, next) => {
         SELECT COALESCE(NULLIF(LTRIM(RTRIM(${groupColumn})), ''), 'Unspecified') AS name,
           CAST(COUNT(*) AS int) AS value
         FROM clients
-        WHERE ${approvedClients} AND ($1 IS NULL OR [year] = $1)
+        WHERE ${approvedClients}
+          AND LOWER(LTRIM(RTRIM(current_status))) NOT IN ('cancelled','canceled')
+          AND ($1 IS NULL OR [year] = $1)
         GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(${groupColumn})), ''), 'Unspecified')
         ORDER BY value DESC, name
       `, [selectedYear]),

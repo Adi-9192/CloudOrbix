@@ -913,10 +913,10 @@ export default function ProjectPage({
     <div className="grid gap-3 border-t p-5 sm:grid-cols-2 xl:grid-cols-4" style={{ borderColor: border }}>
       {taskField("Task title", "taskTitle")}
       {taskField("Assigned to", "assignedTo")}
-      {taskField("Expected start", "expectedStartDate", "date")}
-      {taskField("Expected end", "expectedEndDate", "date")}
-      {taskField("Actual start", "actualStartDate", "date")}
-      {taskField("Actual end", "actualEndDate", "date")}
+      {taskField("Planned Start Date", "expectedStartDate", "date")}
+      {taskField("Planned End Date", "expectedEndDate", "date")}
+      {taskField("Actual Start Date", "actualStartDate", "date")}
+      {taskField("Actual End Date", "actualEndDate", "date")}
       {taskField("Progress %", "progress", "number")}
       <label className="space-y-1">
         <span className="block text-[10px] font-semibold" style={labelStyle}>Status</span>
@@ -967,14 +967,18 @@ export default function ProjectPage({
 
   const renderTaskTable = (items: Task[], showActions: boolean) => (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] text-left">
+      <table className="w-full min-w-[1320px] text-left">
         <thead>
           <tr className="border-b text-[10px] font-bold uppercase tracking-[0.1em]" style={{ borderColor: border, color: muted }}>
-            <th className="px-5 py-3">Task</th>
-            <th className="px-5 py-3">Owner</th>
-            <th className="px-5 py-3">Due date</th>
+            <th className="px-5 py-3">Task Title</th>
+            <th className="px-5 py-3">Assigned To</th>
+            <th className="px-5 py-3">Planned Start Date</th>
+            <th className="px-5 py-3">Planned End Date</th>
+            <th className="px-5 py-3">Actual Start Date</th>
+            <th className="px-5 py-3">Actual End Date</th>
             <th className="px-5 py-3">Progress</th>
             <th className="px-5 py-3">Status</th>
+            <th className="px-5 py-3">Remarks</th>
             {showActions && <th className="px-5 py-3 text-right">Actions</th>}
           </tr>
         </thead>
@@ -986,7 +990,16 @@ export default function ProjectPage({
                 {item.assigned_to || manager}
               </td>
               <td className="px-5 py-4 text-xs" style={{ color: muted }}>
+                {dateLabel(item.expected_start_date)}
+              </td>
+              <td className="px-5 py-4 text-xs" style={{ color: muted }}>
                 {dateLabel(item.expected_end_date)}
+              </td>
+              <td className="px-5 py-4 text-xs" style={{ color: muted }}>
+                {dateLabel(item.actual_start_date)}
+              </td>
+              <td className="px-5 py-4 text-xs" style={{ color: muted }}>
+                {dateLabel(item.actual_end_date)}
               </td>
               <td className="px-5 py-4">
                 <div className="flex items-center gap-2">
@@ -1000,6 +1013,9 @@ export default function ProjectPage({
                 <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ color: statusColor(item.status), background: `${statusColor(item.status)}18` }}>
                   {normalizeProjectStatus(item.status)}
                 </span>
+              </td>
+              <td className="max-w-[280px] whitespace-pre-wrap px-5 py-4 text-xs" style={{ color: muted }}>
+                {item.remark || "—"}
               </td>
               {showActions && (
                 <td className="px-5 py-4">
@@ -1028,7 +1044,7 @@ export default function ProjectPage({
           ))}
           {!items.length && (
             <tr>
-              <td colSpan={showActions ? 6 : 5} className="px-5 py-10 text-center text-xs" style={{ color: muted }}>
+              <td colSpan={showActions ? 10 : 9} className="px-5 py-10 text-center text-xs" style={{ color: muted }}>
                 No project tasks have been recorded yet.
               </td>
             </tr>

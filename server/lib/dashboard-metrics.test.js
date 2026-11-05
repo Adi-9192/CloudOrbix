@@ -45,6 +45,31 @@ test('normalizes equivalent on-track statuses in the dashboard breakdown', () =>
   ]);
 });
 
+test('excludes cancelled projects from dashboard totals and breakdowns', () => {
+  const projects = [
+    { approval_status: 'approved', current_status: 'On Track' },
+    { approval_status: 'approved', current_status: 'Cancelled' },
+    { approval_status: 'approved', current_status: 'canceled' },
+    { approval_status: 'approved', current_status: 'Completed' },
+  ];
+
+  assert.equal(calculateDashboardSummary(projects).totalClients, 2);
+  assert.deepEqual(calculateDashboardProjectBreakdown(projects, 'status'), [
+    { name: 'Completed', value: 1 },
+    { name: 'On Track', value: 1 },
+  ]);
+});
+
+test('counts completed projects by status instead of completion percentage', () => {
+  const summary = calculateDashboardSummary([
+    { current_status: 'On Track', completion: 100 },
+    { current_status: 'Completed', completion: 40 },
+    { current_status: 'Cancelled', completion: 100 },
+  ]);
+
+  assert.equal(summary.completedProjects, 1);
+});
+
 test('calculates dashboard project counts from approved status values only', () => {
   const summary = calculateDashboardSummary([
     { approval_status: 'approved', current_status: 'Delayed (External)', revenue: 100, completion: 25 },
@@ -61,7 +86,7 @@ test('calculates dashboard project counts from approved status values only', () 
     { status: 'At Risk', level: 'Low' },
   ]);
 
-  assert.equal(summary.totalClients, 7);
+  assert.equal(summary.totalClients, 6);
   assert.equal(summary.delayedProjectsExternal, 1);
   assert.equal(summary.delayedProjectsInternal, 1);
   assert.equal(summary.activeClients, 2);

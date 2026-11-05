@@ -150,6 +150,16 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Dashboard project totals",
+    detail:
+      "Cancelled and canceled projects are excluded from dashboard totals and breakdowns. Completed project counts are based only on project status, matching the chart.",
+  },
+  {
+    title: "Project task table columns",
+    detail:
+      "Expanded the Project Tasks table to show task title, assignee, planned and actual start/end dates, progress, one status column, and remarks. Task dates and remarks continue to use existing database fields; task Excel imports accept the new column labels and legacy date labels.",
+  },
+  {
     title: "Project and RFP copy protection",
     detail:
       "Disabled text selection, copying, cutting, and dragging for project listings, project details, and RFP-page content across roles. Editable fields remain available for normal text entry and pasting; page routes and navigation are unchanged.",
