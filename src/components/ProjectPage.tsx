@@ -29,6 +29,7 @@ import { normalizeProjectPhase } from "../../shared/project-phase.js";
 import { calculateRevenueRecovery } from "../../shared/revenue-recovery.js";
 import { normalizeHyperscaler } from "../../shared/hyperscalers.js";
 import { convertCurrencyAmount } from "../../shared/currency-conversion.js";
+import { parseProjectUpdatesText } from "../../shared/project-updates.js";
 
 type ProjectPageProps = {
   dark: boolean;
@@ -134,6 +135,30 @@ type ProjectUpdate = {
   updated_by: string;
   created_at: string;
 };
+
+type ProjectUpdateImportDraft = {
+  updateText: string;
+  createdAt: string;
+};
+
+type ProjectUpdateImportResponse<T> = {
+  message?: string;
+  updates?: T[];
+  imported?: number;
+};
+
+async function readProjectUpdateImportResponse<T>(
+  response: Response,
+): Promise<ProjectUpdateImportResponse<T>> {
+  const responseText = await response.text();
+  try {
+    return JSON.parse(responseText) as ProjectUpdateImportResponse<T>;
+  } catch {
+    throw new Error(
+      `The project API returned an unexpected response (HTTP ${response.status}). Restart or redeploy the API server, then try importing again.`,
+    );
+  }
+}
 
 type ProjectDocument = {
   id: number;
@@ -275,6 +300,13 @@ export default function ProjectPage({
   const [temporaryAccessReason, setTemporaryAccessReason] = useState("");
   const [savingTemporaryAccess, setSavingTemporaryAccess] = useState(false);
   const [updateText, setUpdateText] = useState("");
+  const [showUpdateImport, setShowUpdateImport] = useState(false);
+  const [updateImportText, setUpdateImportText] = useState("");
+  const [updateImportYear, setUpdateImportYear] = useState(String(new Date().getFullYear()));
+  const [updateImportPreview, setUpdateImportPreview] = useState<ProjectUpdateImportDraft[]>([]);
+  const [updateImportError, setUpdateImportError] = useState("");
+  const [previewingUpdateFile, setPreviewingUpdateFile] = useState(false);
+  const [savingImportedUpdates, setSavingImportedUpdates] = useState(false);
   const [task, setTask] = useState<TaskDraft>(emptyTask);
   const [risk, setRisk] = useState<RiskDraft>(emptyRisk());
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
@@ -591,6 +623,76 @@ export default function ProjectPage({
       const errorMessage = error instanceof Error ? error.message : "Unable to add update.";
       setMessage(errorMessage);
       showCloudOrbixAlert(errorMessage, "error");
+    }
+  };
+
+  const previewPastedUpdates = () => {
+    setUpdateImportError("");
+    setUpdateImportPreview([]);
+    try {
+      const year = Number(updateImportYear);
+      if (!Number.isInteger(year) || year < 1900 || year > 2200) {
+        throw new Error("Enter a valid year for dates without a year.");
+      }
+      const parsed = parseProjectUpdatesText(updateImportText, year);
+      if (parsed.length > 100) {
+        throw new Error("Import up to 100 updates at a time. Split the text into smaller batches.");
+      }
+      setUpdateImportPreview(parsed);
+    } catch (error) {
+      setUpdateImportError(error instanceof Error ? error.message : "Unable to parse the pasted updates.");
+    }
+  };
+
+  const previewUpdateWorkbook = async (file: File) => {
+    setUpdateImportError("");
+    setUpdateImportPreview([]);
+    setUpdateImportText("");
+    setPreviewingUpdateFile(true);
+    const form = new FormData();
+    form.append("file", file);
+    form.append("year", updateImportYear);
+    try {
+      const response = await fetch(`/api/projects/${clientId}/updates/import/preview`, {
+        method: "POST",
+        headers: headers(),
+        body: form,
+      });
+      const body = await readProjectUpdateImportResponse<ProjectUpdateImportDraft>(response);
+      if (!response.ok) throw new Error(body.message || "Unable to preview the Excel file.");
+      setUpdateImportPreview(body.updates || []);
+    } catch (error) {
+      setUpdateImportError(error instanceof Error ? error.message : "Unable to preview the Excel file.");
+    } finally {
+      setPreviewingUpdateFile(false);
+    }
+  };
+
+  const importProjectUpdates = async () => {
+    if (!updateImportPreview.length) return;
+    setSavingImportedUpdates(true);
+    setUpdateImportError("");
+    try {
+      const response = await fetch(`/api/projects/${clientId}/updates/import`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ updates: updateImportPreview }),
+      });
+      const body = await readProjectUpdateImportResponse<ProjectUpdate>(response);
+      if (!response.ok) throw new Error(body.message || "Unable to import project updates.");
+      setUpdates((current) =>
+        [...body.updates, ...current].sort(
+          (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+        ),
+      );
+      setShowUpdateImport(false);
+      setUpdateImportText("");
+      setUpdateImportPreview([]);
+      showCloudOrbixAlert(`${body.imported} updates imported successfully.`, "success");
+    } catch (error) {
+      setUpdateImportError(error instanceof Error ? error.message : "Unable to import project updates.");
+    } finally {
+      setSavingImportedUpdates(false);
     }
   };
 
@@ -1088,6 +1190,133 @@ export default function ProjectPage({
         </div>
       )}
 
+      {showUpdateImport && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/50 p-4">
+          <section
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border p-5 shadow-2xl"
+            style={sectionStyle}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="update-import-title"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="update-import-title" className="text-sm font-bold">Import project updates</h2>
+                <p className="mt-1 text-xs" style={{ color: muted }}>
+                  Paste dated updates or preview an Excel workbook. Each saved update keeps its recognized date.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUpdateImport(false)}
+                className="rounded-md p-1"
+                aria-label="Close update import"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <label className="mt-4 block max-w-xs text-xs font-semibold" style={{ color: muted }}>
+              Year for dates without a year
+              <input
+                type="number"
+                min="1900"
+                max="2200"
+                value={updateImportYear}
+                onChange={(event) => {
+                  setUpdateImportYear(event.target.value);
+                  setUpdateImportPreview([]);
+                  setUpdateImportError("");
+                }}
+                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                style={inputStyle}
+              />
+            </label>
+            <p className="mt-2 text-[10px]" style={{ color: muted }}>
+              Supported examples: 10/10, 07-09, 17 Sep 2025, Oct 10, 2025, and YYYY-MM-DD. Start each pasted update with its date and a colon.
+            </p>
+            <textarea
+              value={updateImportText}
+              onChange={(event) => {
+                setUpdateImportText(event.target.value);
+                setUpdateImportPreview([]);
+                setUpdateImportError("");
+              }}
+              rows={7}
+              placeholder={"10/10: Planned servers were completed successfully.\n05/10: Six of eleven production servers completed.\n30/09: Non-production servers completed."}
+              className="mt-3 w-full resize-y rounded-lg border px-3 py-2 text-xs outline-none"
+              style={{ ...inputStyle, color: text }}
+            />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={previewPastedUpdates}
+                disabled={!updateImportText.trim() || previewingUpdateFile}
+                className="rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                style={{ borderColor: border }}
+              >
+                Preview pasted updates
+              </button>
+              <label className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${previewingUpdateFile ? "pointer-events-none opacity-50" : ""}`} style={{ borderColor: border }}>
+                <Upload className="h-3.5 w-3.5" />
+                {previewingUpdateFile ? "Reading workbook…" : "Choose Excel workbook"}
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  disabled={previewingUpdateFile}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void previewUpdateWorkbook(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+            </div>
+            {updateImportError && (
+              <p className="mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {updateImportError}
+              </p>
+            )}
+            {updateImportPreview.length > 0 && (
+              <div className="mt-4 rounded-lg border" style={{ borderColor: border }}>
+                <div className="border-b px-3 py-2 text-xs font-semibold" style={{ borderColor: border }}>
+                  Preview · {updateImportPreview.length} update{updateImportPreview.length === 1 ? "" : "s"}
+                </div>
+                <div className="max-h-56 divide-y overflow-y-auto" style={{ borderColor: border }}>
+                  {updateImportPreview.map((item, index) => (
+                    <div key={`${item.createdAt}-${index}`} className="px-3 py-2">
+                      <p className="text-[10px] font-semibold" style={{ color: accent }}>
+                        {new Date(item.createdAt).toLocaleString()}
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-xs">{item.updateText}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowUpdateImport(false)}
+                className="rounded-lg border px-3 py-2 text-xs font-semibold"
+                style={{ borderColor: border, color: muted }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void importProjectUpdates()}
+                disabled={!updateImportPreview.length || savingImportedUpdates}
+                className="rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                style={{ background: accent }}
+              >
+                {savingImportedUpdates ? "Importing…" : `Import ${updateImportPreview.length || ""} updates`}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {showTemporaryAccessForm && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/40 p-4">
           <section
@@ -1434,6 +1663,9 @@ export default function ProjectPage({
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-semibold" style={{ color: accent }}>{updates.length}</span>
+                  <button type="button" onClick={() => { setUpdateImportError(""); setUpdateImportPreview([]); setUpdateImportText(""); setShowUpdateImport(true); }} title="Import updates" aria-label="Import updates" className="rounded-lg border p-1.5" style={{ borderColor: border, color: muted }}>
+                    <Upload className="h-3.5 w-3.5" />
+                  </button>
                   <button type="button" onClick={() => void downloadUpdates()} title="Export updates" aria-label="Export updates" className="rounded-lg border p-1.5" style={{ borderColor: border, color: muted }}>
                     <Download className="h-3.5 w-3.5" />
                   </button>

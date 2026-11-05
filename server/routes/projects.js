@@ -8,7 +8,9 @@ import { canAccessProject, isAssignedProjectManager } from '../lib/permissions.j
 import { protectRoute, requireRole } from '../middleware/auth.js';
 import { createProjectExport } from '../lib/project-export.js';
 import { createRiskExport } from '../lib/risk-export.js';
+import { previewProjectUpdateWorkbook } from '../lib/project-update-import.js';
 import { MANDATORY_DOCUMENTS } from '../../shared/project-documents.js';
+import { parseProjectUpdateDate } from '../../shared/project-updates.js';
 import {
   isProjectStatus,
   normalizeProjectStatus,
@@ -504,6 +506,63 @@ router.get('/:clientId', protectRoute, async (req, res, next) => {
         status: normalizeProjectStatus(risk.status),
       })),
     });
+  } catch (error) { return next(error); }
+});
+
+router.post('/:clientId/updates/import/preview', protectRoute, upload.single('file'), async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
+    if (!req.file) return res.status(400).json({ message: 'Select an Excel file to preview.' });
+    const year = Number(req.body?.year);
+    if (!Number.isInteger(year) || year < 1900 || year > 2200) {
+      return res.status(400).json({ message: 'Enter a valid year for dates without a year.' });
+    }
+    let updates;
+    try {
+      updates = await previewProjectUpdateWorkbook(req.file.buffer, year);
+    } catch (error) {
+      return res.status(400).json({
+        message: error instanceof Error ? error.message : 'Unable to preview the Excel workbook.',
+      });
+    }
+    return res.json({ updates });
+  } catch (error) { return next(error); }
+});
+
+router.post('/:clientId/updates/import', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
+    const updates = req.body?.updates;
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({ message: 'Choose dated updates to import.' });
+    }
+    if (updates.length > 100) {
+      return res.status(400).json({ message: 'Import up to 100 updates at a time.' });
+    }
+
+    const values = [];
+    const tuples = updates.map((update, index) => {
+      const updateText = String(update?.updateText || '').trim();
+      const createdAt = parseProjectUpdateDate(update?.createdAt);
+      if (!updateText || !createdAt) {
+        return null;
+      }
+      const offset = index * 4;
+      values.push(project.id, updateText, `${req.user.firstName} ${req.user.lastName}`.trim() || req.user.email, new Date(createdAt));
+      return `($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4})`;
+    });
+    if (tuples.some((tuple) => tuple === null)) {
+      return res.status(400).json({ message: 'Every update must include text and a valid date.' });
+    }
+    const result = await getPool().query(
+      `INSERT INTO project_updates(client_id,update_text,updated_by,created_at) VALUES ${tuples.join(',')} RETURNING *`,
+      values,
+    );
+    return res.status(201).json({ updates: result.rows, imported: result.rows.length });
   } catch (error) { return next(error); }
 });
 

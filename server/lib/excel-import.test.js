@@ -6,6 +6,7 @@ import ExcelJS from "exceljs"
 
 import {
   createProjectIdAllocator,
+  decideRepeatedWorkbookRow,
   exactProjectMatch,
   findExactDuplicateProject,
   findExistingProject,
@@ -16,6 +17,17 @@ import {
   spreadsheetValue,
   worksheetRecords,
 } from "./excel-import.js"
+
+const requiredProjectHeaders = [
+  "Year",
+  "Customer Name",
+  "Current Status",
+  "% Completion",
+  "Hyperscaler",
+  "Brief about the Project",
+  "PM Name",
+  "ISOW",
+]
 
 test("matches exact imported project rows across every imported data field", () => {
   const imported = {
@@ -84,6 +96,41 @@ test("matches exact imported project rows across every imported data field", () 
   )
 })
 
+test("repeated workbook rows import only after explicit acceptance", () => {
+  assert.equal(
+    decideRepeatedWorkbookRow({
+      selected: false,
+      accepted: false,
+      rejected: false,
+    }),
+    "skip",
+  )
+  assert.equal(
+    decideRepeatedWorkbookRow({
+      selected: true,
+      accepted: false,
+      rejected: false,
+    }),
+    "unconfirmed",
+  )
+  assert.equal(
+    decideRepeatedWorkbookRow({
+      selected: true,
+      accepted: true,
+      rejected: false,
+    }),
+    "import",
+  )
+  assert.equal(
+    decideRepeatedWorkbookRow({
+      selected: false,
+      accepted: false,
+      rejected: true,
+    }),
+    "reject",
+  )
+})
+
 test("reads grouped Estimated and Actual date headers", () => {
   const workbook = new ExcelJS.Workbook()
 
@@ -101,6 +148,7 @@ test("reads grouped Estimated and Actual date headers", () => {
     "Actual",
 
     null,
+    ...requiredProjectHeaders.slice(2),
   ])
 
   worksheet.addRow([
@@ -115,6 +163,7 @@ test("reads grouped Estimated and Actual date headers", () => {
     "Project Start date",
 
     "Project End Date",
+    ...Array(6).fill(null),
   ])
 
   worksheet.addRow([
@@ -129,6 +178,12 @@ test("reads grouped Estimated and Actual date headers", () => {
     new Date("2026-01-05T00:00:00.000Z"),
 
     new Date("2026-07-02T00:00:00.000Z"),
+    "On Track",
+    50,
+    "Azure",
+    "Example brief",
+    "Example Manager",
+    "ISOW-1",
   ])
 
   assert.deepEqual(worksheetRecords(worksheet), [
@@ -144,6 +199,18 @@ test("reads grouped Estimated and Actual date headers", () => {
       "Actual Project Start date": "2026-01-05",
 
       "Actual Project End Date": "2026-07-02",
+
+      "Current Status": "On Track",
+
+      "% Completion": "50",
+
+      Hyperscaler: "Azure",
+
+      "Brief about the Project": "Example brief",
+
+      "PM Name": "Example Manager",
+
+      ISOW: "ISOW-1",
     },
   ])
 })
@@ -153,9 +220,14 @@ test("normalizes repeated spaces and reads formula-cached Excel dates", () => {
 
   const worksheet = workbook.addWorksheet("Projects")
 
-  worksheet.addRow(["Year", "Estimated", "Actual"])
+  worksheet.addRow(["Year", "Estimated", "Actual", ...requiredProjectHeaders.slice(1)])
 
-  worksheet.addRow(["Year", "Project  Start date", "Project End Date"])
+  worksheet.addRow([
+    null,
+    "Project  Start date",
+    "Project End Date",
+    ...Array(requiredProjectHeaders.length - 1).fill(null),
+  ])
 
   worksheet.addRow([
     2026,
@@ -167,6 +239,13 @@ test("normalizes repeated spaces and reads formula-cached Excel dates", () => {
     },
 
     { formula: "A1" },
+    "Example Project",
+    "On Track",
+    25,
+    "Azure",
+    "Example brief",
+    "Example Manager",
+    "ISOW-1",
   ])
 
   const [record] = worksheetRecords(worksheet)
@@ -185,24 +264,48 @@ test("keeps support for a single-row header workbook", () => {
 
   const worksheet = workbook.addWorksheet("Projects")
 
-  worksheet.addRow(["Project ID", "Customer Name"])
+  worksheet.addRow(["Project ID", ...requiredProjectHeaders])
 
-  worksheet.addRow(["CLT-101", "Example Project"])
-
-  assert.deepEqual(worksheetRecords(worksheet), [
-    { "Project ID": "CLT-101", "Customer Name": "Example Project" },
+  worksheet.addRow([
+    "CLT-101",
+    2026,
+    "Example Project",
+    "On Track",
+    0,
+    "Azure",
+    "Example brief",
+    "Example Manager",
+    "ISOW-1",
   ])
+
+  const [record] = worksheetRecords(worksheet)
+  assert.equal(record["Project ID"], "CLT-101")
+  assert.equal(record["Customer Name"], "Example Project")
+  assert.equal(record.rowNumber, 2)
 })
 
 test("reads estimated start and end dates from the workbook's short headers", () => {
   const workbook = new ExcelJS.Workbook()
   const worksheet = workbook.addWorksheet("Projects")
-  worksheet.addRow(["Year", "Estimated start date", "end date", "Actual start date"])
+  worksheet.addRow([
+    "Year",
+    "Estimated start date",
+    "end date",
+    "Actual start date",
+    ...requiredProjectHeaders.slice(1),
+  ])
   worksheet.addRow([
     2026,
     new Date("2026-01-15T00:00:00.000Z"),
     new Date("2026-10-30T00:00:00.000Z"),
     new Date("2026-03-19T00:00:00.000Z"),
+    "Example Project",
+    "On Track",
+    50,
+    "Azure",
+    "Example brief",
+    "Example Manager",
+    "ISOW-1",
   ])
 
   const [record] = worksheetRecords(worksheet)
@@ -222,6 +325,124 @@ test("reads estimated start and end dates from the workbook's short headers", ()
 
   assert.deepEqual(estimatedStart, { value: "2026-01-15", error: null })
   assert.deepEqual(estimatedEnd, { value: "2026-10-30", error: null })
+})
+
+test("finds the project table below report title and summary rows", () => {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet("Projects")
+  worksheet.addRow(["Portfolio Status Summary"])
+  worksheet.addRow(["Total Projects", 76, "On Track", 6, "Delayed", 1])
+  worksheet.addRow([])
+  worksheet.addRow(requiredProjectHeaders)
+  worksheet.addRow([
+    2026,
+    "Example Project",
+    "On Track",
+    50,
+    "Azure",
+    "Example brief",
+    "Example Manager",
+    "ISOW-1",
+  ])
+
+  const records = worksheetRecords(worksheet)
+
+  assert.equal(records.length, 1)
+  assert.equal(records[0].rowNumber, 5)
+  assert.equal(records[0]["Customer Name"], "Example Project")
+})
+
+test("detects supported project header aliases", () => {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet("Projects")
+  worksheet.addRow([
+    "Year",
+    "Client Name",
+    "Status",
+    "Completion",
+    "Hyperscaler",
+    "Project Brief",
+    "Account Manager",
+    "ISOW",
+  ])
+  worksheet.addRow([
+    2026,
+    "Example Project",
+    "On Track",
+    50,
+    "Azure",
+    "Example brief",
+    "Example Manager",
+    "ISOW-1",
+  ])
+
+  const [record] = worksheetRecords(worksheet)
+
+  assert.equal(record.rowNumber, 2)
+  assert.equal(record["Client Name"], "Example Project")
+})
+
+test("finds grouped date headers below summary content and preserves row numbers", () => {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet("Projects")
+  worksheet.addRow(["Portfolio Status Summary"])
+  worksheet.addRow(["Total Projects", 76, "On Track", 6])
+  worksheet.addRow([
+    "Year",
+    "Customer Name",
+    "Estimated",
+    null,
+    "Actual",
+    null,
+    "Current Status",
+    "% Completion",
+    "Hyperscaler",
+    "Brief about the Project",
+    "PM Name",
+    "ISOW",
+  ])
+  worksheet.addRow([
+    null,
+    null,
+    "Project Start Date",
+    "Project End Date",
+    "Project Start Date",
+    "Project End Date",
+    ...Array(6).fill(null),
+  ])
+  worksheet.addRow([
+    2026,
+    "Example Project",
+    new Date("2026-01-01T00:00:00.000Z"),
+    new Date("2026-06-30T00:00:00.000Z"),
+    null,
+    null,
+    "On Track",
+    50,
+    "Azure",
+    "Example brief",
+    "Example Manager",
+    "ISOW-1",
+  ])
+
+  const records = worksheetRecords(worksheet)
+
+  assert.equal(records.length, 1)
+  assert.equal(records[0].rowNumber, 5)
+  assert.equal(records[0]["Estimated Project Start Date"], "2026-01-01")
+  assert.equal(records[0]["Estimated Project End Date"], "2026-06-30")
+})
+
+test("reports the required columns when no project header row is found", () => {
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet("Projects")
+  worksheet.addRow(["Portfolio Status Summary"])
+  worksheet.addRow(["Total Projects", 76, "On Track", 6])
+
+  assert.throws(
+    () => worksheetRecords(worksheet),
+    /Could not find a project table header row\. Missing required columns: Year, Customer Name, Current Status, % Completion, Hyperscaler, Brief about the Project, PM Name, ISOW/,
+  )
 })
 
 test("parses supported date values and rejects invalid spreadsheet dates", () => {
