@@ -1457,8 +1457,9 @@ export default function ProjectPage({
 
       {activeTab === "Overview" && (
         <div className="space-y-5">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_290px]">
-            <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="min-w-0 space-y-5">
+              <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: border }}>
                 <div>
                   <h2 className="text-sm font-bold">Project details</h2>
@@ -1471,15 +1472,34 @@ export default function ProjectPage({
               {renderProjectDetails()}
               <div className="border-t px-5 py-4" style={{ borderColor: border }}>
                 <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: muted }}>Project brief</p>
-                <p className="mt-2 min-h-[96px] whitespace-pre-wrap text-xs leading-5" style={{ color: text }}>
+                <p className="mt-2 whitespace-pre-wrap text-xs leading-5" style={{ color: text }}>
                   {project.project_brief || "No project brief has been added."}
                 </p>
               </div>
             </section>
 
+              <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: border }}>
+                  <div>
+                    <h2 className="text-sm font-bold">Tasks</h2>
+                    <p className="mt-1 text-[11px]" style={{ color: muted }}>Current project tasks and due dates</p>
+                  </div>
+                  <button type="button" onClick={() => { setActiveTab("Tasks"); setShowTaskForm(true); setEditingTaskId(null); setTask({ ...emptyTask, assignedTo: manager === "Unassigned" ? "" : manager }); }} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold" style={{ borderColor: border }}>
+                    <Plus className="h-3.5 w-3.5" /> Add task
+                  </button>
+                </div>
+                {renderTaskTable(tasks.slice(0, 3), false)}
+                {tasks.length > 3 && (
+                  <button type="button" onClick={() => setActiveTab("Tasks")} className="border-t px-5 py-3 text-xs font-semibold" style={{ borderColor: border, color: accent }}>
+                    View all {tasks.length} tasks
+                  </button>
+                )}
+              </section>
+            </div>
+
             <aside className="space-y-5">
               <section className="flex flex-col items-center rounded-xl border p-5 text-center" style={sectionStyle}>
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: muted }}>Overall progress</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: muted }}>Overall completion</p>
                 <div className="relative my-4 h-28 w-28">
                   <svg className="h-28 w-28 -rotate-90" viewBox="0 0 100 100" aria-label={`${progress}% complete`}>
                     <circle cx="50" cy="50" r="42" fill="none" stroke={dark ? "#334155" : "#E2E8F0"} strokeWidth="8" />
@@ -1497,9 +1517,56 @@ export default function ProjectPage({
                 </button>
               </section>
 
+              <section className="rounded-xl border p-5" style={sectionStyle}>
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-bold">Project updates</h2>
+                    <p className="mt-1 text-[11px]" style={{ color: muted }}>Project activity and handover trail</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold" style={{ color: accent }}>{updates.length}</span>
+                    <button type="button" onClick={() => { setUpdateImportError(""); setUpdateImportPreview([]); setUpdateImportText(""); setShowUpdateImport(true); }} title="Import updates" aria-label="Import updates" className="rounded-lg border p-1.5" style={{ borderColor: border, color: muted }}>
+                      <Upload className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={() => void downloadUpdates()} title="Export updates" aria-label="Export updates" className="rounded-lg border p-1.5" style={{ borderColor: border, color: muted }}>
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-end gap-2 rounded-lg border p-2" style={{ borderColor: border, background: soft }}>
+                  <textarea
+                    value={updateText}
+                    onChange={(event) => setUpdateText(event.target.value)}
+                    rows={2}
+                    placeholder="Share a project update…"
+                    className="min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-xs outline-none"
+                    style={{ color: text }}
+                  />
+                  <button type="button" onClick={() => void addUpdate()} disabled={!updateText.trim()} aria-label="Post update" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-white disabled:opacity-40" style={{ background: accent }}>
+                    <Send className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mt-4 max-h-72 space-y-4 overflow-y-auto">
+                  {updates.length ? updates.map((item) => (
+                    <div key={item.id} className="flex gap-3">
+                      <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[9px] font-bold" style={{ color: accent, background: `${accent}14` }}>
+                        {initialsFor(item.updated_by || "Project")}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="whitespace-pre-wrap text-xs leading-5">{item.update_text}</p>
+                        <p className="mt-1 text-[10px]" style={{ color: muted }}>{item.updated_by || "Project team"} · {new Date(item.created_at).toLocaleString()}</p>
+                      </div>
+                      <button type="button" onClick={() => requestDelete("Permanently delete this project update?", () => { setConfirmDialog(null); void deleteUpdate(item.id); })} title="Delete update" aria-label="Delete update" className="h-fit rounded-md p-1 text-red-500 hover:bg-red-50">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )) : <p className="py-5 text-center text-xs" style={{ color: muted }}>No project updates recorded yet.</p>}
+                </div>
+              </section>
+
               <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
                 <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: border }}>
-                  <h2 className="text-sm font-bold">Attention needed</h2>
+                  <h2 className="text-sm font-bold">Alerts</h2>
                   {attentionItems.length > 0 && <span className="h-2 w-2 rounded-full bg-amber-500" />}
                 </div>
                 <div className="space-y-1 p-2">
@@ -1523,37 +1590,11 @@ export default function ProjectPage({
                 </div>
               </section>
 
-              <section className="rounded-xl border p-4" style={sectionStyle}>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h2 className="text-sm font-bold">Mandatory documents</h2>
-                  <span className="text-[10px] font-bold" style={{ color: documentProgress === 100 ? "#16A34A" : accent }}>
-                    {uploadedMandatoryDocuments}/{MANDATORY_DOCUMENTS.length}
-                  </span>
-                </div>
-                <div className="mb-4 h-1.5 overflow-hidden rounded-full" style={{ background: dark ? "#334155" : "#E2E8F0" }}>
-                  <div className="h-full rounded-full" style={{ width: `${documentProgress}%`, background: documentProgress === 100 ? "#16A34A" : accent }} />
-                </div>
-                <div className="space-y-2">
-                  {MANDATORY_DOCUMENTS.slice(0, 5).map((item) => {
-                    const uploaded = uploadedMandatoryTypes.has(item.id);
-                    return (
-                      <div key={item.id} className="flex items-center gap-2 text-[10px]">
-                        {uploaded ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Circle className="h-3.5 w-3.5" style={{ color: muted }} />}
-                        <span className="flex-1 truncate" style={{ color: uploaded ? text : muted }}>{item.name}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button type="button" onClick={() => setActiveTab("Documents")} className="mt-4 w-full rounded-lg py-2 text-[10px] font-bold" style={{ color: accent, background: `${accent}12` }}>
-                  View all documents
-                </button>
-              </section>
-
               {(canManageTemporaryAccess || temporaryAccess.length > 0) && (
-                <section className="rounded-xl border p-4" style={sectionStyle} aria-label="Temporary project manager access">
+                <section className="rounded-xl border p-4" style={sectionStyle} aria-label="Temporary access manager">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h2 className="text-sm font-bold">Temporary manager access</h2>
+                      <h2 className="text-sm font-bold">Temporary access manager</h2>
                       <p className="mt-1 text-[10px]" style={{ color: muted }}>
                         Approved managers can access this project until their access is revoked.
                       </p>
@@ -1633,74 +1674,33 @@ export default function ProjectPage({
                   )}
                 </section>
               )}
+
+              <section className="rounded-xl border p-4" style={sectionStyle}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-bold">Mandatory documents</h2>
+                  <span className="text-[10px] font-bold" style={{ color: documentProgress === 100 ? "#16A34A" : accent }}>
+                    {uploadedMandatoryDocuments}/{MANDATORY_DOCUMENTS.length}
+                  </span>
+                </div>
+                <div className="mb-4 h-1.5 overflow-hidden rounded-full" style={{ background: dark ? "#334155" : "#E2E8F0" }}>
+                  <div className="h-full rounded-full" style={{ width: `${documentProgress}%`, background: documentProgress === 100 ? "#16A34A" : accent }} />
+                </div>
+                <div className="space-y-2">
+                  {MANDATORY_DOCUMENTS.slice(0, 5).map((item) => {
+                    const uploaded = uploadedMandatoryTypes.has(item.id);
+                    return (
+                      <div key={item.id} className="flex items-center gap-2 text-[10px]">
+                        {uploaded ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Circle className="h-3.5 w-3.5" style={{ color: muted }} />}
+                        <span className="flex-1 truncate" style={{ color: uploaded ? text : muted }}>{item.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => setActiveTab("Documents")} className="mt-4 w-full rounded-lg py-2 text-[10px] font-bold" style={{ color: accent, background: `${accent}12` }}>
+                  View all documents
+                </button>
+              </section>
             </aside>
-          </div>
-
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: border }}>
-                <div>
-                  <h2 className="text-sm font-bold">Tasks</h2>
-                  <p className="mt-1 text-[11px]" style={{ color: muted }}>Current project tasks and due dates</p>
-                </div>
-                <button type="button" onClick={() => { setActiveTab("Tasks"); setShowTaskForm(true); setEditingTaskId(null); setTask({ ...emptyTask, assignedTo: manager === "Unassigned" ? "" : manager }); }} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold" style={{ borderColor: border }}>
-                  <Plus className="h-3.5 w-3.5" /> Add task
-                </button>
-              </div>
-              {renderTaskTable(tasks.slice(0, 3), false)}
-              {tasks.length > 3 && (
-                <button type="button" onClick={() => setActiveTab("Tasks")} className="border-t px-5 py-3 text-xs font-semibold" style={{ borderColor: border, color: accent }}>
-                  View all {tasks.length} tasks
-                </button>
-              )}
-            </section>
-
-            <section className="rounded-xl border p-5" style={sectionStyle}>
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-bold">Daily updates</h2>
-                  <p className="mt-1 text-[11px]" style={{ color: muted }}>Project activity and handover trail</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-semibold" style={{ color: accent }}>{updates.length}</span>
-                  <button type="button" onClick={() => { setUpdateImportError(""); setUpdateImportPreview([]); setUpdateImportText(""); setShowUpdateImport(true); }} title="Import updates" aria-label="Import updates" className="rounded-lg border p-1.5" style={{ borderColor: border, color: muted }}>
-                    <Upload className="h-3.5 w-3.5" />
-                  </button>
-                  <button type="button" onClick={() => void downloadUpdates()} title="Export updates" aria-label="Export updates" className="rounded-lg border p-1.5" style={{ borderColor: border, color: muted }}>
-                    <Download className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div className="flex items-end gap-2 rounded-lg border p-2" style={{ borderColor: border, background: soft }}>
-                <textarea
-                  value={updateText}
-                  onChange={(event) => setUpdateText(event.target.value)}
-                  rows={2}
-                  placeholder="Share a project update…"
-                  className="min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-xs outline-none"
-                  style={{ color: text }}
-                />
-                <button type="button" onClick={() => void addUpdate()} disabled={!updateText.trim()} aria-label="Post update" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-white disabled:opacity-40" style={{ background: accent }}>
-                  <Send className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="mt-4 max-h-72 space-y-4 overflow-y-auto">
-                {updates.length ? updates.map((item) => (
-                  <div key={item.id} className="flex gap-3">
-                    <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[9px] font-bold" style={{ color: accent, background: `${accent}14` }}>
-                      {initialsFor(item.updated_by || "Project")}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="whitespace-pre-wrap text-xs leading-5">{item.update_text}</p>
-                      <p className="mt-1 text-[10px]" style={{ color: muted }}>{item.updated_by || "Project team"} · {new Date(item.created_at).toLocaleString()}</p>
-                    </div>
-                    <button type="button" onClick={() => requestDelete("Permanently delete this project update?", () => { setConfirmDialog(null); void deleteUpdate(item.id); })} title="Delete update" aria-label="Delete update" className="h-fit rounded-md p-1 text-red-500 hover:bg-red-50">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )) : <p className="py-5 text-center text-xs" style={{ color: muted }}>No project updates recorded yet.</p>}
-              </div>
-            </section>
           </div>
         </div>
       )}

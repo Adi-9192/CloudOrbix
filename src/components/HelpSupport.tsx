@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Project overview layout",
+    detail:
+      "Reordered the project overview sidebar to show Overall completion, Project updates, Alerts, Temporary access manager, and Mandatory documents. Increased project page text by 15%, made the project brief height content-driven, and moved Tasks directly below Project details.",
+  },
+  {
     title: "Risk and RFP dashboard typography",
     detail:
       "Increased text sizes by 20% in the Risk dashboard cards and RFP overview.",
