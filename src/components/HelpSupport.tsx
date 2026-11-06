@@ -150,6 +150,26 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Risk and RFP dashboard typography",
+    detail:
+      "Increased text sizes by 20% in the Risk dashboard cards and RFP overview.",
+  },
+  {
+    title: "Dashboard typography and grouping",
+    detail:
+      "Increased text size by 20% in the Project overview and Active project completion sections. The Project pie chart can now be grouped by Status or Region only.",
+  },
+  {
+    title: "Dashboard chart sizing",
+    detail:
+      "Increased the Project and RFP dashboard pie charts by 25% and slightly reduced the dashboard's top padding.",
+  },
+  {
+    title: "Service offering header",
+    detail:
+      "Placed Cloud Professional Services above the Service Offering label on the landing page and reduced the header's top padding.",
+  },
+  {
     title: "Daily update import",
     detail:
       "Project Daily Updates can be imported from pasted dated notes or an Excel workbook. Review parsed updates before saving; recognized dates, including dates without a year using the selected year, are stored as each update's timestamp.",

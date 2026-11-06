@@ -282,16 +282,16 @@ export default function Portfolio({
     <div data-theme={dark ? "dark" : undefined} className={`portfolio-page min-h-screen w-full bg-[var(--portfolio-bg)] text-[var(--portfolio-ink)] ${className}`} style={{ fontFamily: "var(--font-sans, 'Inter', system-ui, sans-serif)" }}>
 
       {!hideHeader && (
-        <header className="px-8 md:px-16 pt-12 pb-4 md:pb-6 flex items-start justify-between border-b border-[var(--portfolio-border)] bg-[var(--portfolio-card)]">
+        <header className="px-8 md:px-16 pt-6 pb-4 md:pb-6 flex items-start justify-between border-b border-[var(--portfolio-border)] bg-[var(--portfolio-card)]">
           <div>
-            <span className="mono" style={{ fontSize: "20px", letterSpacing: "0.18em", color: "var(--portfolio-accent)", textTransform: "uppercase" }}>
-              PORTFOLIO
-            </span>
-            <h1 style={{ fontSize: "clamp(1.65rem, 3.75vw, 3rem)", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.03em", color: "var(--portfolio-ink)", marginTop: "0.25rem" }}>
+            <h1 style={{ fontSize: "clamp(1.65rem, 3.75vw, 3rem)", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.03em", color: "var(--portfolio-ink)" }}>
               {heading === "Cloud Professional Services - Portfolio" ? (
                 <>Cloud{" "}<span className="text-[var(--portfolio-primary)]">Professional Services</span></>
               ) : heading}
             </h1>
+            <span className="mono mt-2 block" style={{ fontSize: "20px", letterSpacing: "0.18em", color: "var(--portfolio-accent)", textTransform: "uppercase" }}>
+              SERVICE OFFERING
+            </span>
           </div>
         </header>
       )}
