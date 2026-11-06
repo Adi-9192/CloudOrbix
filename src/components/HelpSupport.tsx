@@ -150,6 +150,21 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Consistent project task dates",
+    detail:
+      "Task imports and task forms now normalize dates before saving. Dates without a year use the project's start year, while invalid dates are identified by row and block the entire import.",
+  },
+  {
+    title: "Paste tasks from Excel",
+    detail:
+      "Project Tasks can now accept a copied Excel range. Preview the tabular rows, review task status and required columns, then confirm before importing; task records use the same validation and field mapping as workbook imports.",
+  },
+  {
+    title: "Project RFP tab and update date ranges",
+    detail:
+      "Renamed the project tab to RFP Overview. Daily Update imports recognize ordinal and abbreviated-month dates, use the start date for ranges, and let you choose a month for day-only dates in the preview.",
+  },
+  {
     title: "Active project completion percentages",
     detail:
       "Normalized fractional completion values in the active-project chart so values such as 0.06 display as 6%, consistent with project completion.",

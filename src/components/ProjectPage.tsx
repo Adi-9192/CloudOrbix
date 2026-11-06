@@ -4,12 +4,14 @@ import {
   ArrowLeft,
   CalendarDays,
   Check,
+  ClipboardPaste,
   ChevronRight,
   Circle,
   Clock3,
   Download,
   ExternalLink,
   FileText,
+  Link2,
   Pencil,
   Plus,
   Send,
@@ -29,7 +31,15 @@ import { normalizeProjectPhase } from "../../shared/project-phase.js";
 import { calculateRevenueRecovery } from "../../shared/revenue-recovery.js";
 import { normalizeHyperscaler } from "../../shared/hyperscalers.js";
 import { convertCurrencyAmount } from "../../shared/currency-conversion.js";
-import { parseProjectUpdatesText } from "../../shared/project-updates.js";
+import {
+  parseProjectUpdateDate,
+  parseProjectUpdatesText,
+} from "../../shared/project-updates.js";
+import {
+  parseTaskClipboard,
+  reviewTaskImportRecords,
+  taskDateYearFromProjectStart,
+} from "../../shared/task-import.js";
 import {
   normalizeProjectTaskStatus,
   PROJECT_TASK_STATUSES,
@@ -134,6 +144,28 @@ type TaskDraft = {
   remark: string;
 };
 
+type TaskImportRecord = Record<string, string | number> & { __rowNumber: number };
+
+type TaskImportReviewRow = {
+  rowNumber: number;
+  taskTitle: string;
+  assignedTo: string;
+  plannedStartDate: string;
+  plannedEndDate: string;
+  actualStartDate: string;
+  actualEndDate: string;
+  progress: number;
+  status: string | null;
+  remarks: string;
+  error: string;
+  skipped: boolean;
+};
+
+type TaskImportReview = {
+  missingColumns: string[];
+  rows: TaskImportReviewRow[];
+};
+
 type ProjectUpdate = {
   id: number;
   update_text: string;
@@ -143,7 +175,10 @@ type ProjectUpdate = {
 
 type ProjectUpdateImportDraft = {
   updateText: string;
-  createdAt: string;
+  createdAt: string | null;
+  dayOfMonth?: number;
+  dateMonth?: number;
+  dateRange?: string;
 };
 
 type ProjectUpdateImportResponse<T> = {
@@ -211,7 +246,12 @@ type RiskDraft = {
   commentsActions: string;
 };
 
-type Tab = "Overview" | "Tasks" | "Risks" | "Documents" | "RFP";
+type Tab = "Overview" | "Tasks" | "Risks" | "Documents" | "RFP Overview";
+
+const updateMonths = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 const emptyTask: TaskDraft = {
   taskTitle: "",
@@ -316,6 +356,12 @@ export default function ProjectPage({
   const [risk, setRisk] = useState<RiskDraft>(emptyRisk());
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showTaskPasteImport, setShowTaskPasteImport] = useState(false);
+  const [taskPasteText, setTaskPasteText] = useState("");
+  const [taskPasteRecords, setTaskPasteRecords] = useState<TaskImportRecord[]>([]);
+  const [taskPasteReview, setTaskPasteReview] = useState<TaskImportReview | null>(null);
+  const [taskPasteError, setTaskPasteError] = useState("");
+  const [savingPastedTasks, setSavingPastedTasks] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(() => new Set());
   const [showRiskForm, setShowRiskForm] = useState(false);
   const [savingTask, setSavingTask] = useState(false);
@@ -638,6 +684,56 @@ export default function ProjectPage({
     }
   };
 
+  const previewPastedTasks = () => {
+    setTaskPasteError("");
+    setTaskPasteReview(null);
+    setTaskPasteRecords([]);
+    try {
+      const records = parseTaskClipboard(taskPasteText);
+      setTaskPasteRecords(records);
+      setTaskPasteReview(
+        reviewTaskImportRecords(records, {
+          yearForUndated: taskDateYearFromProjectStart(
+            project?.estimated_start_date,
+          ),
+        }),
+      );
+    } catch (error) {
+      setTaskPasteError(error instanceof Error ? error.message : "Unable to preview pasted tasks.");
+    }
+  };
+
+  const importPastedTasks = async () => {
+    if (!taskPasteReview || !taskPasteRecords.length) return;
+    if (
+      taskPasteReview.missingColumns.length ||
+      taskPasteReview.rows.some((row) => row.error) ||
+      !taskPasteReview.rows.some((row) => !row.error && !row.skipped)
+    ) return;
+
+    setSavingPastedTasks(true);
+    setTaskPasteError("");
+    try {
+      const response = await fetch(`/api/projects/${clientId}/tasks/import/pasted`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ records: taskPasteRecords }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "Unable to import pasted tasks.");
+      setShowTaskPasteImport(false);
+      setTaskPasteText("");
+      setTaskPasteRecords([]);
+      setTaskPasteReview(null);
+      showCloudOrbixAlert(`${body.imported} tasks imported successfully.`, "success");
+      await load();
+    } catch (error) {
+      setTaskPasteError(error instanceof Error ? error.message : "Unable to import pasted tasks.");
+    } finally {
+      setSavingPastedTasks(false);
+    }
+  };
+
   const addUpdate = async () => {
     if (!updateText.trim()) return;
     try {
@@ -700,7 +796,7 @@ export default function ProjectPage({
   };
 
   const importProjectUpdates = async () => {
-    if (!updateImportPreview.length) return;
+    if (!updateImportPreview.length || updateImportPreview.some((item) => !item.createdAt)) return;
     setSavingImportedUpdates(true);
     setUpdateImportError("");
     try {
@@ -910,7 +1006,7 @@ export default function ProjectPage({
   const labelStyle = { color: muted };
   const inputStyle = { background: soft, borderColor: border, color: text };
   const inputClass = "w-full rounded-lg border px-3 py-2 text-xs outline-none";
-  const tabs: Tab[] = ["Overview", "Tasks", "Risks", "Documents", "RFP"];
+  const tabs: Tab[] = ["Overview", "Tasks", "Risks", "Documents", "RFP Overview"];
 
   if (!project && accessDenied) {
     return (
@@ -1323,7 +1419,7 @@ export default function ProjectPage({
               />
             </label>
             <p className="mt-2 text-[10px]" style={{ color: muted }}>
-              Supported examples: 10/10, 07-09, 17 Sep 2025, Oct 10, 2025, and YYYY-MM-DD. Start each pasted update with its date and a colon.
+              Supported examples: 10/10, 17 Sep 2025, 5th-Nov, and date ranges such as 5th-7th Nov. Start each pasted update with its date and a colon; day-only dates need a month selected in the preview.
             </p>
             <textarea
               value={updateImportText}
@@ -1373,12 +1469,68 @@ export default function ProjectPage({
                 <div className="border-b px-3 py-2 text-xs font-semibold" style={{ borderColor: border }}>
                   Preview · {updateImportPreview.length} update{updateImportPreview.length === 1 ? "" : "s"}
                 </div>
+                {updateImportPreview.some((item) => !item.createdAt) && (
+                  <p className="border-b px-3 py-2 text-[11px]" style={{ borderColor: border, color: muted }} role="status">
+                    Add a month to each day-only date below before importing.
+                  </p>
+                )}
                 <div className="max-h-56 divide-y overflow-y-auto" style={{ borderColor: border }}>
                   {updateImportPreview.map((item, index) => (
-                    <div key={`${item.createdAt}-${index}`} className="px-3 py-2">
-                      <p className="text-[10px] font-semibold" style={{ color: accent }}>
-                        {new Date(item.createdAt).toLocaleString()}
-                      </p>
+                    <div key={`${item.createdAt || `day-${item.dayOfMonth}`}-${index}`} className="px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="text-[10px] font-semibold" style={{ color: item.createdAt ? accent : muted }}>
+                          {item.createdAt
+                            ? new Date(item.createdAt).toLocaleString()
+                            : "Add a month to complete this date"}
+                        </p>
+                        {item.dateRange && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold"
+                            style={{ color: accent, background: `${accent}12` }}
+                            title={`This update uses the start date of the ${item.dateRange} range.`}
+                            aria-label={`Date range ${item.dateRange}; using the start date.`}
+                          >
+                            <Link2 className="h-3 w-3" aria-hidden="true" />
+                            Range · {item.dateRange}
+                          </span>
+                        )}
+                      </div>
+                      {item.dayOfMonth && (
+                        <label className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-medium" style={{ color: muted }}>
+                          Month
+                          <select
+                            value={item.dateMonth ?? ""}
+                            onChange={(event) => {
+                              const month = Number(event.target.value) || undefined;
+                              const year = Number(updateImportYear);
+                              const createdAt = month
+                                ? parseProjectUpdateDate(`${item.dayOfMonth}-${month}-${year}`, year)
+                                : null;
+                              setUpdateImportPreview((current) =>
+                                current.map((candidate, candidateIndex) =>
+                                  candidateIndex === index
+                                    ? { ...candidate, dateMonth: month, createdAt }
+                                    : candidate,
+                                ),
+                              );
+                            }}
+                            className="rounded-md border px-2 py-1 text-[10px]"
+                            style={inputStyle}
+                            aria-label={`Choose a month for day ${item.dayOfMonth}`}
+                          >
+                            <option value="">Choose month</option>
+                            {updateMonths.map((month, monthIndex) => (
+                              <option
+                                key={month}
+                                value={monthIndex + 1}
+                                disabled={!parseProjectUpdateDate(`${item.dayOfMonth}-${monthIndex + 1}-${updateImportYear}`, Number(updateImportYear))}
+                              >
+                                {month}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                       <p className="mt-1 whitespace-pre-wrap text-xs">{item.updateText}</p>
                     </div>
                   ))}
@@ -1397,7 +1549,7 @@ export default function ProjectPage({
               <button
                 type="button"
                 onClick={() => void importProjectUpdates()}
-                disabled={!updateImportPreview.length || savingImportedUpdates}
+                disabled={!updateImportPreview.length || updateImportPreview.some((item) => !item.createdAt) || savingImportedUpdates}
                 className="rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
                 style={{ background: accent }}
               >
@@ -1825,13 +1977,26 @@ export default function ProjectPage({
                   : `Delete selected${selectedTaskCount ? ` (${selectedTaskCount})` : ""}`}
               </button>
               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold" style={{ borderColor: border }}>
-                <Upload className="h-3.5 w-3.5" /> Import tasks
+                <Upload className="h-3.5 w-3.5" /> Import Excel
                 <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (file) void importTasks(file);
                   event.currentTarget.value = "";
                 }} />
               </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTaskPasteImport((current) => !current);
+                  setTaskPasteError("");
+                }}
+                aria-expanded={showTaskPasteImport}
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold"
+                style={{ borderColor: border, color: showTaskPasteImport ? accent : text }}
+              >
+                <ClipboardPaste className="h-3.5 w-3.5" />
+                {showTaskPasteImport ? "Close paste import" : "Paste from Excel"}
+              </button>
               <button type="button" onClick={() => {
                 if (showTaskForm) {
                   setShowTaskForm(false);
@@ -1848,6 +2013,136 @@ export default function ProjectPage({
               </button>
             </div>
           </div>
+          {showTaskPasteImport && (
+            <div className="border-b p-4 sm:p-5" style={{ borderColor: border }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold">Paste tasks from Excel</h3>
+                  <p className="mt-1 text-[11px]" style={{ color: muted }}>
+                    Copy the task table including its header row, then paste it here. Review the parsed rows before importing.
+                  </p>
+                  <p className="mt-1 text-[10px]" style={{ color: muted }}>
+                    Required columns: Task Title, Status, and Progress. Empty task titles are skipped, statuses must be supported, and progress is kept between 0 and 100.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTaskPasteImport(false)}
+                  aria-label="Close pasted task import"
+                  className="rounded-md p-1"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <textarea
+                value={taskPasteText}
+                onChange={(event) => {
+                  setTaskPasteText(event.target.value);
+                  setTaskPasteRecords([]);
+                  setTaskPasteReview(null);
+                  setTaskPasteError("");
+                }}
+                rows={5}
+                spellCheck={false}
+                aria-label="Paste task table copied from Excel"
+                placeholder={"Task Title\tAssigned To\tPlanned Start Date\tPlanned End Date\tProgress\tStatus\tRemarks\nPrepare environment\tAlex Manager\t2026-03-01\t2026-03-05\t25\tIn progress\tWaiting for access"}
+                className="mt-3 w-full resize-y rounded-lg border px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-blue-500/30"
+                style={{ ...inputStyle, color: text }}
+              />
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[10px]" style={{ color: muted }}>
+                  {taskPasteText.trim() ? `${taskPasteText.split(/\r?\n/).length} pasted lines` : "Pasted tab-separated cells will be mapped by their headers."}
+                </span>
+                <button
+                  type="button"
+                  onClick={previewPastedTasks}
+                  disabled={!taskPasteText.trim() || savingPastedTasks}
+                  className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ borderColor: border }}
+                >
+                  <ClipboardPaste className="h-3.5 w-3.5" />
+                  Preview pasted table
+                </button>
+              </div>
+              {taskPasteError && (
+                <p className="mt-3 rounded-lg border px-3 py-2 text-xs" role="alert" style={{ borderColor: "#FCA5A5", background: dark ? "#451A1A" : "#FEF2F2", color: dark ? "#FECACA" : "#B91C1C" }}>
+                  {taskPasteError}
+                </p>
+              )}
+              {taskPasteReview && (
+                <div className="mt-4 overflow-hidden rounded-lg border" style={{ borderColor: border }}>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2" style={{ borderColor: border }}>
+                    <p className="text-xs font-semibold">
+                      Preview · {taskPasteReview.rows.length} row{taskPasteReview.rows.length === 1 ? "" : "s"}
+                    </p>
+                    <p className="text-[10px]" style={{ color: muted }}>
+                      {taskPasteReview.rows.filter((row) => !row.error && !row.skipped).length} ready
+                      {taskPasteReview.rows.some((row) => row.skipped)
+                        ? ` · ${taskPasteReview.rows.filter((row) => row.skipped).length} skipped`
+                        : ""}
+                    </p>
+                  </div>
+                  {taskPasteReview.missingColumns.length > 0 && (
+                    <p className="border-b px-3 py-2 text-[11px]" role="alert" style={{ borderColor: border, color: dark ? "#FECACA" : "#B91C1C" }}>
+                      Missing required columns: {taskPasteReview.missingColumns.join(", ")}.
+                    </p>
+                  )}
+                  <div className="max-h-80 overflow-auto">
+                    <table className="w-full min-w-[1180px] text-left">
+                      <thead className="sticky top-0" style={{ background: soft }}>
+                        <tr className="border-b text-[9px] font-bold uppercase tracking-wide" style={{ borderColor: border, color: muted }}>
+                          {["Row", "Task title", "Assigned to", "Planned start", "Planned end", "Actual start", "Actual end", "Progress", "Status", "Remarks", "Import check"].map((heading) => (
+                            <th key={heading} className="px-3 py-2">{heading}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {taskPasteReview.rows.map((row) => (
+                          <tr key={row.rowNumber} className="border-b align-top text-[10px]" style={{ borderColor: border, color: text }}>
+                            <td className="px-3 py-2 tabular-nums">{row.rowNumber}</td>
+                            <td className="max-w-56 whitespace-pre-wrap px-3 py-2">{row.taskTitle || "—"}</td>
+                            <td className="max-w-40 whitespace-pre-wrap px-3 py-2">{row.assignedTo || "—"}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{row.plannedStartDate || "—"}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{row.plannedEndDate || "—"}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{row.actualStartDate || "—"}</td>
+                            <td className="whitespace-nowrap px-3 py-2">{row.actualEndDate || "—"}</td>
+                            <td className="px-3 py-2 tabular-nums">{row.progress}%</td>
+                            <td className="px-3 py-2">{row.status || "—"}</td>
+                            <td className="max-w-48 whitespace-pre-wrap px-3 py-2">{row.remarks || "—"}</td>
+                            <td className="max-w-64 px-3 py-2" style={{ color: row.error ? (dark ? "#FCA5A5" : "#B91C1C") : muted }}>
+                              {row.error || (row.skipped ? "Skipped: task title is empty" : "Ready")}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t px-3 py-3" style={{ borderColor: border }}>
+                    <p className="text-[10px]" style={{ color: muted }}>
+                      {taskPasteReview.rows.some((row) => row.error)
+                        ? "Fix the highlighted task status or date errors in Excel, then paste the table again."
+                        : "No tasks are added until you confirm this import."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void importPastedTasks()}
+                      disabled={
+                        savingPastedTasks ||
+                        taskPasteReview.missingColumns.length > 0 ||
+                        taskPasteReview.rows.some((row) => row.error) ||
+                        !taskPasteReview.rows.some((row) => !row.error && !row.skipped)
+                      }
+                      className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ background: accent }}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      {savingPastedTasks ? "Importing…" : `Confirm import${taskPasteReview.rows.some((row) => !row.error && !row.skipped) ? ` (${taskPasteReview.rows.filter((row) => !row.error && !row.skipped).length})` : ""}`}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {showTaskForm && renderTaskForm()}
           {renderTaskTable(tasks, true)}
         </section>
@@ -1982,7 +2277,7 @@ export default function ProjectPage({
         </section>
       )}
 
-      {activeTab === "RFP" && (
+      {activeTab === "RFP Overview" && (
         <div className="space-y-5">
           <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
             <div className="border-b px-5 py-4" style={{ borderColor: border }}>

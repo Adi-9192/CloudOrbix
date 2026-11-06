@@ -30,6 +30,18 @@ test("parses named month date patterns and rejects invalid dates", () => {
     "2025-09-17T00:00:00.000Z",
   );
   assert.equal(
+    parseProjectUpdateDate("5th-Nov", 2025),
+    "2025-11-05T00:00:00.000Z",
+  );
+  assert.equal(
+    parseProjectUpdateDate("19-Oct-2027", 2025),
+    "2027-10-19T00:00:00.000Z",
+  );
+  assert.equal(
+    parseProjectUpdateDate("1st Nov", 2025),
+    "2025-11-01T00:00:00.000Z",
+  );
+  assert.equal(
     parseProjectUpdateDate("Oct 10, 2025"),
     "2025-10-10T00:00:00.000Z",
   );
@@ -58,6 +70,57 @@ test("splits pasted dated updates and keeps continuation lines", () => {
     {
       updateText: "According to process,\nraise the change request.",
       createdAt: "2025-09-07T00:00:00.000Z",
+    },
+  ]);
+});
+
+test("parses ordinal dates and ranges using the range start date", () => {
+  assert.deepEqual(
+    parseProjectUpdatesText("5-nov: Prepared the release.", 2025),
+    [
+      {
+        updateText: "Prepared the release.",
+        createdAt: "2025-11-05T00:00:00.000Z",
+      },
+    ],
+  );
+
+  const updates = parseProjectUpdatesText(
+    "5th-7th Nov: Implemented the deployment plan.\n5 Nov - 7 Nov: Completed validation.",
+    2025,
+  );
+
+  assert.deepEqual(updates, [
+    {
+      updateText: "Implemented the deployment plan.",
+      createdAt: "2025-11-05T00:00:00.000Z",
+      dateRange: "5th–7th Nov",
+    },
+    {
+      updateText: "Completed validation.",
+      createdAt: "2025-11-05T00:00:00.000Z",
+      dateRange: "5 Nov–7 Nov",
+    },
+  ]);
+});
+
+test("previews ordinal day-only dates for month selection", () => {
+  const updates = parseProjectUpdatesText(
+    "5th: Prepared the release.\n1st-3rd: Started the next sprint.",
+    2025,
+  );
+
+  assert.deepEqual(updates, [
+    {
+      updateText: "Prepared the release.",
+      createdAt: null,
+      dayOfMonth: 5,
+    },
+    {
+      updateText: "Started the next sprint.",
+      createdAt: null,
+      dayOfMonth: 1,
+      dateRange: "1st–3rd",
     },
   ]);
 });
