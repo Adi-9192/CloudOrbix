@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Active project completion percentages",
+    detail:
+      "Normalized fractional completion values in the active-project chart so values such as 0.06 display as 6%, consistent with project completion.",
+  },
+  {
     title: "Task selection and progress",
     detail:
       "Added select-all and bulk-delete actions to the Tasks tab and corrected progress display and project completion calculations when stored percentages use a 0–1 fraction.",

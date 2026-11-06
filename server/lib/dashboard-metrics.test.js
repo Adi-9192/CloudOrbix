@@ -82,6 +82,21 @@ test('returns each approved active project with its completion percentage', () =
   assert.equal(calculateDashboardActiveProjectCompletion(projects).length, calculateDashboardSummary(projects).activeProjects);
 });
 
+test('normalizes fractional completion values to percentages for all active projects', () => {
+  const projects = [
+    { id: 1, client_name: 'Curaleaf', current_status: 'On Hold', completion: 0.06 },
+    { id: 2, client_name: 'Fractional', current_status: 'On Track', completion: 0.5 },
+    { id: 3, client_name: 'Already percent', current_status: 'On Track', completion: 6 },
+    { id: 4, client_name: 'Fully complete', current_status: 'On Track', completion: 1 },
+  ];
+
+  assert.deepEqual(calculateDashboardActiveProjectCompletion(projects), [
+    { id: '2', name: 'Fractional', completion: 50 },
+    { id: '3', name: 'Already percent', completion: 6 },
+    { id: '1', name: 'Curaleaf', completion: 6 },
+  ]);
+});
+
 test('returns an empty active-project chart series if there are no active projects', () => {
   assert.deepEqual(calculateDashboardActiveProjectCompletion([
     { approval_status: 'approved', current_status: 'Completed', completion: 100 },
