@@ -150,6 +150,31 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Project overview layout",
+    detail:
+      "Reordered the project overview sidebar to show Overall completion, Project updates, Alerts, Temporary access manager, and Mandatory documents. Increased project page text by 15%, made the project brief height content-driven, and moved Tasks directly below Project details.",
+  },
+  {
+    title: "Risk and RFP dashboard typography",
+    detail:
+      "Increased text sizes by 20% in the Risk dashboard cards and RFP overview.",
+  },
+  {
+    title: "Dashboard typography and grouping",
+    detail:
+      "Increased text size by 20% in the Project overview and Active project completion sections. The Project pie chart can now be grouped by Status or Region only.",
+  },
+  {
+    title: "Dashboard chart sizing",
+    detail:
+      "Increased the Project and RFP dashboard pie charts by 25% and slightly reduced the dashboard's top padding.",
+  },
+  {
+    title: "Service offering header",
+    detail:
+      "Placed Cloud Professional Services above the Service Offering label on the landing page and reduced the header's top padding.",
+  },
+  {
     title: "Daily update import",
     detail:
       "Project Daily Updates can be imported from pasted dated notes or an Excel workbook. Review parsed updates before saving; recognized dates, including dates without a year using the selected year, are stored as each update's timestamp.",
@@ -162,6 +187,11 @@ const releaseNotes = [
   {
     title: "Project statuses and phases",
     detail: "Projects now use seven canonical statuses and a Phase dropdown. Excel imports normalize status and phase variants, and Project Type has been removed from active project and RFP screens.",
+  },
+  {
+    title: "Active project completion chart",
+    detail:
+      "The Project Dashboard includes one completion-progress bar per approved active project. It follows the selected project year, updates as the active project list changes, and excludes completed, cancelled, and 100%-complete projects.",
   },
   {
     title: "Dashboard project totals",

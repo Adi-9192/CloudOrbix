@@ -23,6 +23,13 @@ const projectBreakdownFields = {
   hyperscaler: (client) => normalizeHyperscaler(client.hyperscaler) || 'Unspecified',
 };
 
+const isActiveProject = (client) => {
+  const status = normalizedStatus(client.current_status ?? client.currentStatus);
+  return String(client.approval_status ?? client.approvalStatus ?? 'approved').toLowerCase() === 'approved' &&
+    !['completed', 'cancelled', 'canceled', 'offboarded'].includes(status) &&
+    Number(client.completion || 0) < 100;
+};
+
 export function calculateDashboardProjectBreakdown(clients = [], groupBy = 'status') {
   const getValue = projectBreakdownFields[groupBy];
   if (!getValue) throw new RangeError(`Unsupported project breakdown: ${groupBy}`);
@@ -45,9 +52,20 @@ export function calculateDashboardProjectBreakdown(clients = [], groupBy = 'stat
   return [...counts].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
 }
 
+export function calculateDashboardActiveProjectCompletion(clients = []) {
+  return clients
+    .filter(isActiveProject)
+    .map((client) => ({
+      id: String(client.id ?? client.client_id ?? client.clientId ?? client.client_name ?? client.clientName ?? ''),
+      name: String(client.client_name ?? client.clientName ?? client.name ?? client.client_id ?? client.clientId ?? 'Unnamed project'),
+      completion: Math.min(100, Math.max(0, Number(client.completion) || 0)),
+    }))
+    .sort((a, b) => b.completion - a.completion || a.name.localeCompare(b.name));
+}
+
 export function calculateDashboardSummary(clients = [], risks = []) {
   const approved = clients.filter(
-    (client) => String(client.approval_status || 'approved').toLowerCase() === 'approved',
+    (client) => String(client.approval_status ?? client.approvalStatus ?? 'approved').toLowerCase() === 'approved',
   );
   const totalRevenue = approved.reduce(
     (sum, client) => sum + Number(client.revenue || 0),
@@ -57,11 +75,7 @@ export function calculateDashboardSummary(clients = [], risks = []) {
     const status = normalizedStatus(client.current_status ?? client.currentStatus);
     return status === 'completed';
   }).length;
-  const activeProjects = approved.filter((client) => {
-    const status = normalizedStatus(client.current_status ?? client.currentStatus);
-    return !['completed', 'cancelled', 'canceled', 'offboarded'].includes(status) &&
-      Number(client.completion || 0) < 100;
-  }).length;
+  const activeProjects = approved.filter(isActiveProject).length;
   const activeRisks = risks.filter((risk) => {
     const status = normalizedStatus(risk.status);
     return !['completed', 'cancelled', 'canceled'].includes(status);

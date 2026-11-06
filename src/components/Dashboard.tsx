@@ -3,7 +3,8 @@ import {
   Users, Clock, AlertCircle, FolderKanban, AlertTriangle, ShieldAlert, CheckCircle2
 } from "lucide-react";
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  BarChart, Bar, CartesianGrid, XAxis, YAxis, LabelList,
 } from "recharts";
 import type { DashboardView } from "./Shell";
 
@@ -17,23 +18,20 @@ interface DashboardProps {
 const projectBreakdownOptions = [
   { value: "status", label: "Status" },
   { value: "region", label: "Region" },
-  { value: "hyperscaler", label: "Hyperscaler" },
 ] as const;
 const pieColorsByGroup = {
   status: ["#15803D", "#D97706", "#DC2626", "#7C3AED", "#2563EB", "#64748B", "#DB2777", "#0F766E"],
   region: ["#1D4ED8", "#0891B2", "#0F766E", "#65A30D", "#CA8A04", "#EA580C", "#C026D3", "#475569"],
-  hyperscaler: ["#2563EB", "#F97316", "#7C3AED", "#059669", "#DB2777", "#64748B", "#CA8A04", "#0F766E"],
 };
-
 const CustomTooltip = ({ active, payload, label, dark }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl shadow-xl px-4 py-3 text-xs border" style={{ background: dark ? "#1E293B" : "#fff", borderColor: dark ? "#334155" : "#E2E8F0", color: dark ? "#E2E8F0" : "#0F172A" }}>
+    <div className="rounded-xl shadow-xl px-4 py-3 text-[14.4px] border" style={{ background: dark ? "#1E293B" : "#fff", borderColor: dark ? "#334155" : "#E2E8F0", color: dark ? "#E2E8F0" : "#0F172A" }}>
       <div className="font-semibold mb-2">{label}</div>
       {payload.map((p: any) => (
         <div key={p.name} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-          <span>{p.name}: <strong>{p.value}</strong></span>
+          <span>{p.name}: <strong>{p.dataKey === "completion" ? `${p.value}%` : p.value}</strong></span>
         </div>
       ))}
     </div>
@@ -51,6 +49,7 @@ export default function Dashboard({
   const pieColors = pieColorsByGroup[projectGroupBy];
   const [summary, setSummary] = useState({ totalClients: 0, activeProjects: 0, completedProjects: 0, delayedProjectsExternal: 0, delayedProjectsInternal: 0, totalRisks: 0, openRisks: 0 });
   const [projectBreakdown, setProjectBreakdown] = useState<{ name: string; value: number }[]>([]);
+  const [activeProjectCompletion, setActiveProjectCompletion] = useState<{ id: string; name: string; completion: number }[]>([]);
   const [rfpBreakdown, setRfpBreakdown] = useState<{ name: string; value: number; revenueInr: number }[]>([]);
   const [dashboardError, setDashboardError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -71,6 +70,7 @@ export default function Dashboard({
         setLastUpdated(new Date());
         setSummary(payload.summary);
         setProjectBreakdown(payload.projectBreakdown || []);
+        setActiveProjectCompletion(payload.activeProjectCompletion || []);
         setRfpBreakdown(payload.rfpBreakdown || []);
       })
       .catch((error) => {
@@ -224,7 +224,7 @@ export default function Dashboard({
   const pageBg = dark ? "#0F172A" : "#F1F5F9";
 
   return (
-    <div className="min-h-screen p-6 space-y-6" style={{ color: text, background: pageBg }}>
+    <div className="min-h-screen space-y-6 p-6 pt-4" style={{ color: text, background: pageBg }}>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-[25px] font-bold">
@@ -297,14 +297,14 @@ export default function Dashboard({
         {projectBreakdown.length ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3">
             <div className="relative w-full">
-            <ResponsiveContainer width="100%" height={340}>
+            <ResponsiveContainer width="100%" height={425}>
               <PieChart>
                 <Pie
                   data={projectBreakdown}
                   dataKey="value"
                   nameKey="name"
-                  innerRadius={68}
-                  outerRadius={112}
+                  innerRadius={85}
+                  outerRadius={140}
                   paddingAngle={3}
                 >
                   {projectBreakdown.map((item, index) => (
@@ -339,7 +339,7 @@ export default function Dashboard({
       </section>
 
       <section aria-labelledby="dashboard-projects-heading" className="flex min-h-[560px] flex-col gap-3">
-        <h2 id="dashboard-projects-heading" className="text-[17.5px] font-semibold">Project overview</h2>
+        <h2 id="dashboard-projects-heading" className="text-[21px] font-semibold">Project overview</h2>
         <div className="grid flex-1 grid-rows-5 gap-2">
         {projectOverviewCards.map((card) => {
           const Icon = card.icon;
@@ -351,13 +351,13 @@ export default function Dashboard({
                     <Icon className="h-4 w-4" aria-hidden="true" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[15px] font-semibold" style={{ color: text }}>{card.title}</span>
-                    <span className="mt-0.5 block truncate text-[12.5px]" style={{ color: muted }}>{card.subtitle}</span>
+                    <span className="block text-[18px] font-semibold" style={{ color: text }}>{card.title}</span>
+                    <span className="mt-0.5 block truncate text-[15px]" style={{ color: muted }}>{card.subtitle}</span>
                   </span>
                 </div>
                 <span className="shrink-0 text-right">
-                  <span className="block text-[30px] font-bold leading-none" style={{ color: text }}>{card.value}</span>
-                  <span className="mt-1 block text-[11.25px]" style={{ color: muted }}>Live</span>
+                  <span className="block text-[36px] font-bold leading-none" style={{ color: text }}>{card.value}</span>
+                  <span className="mt-1 block text-[13.5px]" style={{ color: muted }}>Live</span>
                 </span>
               </div>
             </button>
@@ -366,6 +366,75 @@ export default function Dashboard({
         </div>
       </section>
       </div>}
+
+      {view === "project" && (
+        <section
+          aria-labelledby="dashboard-active-projects-heading"
+          className="rounded-xl border p-5"
+          style={{ background: bg, borderColor: border, boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)" }}
+        >
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 id="dashboard-active-projects-heading" className="text-[21px] font-semibold">
+                Active project completion
+              </h2>
+              <p className="mt-0.5 text-[18px]" style={{ color: muted }}>
+                {selectedYear === "all" ? "All project years" : `Project year ${selectedYear}`} · Completion progress for each active project
+              </p>
+            </div>
+            <span className="rounded-full px-3 py-1 text-[15.6px] font-semibold" style={{ background: dark ? "#1E3A5F" : "#DBEAFE", color: dark ? "#BFDBFE" : "#1E40AF" }}>
+              {activeProjectCompletion.length} active
+            </span>
+          </div>
+          {activeProjectCompletion.length ? (
+            <div className="max-h-[520px] overflow-y-auto pr-2">
+              <ResponsiveContainer width="100%" height={Math.max(240, activeProjectCompletion.length * 40)}>
+                <BarChart
+                  data={activeProjectCompletion}
+                  layout="vertical"
+                  margin={{ top: 4, right: 36, bottom: 4, left: 8 }}
+                  barCategoryGap={10}
+                >
+                  <CartesianGrid horizontal={false} stroke={dark ? "#334155" : "#E2E8F0"} />
+                  <XAxis
+                    type="number"
+                    domain={[0, 100]}
+                    ticks={[0, 25, 50, 75, 100]}
+                    tickFormatter={(value: number) => `${value}%`}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 14.4, fill: muted }}
+                    stroke={muted}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={250}
+                    interval={0}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 14.4, fill: text }}
+                  />
+                  <Tooltip content={<CustomTooltip dark={dark} />} cursor={{ fill: dark ? "#334155" : "#F1F5F9", opacity: 0.7 }} />
+                  <Bar dataKey="completion" name="Completion" radius={[0, 7, 7, 0]} maxBarSize={28}>
+                    {activeProjectCompletion.map((project) => (
+                      <Cell
+                        key={project.id || project.name}
+                        fill={project.completion >= 75 ? "#1E40AF" : project.completion >= 50 ? "#2563EB" : project.completion >= 25 ? "#3B82F6" : "#60A5FA"}
+                      />
+                    ))}
+                    <LabelList dataKey="completion" position="right" formatter={(value: number) => `${value}%`} fill={text} fontSize={14.4} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="text-center text-sm" style={{ color: muted }}>
+              No active projects for this year.
+            </p>
+          )}
+        </section>
+      )}
 
       {view === "rfp" && <div className="grid items-stretch gap-4 md:grid-cols-2">
         <section
@@ -381,14 +450,14 @@ export default function Dashboard({
           </div>
           {rfpBreakdown.length ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3">
-              <ResponsiveContainer width="100%" height={340}>
+              <ResponsiveContainer width="100%" height={425}>
                 <PieChart>
                   <Pie
                     data={rfpBreakdown}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={68}
-                    outerRadius={112}
+                    innerRadius={85}
+                    outerRadius={140}
                     paddingAngle={2}
                   >
                     {rfpBreakdown.map((item, index) => (
@@ -416,7 +485,7 @@ export default function Dashboard({
         </section>
 
         <section aria-labelledby="dashboard-rfp-overview-heading" className="flex min-h-[560px] flex-col gap-3">
-          <h2 id="dashboard-rfp-overview-heading" className="text-[17.5px] font-semibold">RFP overview</h2>
+          <h2 id="dashboard-rfp-overview-heading" className="text-[21px] font-semibold">RFP overview</h2>
           {rfpBreakdown.length > 0 ? (
             <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-1">
               {rfpBreakdown.map((item, index) => (
@@ -427,23 +496,23 @@ export default function Dashboard({
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: pieColorsByGroup.status[index % pieColorsByGroup.status.length] }} />
-                    <span className="text-[15px] font-semibold" style={{ color: text }}>{item.name} RFP revenue</span>
+                    <span className="text-[18px] font-semibold" style={{ color: text }}>{item.name} RFP revenue</span>
                   </div>
                   <span className="shrink-0 text-right">
-                    <span className="block text-[25px] font-bold leading-tight" style={{ color: text }}>
+                    <span className="block text-[30px] font-bold leading-tight" style={{ color: text }}>
                       {new Intl.NumberFormat("en-IN", {
                         style: "currency",
                         currency: "INR",
                         maximumFractionDigits: 0,
                       }).format(item.revenueInr)}
                     </span>
-                    <span className="mt-0.5 block text-[12.5px]" style={{ color: muted }}>{item.value} RFPs</span>
+                    <span className="mt-0.5 block text-[15px]" style={{ color: muted }}>{item.value} RFPs</span>
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="rounded-xl border p-4 text-[15px]" style={{ background: bg, borderColor: border, color: muted }}>
+            <p className="rounded-xl border p-4 text-[18px]" style={{ background: bg, borderColor: border, color: muted }}>
               No RFPs for this year.
             </p>
           )}
@@ -451,7 +520,7 @@ export default function Dashboard({
       </div>}
 
       {view === "risk" && <section aria-labelledby="dashboard-risks-heading" className="space-y-3">
-        <h2 id="dashboard-risks-heading" className="text-[17.5px] font-semibold">Risks</h2>
+        <h2 id="dashboard-risks-heading" className="text-[21px] font-semibold">Risks</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {kpiCards.slice(5).map((card) => {
             const Icon = card.icon;
@@ -463,13 +532,13 @@ export default function Dashboard({
                       <Icon className="h-4 w-4" aria-hidden="true" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-[15px] font-semibold" style={{ color: text }}>{card.title}</span>
-                      <span className="mt-0.5 block text-[12.5px]" style={{ color: muted }}>{card.subtitle}</span>
+                      <span className="block text-[18px] font-semibold" style={{ color: text }}>{card.title}</span>
+                      <span className="mt-0.5 block text-[15px]" style={{ color: muted }}>{card.subtitle}</span>
                     </span>
                   </div>
                   <span className="shrink-0 text-right">
-                    <span className="block text-[30px] font-bold leading-none" style={{ color: text }}>{card.value}</span>
-                    <span className="mt-1 block text-[11.25px]" style={{ color: muted }}>Live</span>
+                    <span className="block text-[36px] font-bold leading-none" style={{ color: text }}>{card.value}</span>
+                    <span className="mt-1 block text-[13.5px]" style={{ color: muted }}>Live</span>
                   </span>
                 </div>
               </button>
