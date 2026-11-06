@@ -4,6 +4,7 @@ import { protectRoute, requireRole } from '../middleware/auth.js';
 import { buildPeriods, periodAllocationKey } from '../lib/rfp-periods.js';
 import { buildRfpWorkbook } from '../lib/rfp-export.js';
 import { normalizeProjectName } from '../../shared/project-name.js';
+import { buildRfpCodeBase } from '../../shared/rfp-code.js';
 import { HYPERSCALERS, normalizeHyperscaler } from '../../shared/hyperscalers.js';
 
 const router = express.Router();
@@ -376,7 +377,7 @@ router.get('/projects', async (req, res, next) => {
   const pool = requireDatabase(res);
   if (!pool) return;
   try {
-    const result = await pool.query('SELECT p.id, p.project_name, p.client_name, p.[year], p.currency_code, p.status, p.project_status, p.initiated_at, p.requested_date, p.region, p.cloud, p.request_from_by, p.requestor_email, p.duration_months, p.duration_days, p.project_overview, p.assumption, p.out_of_scope, p.in_scope, p.updated_at, s.grand_total_inr, s.selected_currency_total FROM rfp_projects p LEFT JOIN rfp_cost_summary s ON s.project_id = p.id ORDER BY p.updated_at DESC');
+    const result = await pool.query('SELECT p.id, p.rfp_code, p.project_name, p.client_name, p.[year], p.currency_code, p.status, p.project_status, p.initiated_at, p.requested_date, p.region, p.cloud, p.request_from_by, p.requestor_email, p.duration_months, p.duration_days, p.project_overview, p.assumption, p.out_of_scope, p.in_scope, p.updated_at, s.grand_total_inr, s.selected_currency_total FROM rfp_projects p LEFT JOIN rfp_cost_summary s ON s.project_id = p.id ORDER BY p.updated_at DESC');
     return res.json({
       projects: result.rows.map((project) => ({
         ...project,
@@ -569,7 +570,29 @@ async function persistProject(pool, userId, data, status, existingId = null, exc
     values.push(existingId);
     sql.push('UPDATE rfp_projects SET project_name = $1, client_name = $2, [year] = $3, currency_code = $4, start_month = $5, end_month = $6, allowance_percent = $7, working_days_per_month = $8, end_month_half_month = $9, notes = $10, status = $11, updated_by = $12, project_type = COALESCE($13, project_type), project_status = $14, request_from_by = $15, requestor_email = $16, requested_date = $17, region = $18, cloud = $19, project_overview = $20, assumption = $21, out_of_scope = $22, in_scope = $23, duration_months = $24, duration_days = $25, initiated_at = CASE WHEN $14 = N\'Project Initiated\' AND (project_status <> N\'Project Initiated\' OR initiated_at IS NULL) THEN COALESCE(initiated_at, $26) ELSE initiated_at END, direct_entry = $27, direct_budget = $28, updated_at = SYSUTCDATETIME() WHERE id = $29; IF @@ROWCOUNT = 0 THROW 50001, \'Estimate not found\', 1; DELETE FROM rfp_resources WHERE project_id = $29;');
   } else {
-    sql.push('DECLARE @newProjectId INT; INSERT INTO rfp_projects (project_name, client_name, [year], currency_code, start_month, end_month, allowance_percent, working_days_per_month, end_month_half_month, notes, status, created_by, updated_by, project_type, project_status, request_from_by, requestor_email, requested_date, region, cloud, project_overview, assumption, out_of_scope, in_scope, duration_months, duration_days, initiated_at, direct_entry, direct_budget) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28); SET @newProjectId = CAST(SCOPE_IDENTITY() AS INT);');
+    const codeBase = buildRfpCodeBase(data.accountName, data.requestedDate);
+    if (!codeBase) {
+      throw Object.assign(new Error('The project name and requested date cannot be used to generate an RFP code.'), { status: 400 });
+    }
+    values.push(codeBase);
+    sql.push(`DECLARE @newProjectId INT;
+      DECLARE @rfpLockResult INT;
+      EXEC @rfpLockResult = sys.sp_getapplock
+        @Resource = $29,
+        @LockMode = 'Exclusive',
+        @LockOwner = 'Transaction',
+        @LockTimeout = 10000;
+      IF @rfpLockResult < 0 THROW 50002, 'Unable to reserve an RFP code. Please try again.', 1;
+      DECLARE @rfpCode NVARCHAR(100) = $29;
+      DECLARE @rfpSequence INT = 1;
+      WHILE EXISTS (SELECT 1 FROM rfp_projects WITH (UPDLOCK, HOLDLOCK) WHERE rfp_code = @rfpCode)
+      BEGIN
+        SET @rfpSequence = @rfpSequence + 1;
+        SET @rfpCode = $29 + N'_' + CONVERT(NVARCHAR(10), @rfpSequence);
+      END;
+      INSERT INTO rfp_projects (rfp_code, project_name, client_name, [year], currency_code, start_month, end_month, allowance_percent, working_days_per_month, end_month_half_month, notes, status, created_by, updated_by, project_type, project_status, request_from_by, requestor_email, requested_date, region, cloud, project_overview, assumption, out_of_scope, in_scope, duration_months, duration_days, initiated_at, direct_entry, direct_budget)
+      VALUES (@rfpCode, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28);
+      SET @newProjectId = CAST(SCOPE_IDENTITY() AS INT);`);
   }
   const projectRef = existingId ? '$29' : '@newProjectId';
   let allocationParameters = values.length + 1;
@@ -594,10 +617,12 @@ async function persistProject(pool, userId, data, status, existingId = null, exc
   sql.push(`MERGE rfp_cost_summary AS target USING (SELECT ${projectRef} AS project_id) AS source ON target.project_id = source.project_id WHEN MATCHED THEN UPDATE SET base_cost_inr = $${allocationParameters}, allowance_cost_inr = $${allocationParameters + 1}, grand_total_inr = $${allocationParameters + 2}, selected_currency_total = $${allocationParameters + 3}, exchange_rate = $${allocationParameters + 4}, updated_at = SYSUTCDATETIME() WHEN NOT MATCHED THEN INSERT (project_id, base_cost_inr, allowance_cost_inr, grand_total_inr, selected_currency_total, exchange_rate) VALUES (source.project_id, $${allocationParameters}, $${allocationParameters + 1}, $${allocationParameters + 2}, $${allocationParameters + 3}, $${allocationParameters + 4});`);
   sql.push(`UPDATE clients SET revenue = $${allocationParameters + 3}, currency_code = $${allocationParameters + 5}, project_overview = $${allocationParameters + 6}, assumption = $${allocationParameters + 7}, out_of_scope = $${allocationParameters + 8}, in_scope = $${allocationParameters + 9}, updated_at = SYSUTCDATETIME() WHERE rfp_project_id = ${projectRef};`);
   values.push(baseCost, allowanceCost, grandTotal, currencyTotal, exchangeRate, data.currency, data.projectOverview || null, data.assumption || null, data.outOfScope || null, data.inScope || null);
-  sql.push(existingId ? 'SELECT $29 AS id;' : 'SELECT @newProjectId AS id;');
+  sql.push(existingId
+    ? 'SELECT $29 AS id, (SELECT rfp_code FROM rfp_projects WHERE id = $29) AS rfp_code;'
+    : 'SELECT @newProjectId AS id, @rfpCode AS rfp_code;');
   const batch = `BEGIN TRY BEGIN TRANSACTION; ${sql.join('\n')} COMMIT TRANSACTION; END TRY BEGIN CATCH IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION; THROW; END CATCH;`;
   const result = await pool.query(batch, values);
-  return { id: existingId || result.rows[0]?.id, status, initiatedAt, summary: { baseCostInr: baseCost, allowanceCostInr: allowanceCost, grandTotalInr: grandTotal, selectedCurrencyTotal: currencyTotal, exchangeRate } };
+  return { id: existingId || result.rows[0]?.id, rfpCode: result.rows[0]?.rfp_code, status, initiatedAt, summary: { baseCostInr: baseCost, allowanceCostInr: allowanceCost, grandTotalInr: grandTotal, selectedCurrencyTotal: currencyTotal, exchangeRate } };
 }
 
 async function notifyRfpAdmins(requestId, requestType, projectName, requester) {

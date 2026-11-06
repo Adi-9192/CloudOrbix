@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { normalizeProjectName } from "../../shared/project-name.js";
+import { buildRfpCodeBase } from "../../shared/rfp-code.js";
 import { PROJECT_REGIONS } from "../../shared/regions.js";
 import { HYPERSCALERS, normalizeHyperscaler } from "../../shared/hyperscalers.js";
 import {
@@ -37,6 +38,7 @@ type ResourceRow = {
 type ResourcePlanTab = "monthly" | "daily";
 type Estimate = {
   id: number;
+  rfpCode: string;
   accountName: string;
   year: number;
   currency: string;
@@ -161,6 +163,7 @@ const blankResource = (planType: ResourcePlanType = "monthly"): ResourceRow => (
 const emptyEstimate = (): Estimate => {
   return {
     id: 0,
+    rfpCode: "",
     accountName: "",
     year: new Date().getFullYear(),
     currency: "INR",
@@ -256,6 +259,7 @@ const restoreEstimateDraft = (value: unknown): Estimate => {
   return {
     ...emptyEstimate(),
     ...stored,
+    rfpCode: String(stored.rfpCode || ""),
     accountName: String(stored.accountName || stored.projectName || ""),
     year: Number(stored.year) || new Date().getFullYear(),
     currency: String(stored.currency || "INR"),
@@ -310,6 +314,7 @@ export default function RfpEstimation({
   const [estimates, setEstimates] = useState<
     Array<{
       id: number;
+      rfp_code: string;
       project_name: string;
       client_name: string;
       year: number;
@@ -812,6 +817,7 @@ export default function RfpEstimation({
       sessionStorage.removeItem(`clmp-rfp-draft-${userId}`);
       setEstimate({
         id: project.id,
+        rfpCode: project.rfp_code || "",
         accountName: project.project_name,
         year: Number(project.year),
         currency: project.currency_code,
@@ -961,7 +967,12 @@ export default function RfpEstimation({
         sessionStorage.removeItem(`clmp-rfp-draft-${userId}`);
         setMessage("Estimate submitted for administrator approval.");
       } else {
-        setEstimate((current) => ({ ...current, id: result.id, status }));
+        setEstimate((current) => ({
+          ...current,
+          id: result.id,
+          rfpCode: result.rfpCode || current.rfpCode,
+          status,
+        }));
         setMessage("Estimate saved.");
       }
       const projects = await api("/projects");
@@ -1528,6 +1539,7 @@ export default function RfpEstimation({
                     </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <label className="text-xs font-semibold" style={labelStyle}>RFP Code{!estimate.rfpCode && " (preview)"}<input className={`${inputClass} mt-1`} style={inputStyle} value={estimate.rfpCode || buildRfpCodeBase(estimate.accountName, estimate.requestedDate)} readOnly aria-readonly="true" /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Account Name<input className={`${inputClass} mt-1`} style={inputStyle} value={estimate.accountName} onChange={(event) => patchEstimate({ accountName: event.target.value })} /></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Status<select className={`${inputClass} mt-1`} style={inputStyle} value={estimate.projectStatus} onChange={(event) => patchEstimate({ projectStatus: event.target.value })}>{["Tentative", "Completed", "Project Initiated", "Cancelled", "In Discussion", "Firm"].map((status) => <option key={status}>{status}</option>)}</select></label>
                     <label className="text-xs font-semibold" style={labelStyle}>Request From/By<input className={`${inputClass} mt-1`} style={inputStyle} value={estimate.requestFromBy} onChange={(event) => patchEstimate({ requestFromBy: event.target.value })} /></label>
@@ -2001,10 +2013,11 @@ export default function RfpEstimation({
                   >
                     <h2 className="text-sm font-bold">Estimate register</h2>
                     <div className="mt-3 overflow-x-auto">
-                      <table id="rfp-estimate-register-table" className="w-full min-w-[520px] text-left text-xs">
+                      <table id="rfp-estimate-register-table" className="w-full min-w-[660px] text-left text-xs">
                         <thead>
                           <tr style={{ color: muted }}>
                             <th className="py-2">Account Name</th>
+                            <th className="py-2">RFP Code</th>
                             <th className="py-2">Year</th>
                             <th className="py-2">Status</th>
                             <th className="py-2 text-right">Grand total INR</th>
@@ -2027,6 +2040,7 @@ export default function RfpEstimation({
                                   {item.project_name}
                                 </button>
                               </td>
+                              <td className="font-mono">{item.rfp_code || "—"}</td>
                               <td>{item.year}</td>
                               <td>{item.project_status}</td>
                               <td className="text-right tabular-nums">
@@ -2091,7 +2105,7 @@ export default function RfpEstimation({
                           {!estimates.length && (
                             <tr>
                               <td
-                                colSpan={5}
+                                colSpan={6}
                                 className="py-5 text-center"
                                 style={{ color: muted }}
                               >
