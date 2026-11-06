@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "RFP details on project pages",
+    detail:
+      "Project RFP Overview now shows account name, RFP code, requested date, region, and related estimate details from the linked estimate. Missing RFP values remain blank, and In scope, Out of scope, and Assumptions stack vertically.",
+  },
+  {
     title: "Consistent project task dates",
     detail:
       "Task imports and task forms now normalize dates before saving. Dates without a year use the project's start year, while invalid dates are identified by row and block the entire import.",

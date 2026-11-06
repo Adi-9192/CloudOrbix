@@ -95,6 +95,28 @@ type Project = {
   }[];
   voumetric?: number | null;
   rfp_project_id?: number | null;
+  rfpDetails?: {
+    id: number;
+    code?: string | null;
+    projectName?: string | null;
+    estimateStatus?: string | null;
+    projectStatus?: string | null;
+    requestFromBy?: string | null;
+    requestorEmail?: string | null;
+    requestedDate?: string | null;
+    region?: string | null;
+    cloud?: string | null;
+    year?: number | null;
+    currencyCode?: string | null;
+    durationMonths?: number | null;
+    durationDays?: number | null;
+    allowancePercent?: number | null;
+    projectOverview?: string | null;
+    inScope?: string | null;
+    outOfScope?: string | null;
+    assumption?: string | null;
+    revenue?: number | string | null;
+  } | null;
 };
 
 type Task = {
@@ -1044,8 +1066,49 @@ export default function ProjectPage({
   const revenue = Number(project.revenue || 0);
   const recoveryPercentage = Number(project.revenue_recovery_percentage || 0);
   const recovery = calculateRevenueRecovery(revenue, recoveryPercentage);
-  const manager = project.project_manager || project.account_manager || "Unassigned";
   const projectStatus = normalizeProjectStatus(project.current_status);
+  const linkedRfp = project.rfpDetails;
+  const rfpOverview = linkedRfp
+    ? linkedRfp.projectOverview?.trim() || ""
+    : project.project_overview?.trim() || "";
+  const rfpInScope = linkedRfp
+    ? linkedRfp.inScope?.trim() || ""
+    : project.in_scope?.trim() || "";
+  const rfpOutOfScope = linkedRfp
+    ? linkedRfp.outOfScope?.trim() || ""
+    : project.out_of_scope?.trim() || "";
+  const rfpAssumptions = linkedRfp
+    ? linkedRfp.assumption?.trim() || ""
+    : project.assumption?.trim() || "";
+  const rfpMonths = Number(linkedRfp?.durationMonths || 0);
+  const rfpDays = Number(linkedRfp?.durationDays || 0);
+  const rfpDuration = [
+    rfpMonths > 0 ? `${rfpMonths} month${rfpMonths === 1 ? "" : "s"}` : "",
+    rfpDays > 0 ? `${rfpDays} day${rfpDays === 1 ? "" : "s"}` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const rfpRevenue = Number(linkedRfp?.revenue);
+  const rfpDetailRows: [string, string][] = [
+    ["Account name", linkedRfp?.projectName?.trim() || ""],
+    ["RFP code", linkedRfp?.code?.trim() || ""],
+    ["Region", linkedRfp?.region?.trim() || ""],
+    ["Request from/by", linkedRfp?.requestFromBy?.trim() || ""],
+    ["Hyperscaler", normalizeHyperscaler(linkedRfp?.cloud) || ""],
+    ["Year", linkedRfp?.year ? String(linkedRfp.year) : ""],
+    ["Duration", rfpDuration],
+    [
+      "Estimated revenue",
+      Number.isFinite(rfpRevenue) && linkedRfp?.currencyCode
+        ? new Intl.NumberFormat("en-IN", {
+            style: "currency",
+            currency: linkedRfp.currencyCode,
+            maximumFractionDigits: 2,
+          }).format(rfpRevenue)
+        : "",
+    ],
+  ];
+  const manager = project.project_manager || project.account_manager || "Unassigned";
   const currentUserName = `${user.firstName || ""} ${user.lastName || ""}`.trim().toLowerCase();
   const primaryManagerIdentities = [project.project_manager, project.account_manager]
     .filter(Boolean)
@@ -2282,42 +2345,53 @@ export default function ProjectPage({
           <section className="overflow-hidden rounded-xl border" style={sectionStyle}>
             <div className="border-b px-5 py-4" style={{ borderColor: border }}>
               <h2 className="text-sm font-bold">RFP overview & scope</h2>
-              <p className="mt-1 text-[11px]" style={{ color: muted }}>Commercial context and scope saved with this project</p>
+              <p className="mt-1 text-[11px]" style={{ color: muted }}>
+                {linkedRfp
+                  ? `Details from RFP ${linkedRfp.code || `#${linkedRfp.id}`}`
+                  : "Commercial context and scope saved with this project"}
+              </p>
             </div>
-            <div className="grid divide-y lg:grid-cols-[1.4fr_1fr] lg:divide-x lg:divide-y-0" style={{ borderColor: border }}>
+            <div
+              className={rfpOverview
+                ? "grid divide-y lg:grid-cols-[1.4fr_1fr] lg:divide-x lg:divide-y-0"
+                : "block"}
+              style={{ borderColor: border }}
+            >
+              {rfpOverview && (
+                <div className="p-5">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: accent }}>Opportunity overview</h3>
+                  <p className="mt-3 whitespace-pre-wrap text-xs leading-6" style={{ color: text }}>
+                    {rfpOverview}
+                  </p>
+                </div>
+              )}
               <div className="p-5">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: accent }}>Opportunity overview</h3>
-                <p className="mt-3 whitespace-pre-wrap text-xs leading-6" style={{ color: project.project_overview ? text : muted }}>
-                  {project.project_overview || "No RFP overview has been saved for this project."}
-                </p>
+                {rfpDetailRows.length > 0 ? (
+                  <dl className="space-y-3.5">
+                    {rfpDetailRows.map(([label, value]) => (
+                      <div key={label} className="flex items-start justify-between gap-4">
+                        <dt className="text-[11px]" style={{ color: muted }}>{label}</dt>
+                        <dd className="text-right text-[11px] font-semibold">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="text-xs" style={{ color: muted }}>
+                    No linked RFP details have been saved.
+                  </p>
+                )}
               </div>
-              <dl className="space-y-3.5 p-5">
-                {[
-                  ["RFP reference", project.rfp_project_id || "—"],
-                  ["Phase", normalizeProjectPhase(project.phase) || "—"],
-                  ["Service category", project.service_category || "—"],
-                  ["Hyperscaler", normalizeHyperscaler(project.hyperscaler) || "—"],
-                  ["Proposal owner", project.account_manager || "—"],
-                  ["Revenue", formatCurrency(revenue)],
-                  ["Status", projectStatus],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex items-start justify-between gap-4">
-                    <dt className="text-[11px]" style={{ color: muted }}>{label}</dt>
-                    <dd className="text-right text-[11px] font-semibold">{value}</dd>
-                  </div>
-                ))}
-              </dl>
             </div>
           </section>
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="space-y-5">
             {[
-              { title: "In scope", content: project.in_scope, icon: Check, color: "#16A34A" },
-              { title: "Out of scope", content: project.out_of_scope, icon: X, color: "#DC2626" },
+              { title: "In scope", content: rfpInScope, icon: Check, color: "#16A34A" },
+              { title: "Out of scope", content: rfpOutOfScope, icon: X, color: "#DC2626" },
             ].map((item) => (
               <section key={item.title} className="rounded-xl border p-5" style={sectionStyle}>
                 <h3 className="text-sm font-bold">{item.title}</h3>
                 <div className="mt-4 space-y-3">
-                  {item.content?.trim() ? item.content.split(/\r?\n/).filter(Boolean).map((line, index) => (
+                  {item.content ? item.content.split(/\r?\n/).filter(Boolean).map((line, index) => (
                     <p key={`${item.title}-${index}`} className="flex gap-2 text-xs leading-5" style={{ color: text }}>
                       <item.icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: item.color }} />
                       {line.replace(/^\s*[-•]\s*/, "")}
@@ -2326,20 +2400,20 @@ export default function ProjectPage({
                 </div>
               </section>
             ))}
+            <section className="rounded-xl border p-5" style={sectionStyle}>
+              <h3 className="text-sm font-bold">Assumptions</h3>
+              <div className="mt-4 space-y-3">
+                {rfpAssumptions
+                  ? rfpAssumptions.split(/\r?\n/).filter(Boolean).map((line, index) => (
+                      <p key={index} className="flex gap-3 rounded-lg p-3 text-xs leading-5" style={{ background: soft, color: text }}>
+                        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[9px] font-bold" style={{ color: accent, background: `${accent}18` }}>{index + 1}</span>
+                        {line.replace(/^\s*[-•]\s*/, "")}
+                      </p>
+                    ))
+                  : <p className="text-xs" style={{ color: muted }}>No assumptions have been saved for this project.</p>}
+              </div>
+            </section>
           </div>
-          <section className="rounded-xl border p-5" style={sectionStyle}>
-            <h3 className="text-sm font-bold">Assumptions</h3>
-            <div className="mt-4 space-y-3">
-              {project.assumption?.trim()
-                ? project.assumption.split(/\r?\n/).filter(Boolean).map((line, index) => (
-                    <p key={index} className="flex gap-3 rounded-lg p-3 text-xs leading-5" style={{ background: soft, color: text }}>
-                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[9px] font-bold" style={{ color: accent, background: `${accent}18` }}>{index + 1}</span>
-                      {line.replace(/^\s*[-•]\s*/, "")}
-                    </p>
-                  ))
-                : <p className="text-xs" style={{ color: muted }}>No assumptions have been saved for this project.</p>}
-            </div>
-          </section>
         </div>
       )}
     </div>

@@ -29,12 +29,34 @@ async function projectFor(clientId) {
   const pool = getPool();
   const result = await pool.query(`
     SELECT c.*,
+      rfp.id linked_rfp_id,
+      rfp.rfp_code linked_rfp_code,
+      rfp.project_name linked_rfp_project_name,
+      rfp.status linked_rfp_estimate_status,
+      rfp.project_status linked_rfp_project_status,
+      rfp.request_from_by linked_rfp_request_from_by,
+      rfp.requestor_email linked_rfp_requestor_email,
+      rfp.requested_date linked_rfp_requested_date,
+      rfp.region linked_rfp_region,
+      rfp.cloud linked_rfp_cloud,
+      rfp.[year] linked_rfp_year,
+      rfp.currency_code linked_rfp_currency_code,
+      rfp.duration_months linked_rfp_duration_months,
+      rfp.duration_days linked_rfp_duration_days,
+      rfp.allowance_percent linked_rfp_allowance_percent,
+      rfp.project_overview linked_rfp_project_overview,
+      rfp.in_scope linked_rfp_in_scope,
+      rfp.out_of_scope linked_rfp_out_of_scope,
+      rfp.assumption linked_rfp_assumption,
+      rfp_cost.selected_currency_total linked_rfp_revenue,
       COALESCE((SELECT AVG(t.progress) FROM project_tasks t WHERE t.client_id = c.id), c.completion, 0) project_progress,
       (SELECT STRING_AGG(u.email, ',')
        FROM project_temporary_access ta
        JOIN users u ON u.id = ta.manager_user_id
        WHERE ta.client_id = c.id AND ta.status = 'approved' AND u.is_active = 1) temporary_manager_emails
     FROM clients c
+    LEFT JOIN rfp_projects rfp ON rfp.id = c.rfp_project_id
+    LEFT JOIN rfp_cost_summary rfp_cost ON rfp_cost.project_id = rfp.id
     WHERE c.client_id = $1 OR c.id = TRY_CONVERT(INT, $1)
     ORDER BY CASE WHEN c.client_id = $1 THEN 0 ELSE 1 END
   `, [clientId]);
@@ -56,6 +78,30 @@ async function projectFor(clientId) {
   ]);
   return {
     ...project,
+    rfpDetails: project.linked_rfp_id
+      ? {
+          id: project.linked_rfp_id,
+          code: project.linked_rfp_code,
+          projectName: project.linked_rfp_project_name,
+          estimateStatus: project.linked_rfp_estimate_status,
+          projectStatus: project.linked_rfp_project_status,
+          requestFromBy: project.linked_rfp_request_from_by,
+          requestorEmail: project.linked_rfp_requestor_email,
+          requestedDate: project.linked_rfp_requested_date,
+          region: project.linked_rfp_region,
+          cloud: project.linked_rfp_cloud,
+          year: project.linked_rfp_year,
+          currencyCode: project.linked_rfp_currency_code,
+          durationMonths: project.linked_rfp_duration_months,
+          durationDays: project.linked_rfp_duration_days,
+          allowancePercent: project.linked_rfp_allowance_percent,
+          projectOverview: project.linked_rfp_project_overview,
+          inScope: project.linked_rfp_in_scope,
+          outOfScope: project.linked_rfp_out_of_scope,
+          assumption: project.linked_rfp_assumption,
+          revenue: project.linked_rfp_revenue,
+        }
+      : null,
     services: services.rows.map((service) => service.name),
     resources: resources.rows.map((resource) => ({
       resourceName: resource.resource_name,
