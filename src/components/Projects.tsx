@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import {
   Search,
@@ -434,6 +434,16 @@ export default function Projects({
   newProjectSeed,
   onProjectSeedConsumed,
 }: ClientsProps) {
+  const projectTableDragRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    startScrollLeft: number
+    dragging: boolean
+  } | null>(null)
+  const suppressTableClickRef = useRef(false)
+  const [isDraggingProjectTable, setIsDraggingProjectTable] = useState(false)
+
   const [clientList, setClientList] = useState<ClientRow[]>([])
   const [clientsLoaded, setClientsLoaded] = useState(false)
   const [currencyRatesByYear, setCurrencyRatesByYear] = useState<
@@ -488,6 +498,70 @@ export default function Projects({
   const rowHover = dark ? "#1E293B" : "#F8FAFC"
 
   const inputBg = dark ? "#0F172A" : "#F8FAFC"
+
+  const handleProjectTablePointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    if (event.pointerType !== "mouse" || event.button !== 0) return
+    if (
+      (event.target as HTMLElement).closest(
+        "button, a, input, select, textarea, [role='button']",
+      )
+    ) {
+      return
+    }
+
+    suppressTableClickRef.current = false
+    projectTableDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollLeft: event.currentTarget.scrollLeft,
+      dragging: false,
+    }
+  }
+
+  const handleProjectTablePointerMove = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    const drag = projectTableDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+
+    const deltaX = event.clientX - drag.startX
+    const deltaY = event.clientY - drag.startY
+    if (!drag.dragging) {
+      if (Math.abs(deltaY) > 5 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        projectTableDragRef.current = null
+        return
+      }
+      if (Math.abs(deltaX) <= 5 || Math.abs(deltaX) <= Math.abs(deltaY)) return
+
+      drag.dragging = true
+      event.currentTarget.setPointerCapture(event.pointerId)
+      setIsDraggingProjectTable(true)
+    }
+
+    event.preventDefault()
+    event.currentTarget.scrollLeft = drag.startScrollLeft - deltaX
+    window.getSelection()?.removeAllRanges()
+  }
+
+  const finishProjectTableDrag = (
+    event: React.PointerEvent<HTMLDivElement>,
+    suppressClick: boolean,
+  ) => {
+    const drag = projectTableDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+
+    projectTableDragRef.current = null
+    if (drag.dragging) {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+      suppressTableClickRef.current = suppressClick
+      setIsDraggingProjectTable(false)
+    }
+  }
 
   const loadClients = async () => {
     const token = localStorage.getItem("clmp-token")
@@ -1603,7 +1677,21 @@ export default function Projects({
         className="rounded-xl border overflow-hidden"
         style={{ background: bg, borderColor: border }}
       >
-        <div className="overflow-x-auto">
+        <div
+          className={`overflow-x-auto cursor-grab ${isDraggingProjectTable ? "cursor-grabbing select-none" : ""}`}
+          aria-label="Project table. Drag horizontally to scroll."
+          title="Drag to scroll horizontally"
+          onPointerDown={handleProjectTablePointerDown}
+          onPointerMove={handleProjectTablePointerMove}
+          onPointerUp={(event) => finishProjectTableDrag(event, true)}
+          onPointerCancel={(event) => finishProjectTableDrag(event, false)}
+          onClickCapture={(event) => {
+            if (!suppressTableClickRef.current) return
+            event.preventDefault()
+            event.stopPropagation()
+            suppressTableClickRef.current = false
+          }}
+        >
           <table id="projects-table" className="w-full min-w-[1900px]">
             <thead>
               <tr
