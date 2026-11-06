@@ -113,6 +113,7 @@ test('calculates dashboard project counts from approved status values only', () 
     { status: 'On-track', level: 'High' },
     { status: 'Completed', level: 'High' },
     { status: 'At Risk', level: 'Low' },
+    { status: 'On-track', level: 'Medium' },
   ]);
 
   assert.equal(summary.totalClients, 6);
@@ -123,9 +124,11 @@ test('calculates dashboard project counts from approved status values only', () 
   assert.equal(summary.completedProjects, 1);
   assert.equal(summary.totalRevenue, 1750);
   assert.equal(summary.averageRevenue, 1750 / 7);
-  assert.equal(summary.totalRisks, 3);
-  assert.equal(summary.openRisks, 2);
-  assert.equal(summary.highRisks, 1);
+  assert.equal(summary.totalRisks, 4);
+  assert.equal(summary.openRisks, 3);
+  assert.equal(summary.highRisks, 2);
+  assert.equal(summary.mediumRisks, 1);
+  assert.equal(summary.lowRisks, 1);
 });
 
 test('returns zero-safe dashboard metrics for no approved records', () => {
@@ -143,6 +146,8 @@ test('returns zero-safe dashboard metrics for no approved records', () => {
     totalRisks: 0,
     openRisks: 0,
     highRisks: 0,
+    mediumRisks: 0,
+    lowRisks: 0,
     averageCompletion: 0,
   });
 });

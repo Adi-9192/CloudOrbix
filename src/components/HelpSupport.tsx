@@ -150,6 +150,21 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Task selection and progress",
+    detail:
+      "Added select-all and bulk-delete actions to the Tasks tab and corrected progress display and project completion calculations when stored percentages use a 0–1 fraction.",
+  },
+  {
+    title: "Project task statuses",
+    detail:
+      "Limited project task status choices and displayed values on the Tasks tab to Not Started, In progress, Completed, and Blocked. Project overview and project/risk statuses are unchanged.",
+  },
+  {
+    title: "Risk severity cards",
+    detail:
+      "Added High Risks, Medium Risks, and Low Risks cards to the Risk Dashboard. Severity totals follow the selected project year and include risks across all statuses.",
+  },
+  {
     title: "Automatic RFP codes",
     detail:
       "RFP estimates now receive a code based on the project name and requested date. Same-day code collisions receive a numeric suffix, and existing estimates are assigned codes by the database migration.",

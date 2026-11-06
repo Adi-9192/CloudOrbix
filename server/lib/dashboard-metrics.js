@@ -105,7 +105,9 @@ export function calculateDashboardSummary(clients = [], risks = []) {
     delayedProjectsInternal: delayedProjects.internal,
     totalRisks: risks.length,
     openRisks: activeRisks.length,
-    highRisks: activeRisks.filter((risk) => normalizedStatus(risk.level) === 'high').length,
+    highRisks: risks.filter((risk) => normalizedStatus(risk.level) === 'high').length,
+    mediumRisks: risks.filter((risk) => normalizedStatus(risk.level) === 'medium').length,
+    lowRisks: risks.filter((risk) => normalizedStatus(risk.level) === 'low').length,
     averageCompletion: approved.length
       ? approved.reduce((sum, client) => sum + Number(client.completion || 0), 0) / approved.length
       : 0,
