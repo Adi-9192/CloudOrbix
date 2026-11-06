@@ -1,6 +1,7 @@
 import express from 'express';
 import { appState, getPool } from '../db.js';
 import {
+  calculateDashboardActiveProjectCompletion,
   calculateDashboardProjectBreakdown,
   calculateDashboardSummary,
 } from '../lib/dashboard-metrics.js';
@@ -78,6 +79,7 @@ router.get('/', protectRoute, async (req, res, next) => {
         : (appState.risks || []).filter((risk) => clientKeys.has(String(risk.clientId ?? risk.client_id)));
       const summary = calculateDashboardSummary(clients, risks);
       const projectBreakdown = calculateDashboardProjectBreakdown(clients, groupBy);
+      const activeProjectCompletion = calculateDashboardActiveProjectCompletion(clients);
       const services = appState.services.map((service) => ({
         name: service.name,
         clients: clients.filter((client) => client.services?.includes(service.name)).length,
@@ -96,6 +98,7 @@ router.get('/', protectRoute, async (req, res, next) => {
         summary,
         availableYears,
         projectBreakdown,
+        activeProjectCompletion,
         onboardingTrend: [{
           month: period,
           onboarded: clients.filter((client) => client.actualOnboardDate || client.plannedOnboardDate).length,
@@ -109,12 +112,12 @@ router.get('/', protectRoute, async (req, res, next) => {
       });
     }
 
-    const [summaryResult, onboardingResult, revenueResult, servicesResult, risksResult, upcomingResult, regionResult, yearsResult, projectBreakdownResult, rfpBreakdownResult] = await Promise.all([
+    const [summaryResult, onboardingResult, revenueResult, servicesResult, risksResult, upcomingResult, regionResult, yearsResult, projectBreakdownResult, activeProjectResult, rfpBreakdownResult] = await Promise.all([
       pool.query(`
         SELECT CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) NOT IN ('cancelled','canceled') THEN 1 END) AS int) AS total_clients,
           CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) IN ('on-track','on track','in progress','onboarded') THEN 1 END) AS int) AS active_clients,
           CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) = 'completed' THEN 1 END) AS int) AS completed_projects,
-          CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(current_status))) NOT IN ('completed','cancelled','canceled','offboarded')
+          CAST(COUNT(CASE WHEN COALESCE(LOWER(LTRIM(RTRIM(current_status))), '') NOT IN ('completed','cancelled','canceled','offboarded')
             AND COALESCE(completion,0) < 100 THEN 1 END) AS int) AS active_projects,
           CAST(COUNT(CASE WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(current_status)), ' ', ''), '-', ''), '(', ''), ')', '')) IN ('delayedexternal','offtrackexternal') THEN 1 END) AS int) AS delayed_projects_external,
           CAST(COUNT(CASE WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(current_status)), ' ', ''), '-', ''), '(', ''), ')', '')) IN ('delayedinternal','offtrackinternal') THEN 1 END) AS int) AS delayed_projects_internal,
@@ -218,6 +221,14 @@ router.get('/', protectRoute, async (req, res, next) => {
         ORDER BY value DESC, name
       `, [selectedYear]),
       pool.query(`
+        SELECT id, client_id, client_name, current_status, completion
+        FROM clients
+        WHERE ${approvedClients}
+          AND COALESCE(LOWER(LTRIM(RTRIM(current_status))), '') NOT IN ('completed','cancelled','canceled','offboarded')
+          AND COALESCE(completion,0) < 100
+          AND ($1 IS NULL OR [year] = $1)
+      `, [selectedYear]),
+      pool.query(`
         SELECT COALESCE(NULLIF(LTRIM(RTRIM(p.${rfpGroupColumn})), ''), 'Unspecified') AS name,
           CAST(COUNT(*) AS int) AS value,
           CAST(COALESCE(SUM(s.grand_total_inr), 0) AS numeric(18,2)) AS revenue_inr
@@ -253,6 +264,7 @@ router.get('/', protectRoute, async (req, res, next) => {
         name: item.name,
         value: Number(item.value),
       })),
+      activeProjectCompletion: calculateDashboardActiveProjectCompletion(activeProjectResult.rows),
       onboardingTrend: onboardingResult.rows.reverse(),
       revenueTrend: revenueResult.rows.reverse(),
       serviceAdoption: servicesResult.rows,

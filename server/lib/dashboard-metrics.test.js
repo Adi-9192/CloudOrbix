@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  calculateDashboardActiveProjectCompletion,
   calculateDashboardProjectBreakdown,
   calculateDashboardSummary,
 } from './dashboard-metrics.js';
@@ -54,6 +55,38 @@ test('excludes cancelled projects from dashboard totals and breakdowns', () => {
     { name: 'Completed', value: 1 },
     { name: 'On Track', value: 1 },
   ]);
+});
+
+test('returns each approved active project with its completion percentage', () => {
+  const projects = [
+    { id: 1, client_name: 'Alpha', approval_status: 'approved', current_status: 'On Track', completion: 0 },
+    { id: 2, client_name: 'Beta', approval_status: 'approved', current_status: 'At Risk', completion: 25 },
+    { id: 3, client_name: 'Gamma', approval_status: 'approved', current_status: 'On Hold', completion: 25.5 },
+    { id: 4, client_name: 'Delta', approval_status: 'approved', current_status: 'On Track', completion: 50 },
+    { id: 5, client_name: 'Epsilon', approval_status: 'approved', current_status: 'On Track', completion: 75 },
+    { id: 6, client_name: 'Zeta', approval_status: 'approved', current_status: 'Off Track (External)', completion: 99 },
+    { id: 7, client_name: 'Eta', approval_status: 'approved', current_status: 'Completed', completion: 80 },
+    { id: 8, client_name: 'Theta', approval_status: 'approved', current_status: 'On Track', completion: 100 },
+    { id: 9, client_name: 'Iota', approval_status: 'approved', current_status: 'Cancelled', completion: 10 },
+    { id: 10, client_name: 'Kappa', approval_status: 'pending', current_status: 'On Track', completion: 10 },
+  ];
+
+  assert.deepEqual(calculateDashboardActiveProjectCompletion(projects), [
+    { id: '6', name: 'Zeta', completion: 99 },
+    { id: '5', name: 'Epsilon', completion: 75 },
+    { id: '4', name: 'Delta', completion: 50 },
+    { id: '3', name: 'Gamma', completion: 25.5 },
+    { id: '2', name: 'Beta', completion: 25 },
+    { id: '1', name: 'Alpha', completion: 0 },
+  ]);
+  assert.equal(calculateDashboardActiveProjectCompletion(projects).length, calculateDashboardSummary(projects).activeProjects);
+});
+
+test('returns an empty active-project chart series if there are no active projects', () => {
+  assert.deepEqual(calculateDashboardActiveProjectCompletion([
+    { approval_status: 'approved', current_status: 'Completed', completion: 100 },
+    { approval_status: 'approved', current_status: 'Cancelled', completion: 40 },
+  ]), []);
 });
 
 test('counts completed projects by status instead of completion percentage', () => {

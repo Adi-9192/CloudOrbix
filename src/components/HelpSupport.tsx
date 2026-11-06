@@ -164,6 +164,11 @@ const releaseNotes = [
     detail: "Projects now use seven canonical statuses and a Phase dropdown. Excel imports normalize status and phase variants, and Project Type has been removed from active project and RFP screens.",
   },
   {
+    title: "Active project completion chart",
+    detail:
+      "The Project Dashboard includes one completion-progress bar per approved active project. It follows the selected project year, updates as the active project list changes, and excludes completed, cancelled, and 100%-complete projects.",
+  },
+  {
     title: "Dashboard project totals",
     detail:
       "Cancelled and canceled projects are excluded from dashboard totals and breakdowns. Completed project counts are based only on project status, matching the chart.",

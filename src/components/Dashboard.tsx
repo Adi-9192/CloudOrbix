@@ -3,7 +3,8 @@ import {
   Users, Clock, AlertCircle, FolderKanban, AlertTriangle, ShieldAlert, CheckCircle2
 } from "lucide-react";
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  BarChart, Bar, CartesianGrid, XAxis, YAxis, LabelList,
 } from "recharts";
 import type { DashboardView } from "./Shell";
 
@@ -24,7 +25,6 @@ const pieColorsByGroup = {
   region: ["#1D4ED8", "#0891B2", "#0F766E", "#65A30D", "#CA8A04", "#EA580C", "#C026D3", "#475569"],
   hyperscaler: ["#2563EB", "#F97316", "#7C3AED", "#059669", "#DB2777", "#64748B", "#CA8A04", "#0F766E"],
 };
-
 const CustomTooltip = ({ active, payload, label, dark }: any) => {
   if (!active || !payload?.length) return null;
   return (
@@ -33,7 +33,7 @@ const CustomTooltip = ({ active, payload, label, dark }: any) => {
       {payload.map((p: any) => (
         <div key={p.name} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-          <span>{p.name}: <strong>{p.value}</strong></span>
+          <span>{p.name}: <strong>{p.dataKey === "completion" ? `${p.value}%` : p.value}</strong></span>
         </div>
       ))}
     </div>
@@ -51,6 +51,7 @@ export default function Dashboard({
   const pieColors = pieColorsByGroup[projectGroupBy];
   const [summary, setSummary] = useState({ totalClients: 0, activeProjects: 0, completedProjects: 0, delayedProjectsExternal: 0, delayedProjectsInternal: 0, totalRisks: 0, openRisks: 0 });
   const [projectBreakdown, setProjectBreakdown] = useState<{ name: string; value: number }[]>([]);
+  const [activeProjectCompletion, setActiveProjectCompletion] = useState<{ id: string; name: string; completion: number }[]>([]);
   const [rfpBreakdown, setRfpBreakdown] = useState<{ name: string; value: number; revenueInr: number }[]>([]);
   const [dashboardError, setDashboardError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -71,6 +72,7 @@ export default function Dashboard({
         setLastUpdated(new Date());
         setSummary(payload.summary);
         setProjectBreakdown(payload.projectBreakdown || []);
+        setActiveProjectCompletion(payload.activeProjectCompletion || []);
         setRfpBreakdown(payload.rfpBreakdown || []);
       })
       .catch((error) => {
@@ -366,6 +368,75 @@ export default function Dashboard({
         </div>
       </section>
       </div>}
+
+      {view === "project" && (
+        <section
+          aria-labelledby="dashboard-active-projects-heading"
+          className="rounded-xl border p-5"
+          style={{ background: bg, borderColor: border, boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)" }}
+        >
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 id="dashboard-active-projects-heading" className="text-[17.5px] font-semibold">
+                Active project completion
+              </h2>
+              <p className="mt-0.5 text-[15px]" style={{ color: muted }}>
+                {selectedYear === "all" ? "All project years" : `Project year ${selectedYear}`} · Completion progress for each active project
+              </p>
+            </div>
+            <span className="rounded-full px-3 py-1 text-[13px] font-semibold" style={{ background: dark ? "#1E3A5F" : "#DBEAFE", color: dark ? "#BFDBFE" : "#1E40AF" }}>
+              {activeProjectCompletion.length} active
+            </span>
+          </div>
+          {activeProjectCompletion.length ? (
+            <div className="max-h-[520px] overflow-y-auto pr-2">
+              <ResponsiveContainer width="100%" height={Math.max(240, activeProjectCompletion.length * 40)}>
+                <BarChart
+                  data={activeProjectCompletion}
+                  layout="vertical"
+                  margin={{ top: 4, right: 36, bottom: 4, left: 8 }}
+                  barCategoryGap={10}
+                >
+                  <CartesianGrid horizontal={false} stroke={dark ? "#334155" : "#E2E8F0"} />
+                  <XAxis
+                    type="number"
+                    domain={[0, 100]}
+                    ticks={[0, 25, 50, 75, 100]}
+                    tickFormatter={(value: number) => `${value}%`}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: muted }}
+                    stroke={muted}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={220}
+                    interval={0}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: text }}
+                  />
+                  <Tooltip content={<CustomTooltip dark={dark} />} cursor={{ fill: dark ? "#334155" : "#F1F5F9", opacity: 0.7 }} />
+                  <Bar dataKey="completion" name="Completion" radius={[0, 7, 7, 0]} maxBarSize={28}>
+                    {activeProjectCompletion.map((project) => (
+                      <Cell
+                        key={project.id || project.name}
+                        fill={project.completion >= 75 ? "#1E40AF" : project.completion >= 50 ? "#2563EB" : project.completion >= 25 ? "#3B82F6" : "#60A5FA"}
+                      />
+                    ))}
+                    <LabelList dataKey="completion" position="right" formatter={(value: number) => `${value}%`} fill={text} fontSize={12} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="text-center text-sm" style={{ color: muted }}>
+              No active projects for this year.
+            </p>
+          )}
+        </section>
+      )}
 
       {view === "rfp" && <div className="grid items-stretch gap-4 md:grid-cols-2">
         <section
