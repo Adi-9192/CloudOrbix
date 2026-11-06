@@ -174,7 +174,9 @@ router.get('/', protectRoute, async (req, res, next) => {
       pool.query(`
         SELECT CAST(COUNT(*) AS int) AS total_risks,
           CAST(COUNT(CASE WHEN LOWER(r.status) NOT IN ('completed','cancelled','canceled') THEN 1 END) AS int) AS open_risks,
-          CAST(COUNT(CASE WHEN r.level='High' AND LOWER(r.status) NOT IN ('completed','cancelled','canceled') THEN 1 END) AS int) AS high_risks
+          CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(r.level)))='high' THEN 1 END) AS int) AS high_risks,
+          CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(r.level)))='medium' THEN 1 END) AS int) AS medium_risks,
+          CAST(COUNT(CASE WHEN LOWER(LTRIM(RTRIM(r.level)))='low' THEN 1 END) AS int) AS low_risks
         FROM project_risks r
         JOIN clients c ON c.id=r.client_id AND ${approvedClients}
         WHERE ($1 IS NULL OR c.[year] = $1)
@@ -255,6 +257,8 @@ router.get('/', protectRoute, async (req, res, next) => {
         totalRisks: Number(risks.total_risks),
         openRisks: Number(risks.open_risks),
         highRisks: Number(risks.high_risks),
+        mediumRisks: Number(risks.medium_risks),
+        lowRisks: Number(risks.low_risks),
         averageCompletion: Number(summary.average_completion),
         azureClients: Number(servicesResult.rows.find((item) => item.name === 'Azure')?.clients || 0),
         awsClients: Number(servicesResult.rows.find((item) => item.name === 'AWS')?.clients || 0),

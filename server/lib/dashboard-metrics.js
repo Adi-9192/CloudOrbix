@@ -17,6 +17,12 @@ const isCancelledProject = (client) =>
     normalizedStatus(client.current_status ?? client.currentStatus),
   );
 
+const normalizeCompletionPercentage = (value) => {
+  const completion = Number(value) || 0;
+  const percentage = completion > 0 && completion <= 1 ? completion * 100 : completion;
+  return Math.min(100, Math.max(0, percentage));
+};
+
 const projectBreakdownFields = {
   status: (client) => client.current_status ?? client.currentStatus,
   region: (client) => client.region,
@@ -27,7 +33,7 @@ const isActiveProject = (client) => {
   const status = normalizedStatus(client.current_status ?? client.currentStatus);
   return String(client.approval_status ?? client.approvalStatus ?? 'approved').toLowerCase() === 'approved' &&
     !['completed', 'cancelled', 'canceled', 'offboarded'].includes(status) &&
-    Number(client.completion || 0) < 100;
+    normalizeCompletionPercentage(client.completion) < 100;
 };
 
 export function calculateDashboardProjectBreakdown(clients = [], groupBy = 'status') {
@@ -58,7 +64,7 @@ export function calculateDashboardActiveProjectCompletion(clients = []) {
     .map((client) => ({
       id: String(client.id ?? client.client_id ?? client.clientId ?? client.client_name ?? client.clientName ?? ''),
       name: String(client.client_name ?? client.clientName ?? client.name ?? client.client_id ?? client.clientId ?? 'Unnamed project'),
-      completion: Math.min(100, Math.max(0, Number(client.completion) || 0)),
+      completion: normalizeCompletionPercentage(client.completion),
     }))
     .sort((a, b) => b.completion - a.completion || a.name.localeCompare(b.name));
 }
@@ -105,7 +111,9 @@ export function calculateDashboardSummary(clients = [], risks = []) {
     delayedProjectsInternal: delayedProjects.internal,
     totalRisks: risks.length,
     openRisks: activeRisks.length,
-    highRisks: activeRisks.filter((risk) => normalizedStatus(risk.level) === 'high').length,
+    highRisks: risks.filter((risk) => normalizedStatus(risk.level) === 'high').length,
+    mediumRisks: risks.filter((risk) => normalizedStatus(risk.level) === 'medium').length,
+    lowRisks: risks.filter((risk) => normalizedStatus(risk.level) === 'low').length,
     averageCompletion: approved.length
       ? approved.reduce((sum, client) => sum + Number(client.completion || 0), 0) / approved.length
       : 0,

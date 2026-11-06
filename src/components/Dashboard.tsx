@@ -47,7 +47,7 @@ export default function Dashboard({
   const [selectedYear, setSelectedYear] = useState("all");
   const [projectGroupBy, setProjectGroupBy] = useState<(typeof projectBreakdownOptions)[number]["value"]>("status");
   const pieColors = pieColorsByGroup[projectGroupBy];
-  const [summary, setSummary] = useState({ totalClients: 0, activeProjects: 0, completedProjects: 0, delayedProjectsExternal: 0, delayedProjectsInternal: 0, totalRisks: 0, openRisks: 0 });
+  const [summary, setSummary] = useState({ totalClients: 0, activeProjects: 0, completedProjects: 0, delayedProjectsExternal: 0, delayedProjectsInternal: 0, totalRisks: 0, openRisks: 0, highRisks: 0, mediumRisks: 0, lowRisks: 0 });
   const [projectBreakdown, setProjectBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [activeProjectCompletion, setActiveProjectCompletion] = useState<{ id: string; name: string; completion: number }[]>([]);
   const [rfpBreakdown, setRfpBreakdown] = useState<{ name: string; value: number; revenueInr: number }[]>([]);
@@ -214,6 +214,9 @@ export default function Dashboard({
     { title: "Off Track (Internal)", value: String(summary.delayedProjectsInternal), subtitle: "Internally off-track projects", accent: "#BE185D", icon: Clock, action: () => onNavigate("projects", "Off Track (Internal)") },
     { title: "Total Risks", value: String(summary.totalRisks), subtitle: "All project risks", accent: "#7C3AED", icon: ShieldAlert, action: () => onNavigate("risks") },
     { title: "Open Risks", value: String(summary.openRisks), subtitle: "Risks not completed or cancelled", accent: "#D97706", icon: AlertCircle, action: () => onNavigate("risks") },
+    { title: "High Risks", value: String(summary.highRisks), subtitle: "All high-level risks", accent: "#DC2626", icon: AlertTriangle, action: () => onNavigate("risks") },
+    { title: "Medium Risks", value: String(summary.mediumRisks), subtitle: "All medium-level risks", accent: "#D97706", icon: AlertTriangle, action: () => onNavigate("risks") },
+    { title: "Low Risks", value: String(summary.lowRisks), subtitle: "All low-level risks", accent: "#16A34A", icon: ShieldAlert, action: () => onNavigate("risks") },
   ], [summary, onNavigate]);
   const projectOverviewCards = kpiCards.slice(0, 5);
 
