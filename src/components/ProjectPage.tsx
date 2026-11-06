@@ -30,6 +30,11 @@ import { calculateRevenueRecovery } from "../../shared/revenue-recovery.js";
 import { normalizeHyperscaler } from "../../shared/hyperscalers.js";
 import { convertCurrencyAmount } from "../../shared/currency-conversion.js";
 import { parseProjectUpdatesText } from "../../shared/project-updates.js";
+import {
+  normalizeProjectTaskStatus,
+  PROJECT_TASK_STATUSES,
+} from "../../shared/project-task-status.js";
+import { normalizeProjectTaskProgress } from "../../shared/project-task-progress.js";
 
 type ProjectPageProps = {
   dark: boolean;
@@ -216,7 +221,7 @@ const emptyTask: TaskDraft = {
   actualStartDate: "",
   actualEndDate: "",
   progress: "0",
-  status: "On Track",
+  status: "Not Started",
   remark: "",
 };
 
@@ -267,8 +272,8 @@ const taskDraftFromTask = (task: Task): TaskDraft => ({
   expectedEndDate: task.expected_end_date?.slice(0, 10) || "",
   actualStartDate: task.actual_start_date?.slice(0, 10) || "",
   actualEndDate: task.actual_end_date?.slice(0, 10) || "",
-  progress: String(task.progress || 0),
-  status: normalizeProjectStatus(task.status),
+  progress: String(normalizeProjectTaskProgress(task.progress)),
+  status: normalizeProjectTaskStatus(task.status) || "Not Started",
   remark: task.remark || "",
 });
 
@@ -311,6 +316,7 @@ export default function ProjectPage({
   const [risk, setRisk] = useState<RiskDraft>(emptyRisk());
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(() => new Set());
   const [showRiskForm, setShowRiskForm] = useState(false);
   const [savingTask, setSavingTask] = useState(false);
   const [savingRisk, setSavingRisk] = useState(false);
@@ -431,6 +437,7 @@ export default function ProjectPage({
     const controller = new AbortController();
     setProject(null);
     setTasks([]);
+    setSelectedTaskIds(new Set());
     setDocuments([]);
     setUpdates([]);
     setRisks([]);
@@ -581,6 +588,30 @@ export default function ProjectPage({
       await load();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unable to delete task.";
+      setMessage(errorMessage);
+      showCloudOrbixAlert(errorMessage, "error");
+    }
+  };
+
+  const deleteSelectedTasks = async () => {
+    const taskIds = tasks
+      .filter((item) => selectedTaskIds.has(item.id))
+      .map((item) => item.id);
+    if (!taskIds.length) return;
+
+    try {
+      const response = await fetch(`/api/projects/${clientId}/tasks/bulk-delete`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ taskIds }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || "Unable to delete selected tasks.");
+      setSelectedTaskIds(new Set());
+      showCloudOrbixAlert(`${body.deleted} tasks deleted successfully.`, "success");
+      await load();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to delete selected tasks.";
       setMessage(errorMessage);
       showCloudOrbixAlert(errorMessage, "error");
     }
@@ -799,8 +830,9 @@ export default function ProjectPage({
   };
 
   const completedTasks = tasks.filter((item) => item.status?.toLowerCase() === "completed").length;
+  const selectedTaskCount = tasks.filter((item) => selectedTaskIds.has(item.id)).length;
   const progress = tasks.length
-    ? Math.round(tasks.reduce((total, item) => total + Number(item.progress || 0), 0) / tasks.length)
+    ? Math.round(tasks.reduce((total, item) => total + normalizeProjectTaskProgress(item.progress), 0) / tasks.length)
     : Math.round(Number(project?.completion || project?.project_progress || 0));
   const openRisks = risks.filter(
     (item) => !["completed", "cancelled", "canceled"].includes(item.status?.toLowerCase()),
@@ -854,6 +886,13 @@ export default function ProjectPage({
     if (status.toLowerCase().includes("delay") || status === "Blocked") return "#DC2626";
     if (status === "At Risk" || status === "On Hold") return "#D97706";
     return accent;
+  };
+  const taskStatusColor = (value: string) => {
+    const status = normalizeProjectTaskStatus(value);
+    if (status === "Completed") return "#16A34A";
+    if (status === "Blocked") return "#DC2626";
+    if (status === "In progress") return accent;
+    return muted;
   };
   const formatCurrency = (amount: number) => {
     if (currencyRateToInr === null) {
@@ -1029,8 +1068,7 @@ export default function ProjectPage({
           className={inputClass}
           style={inputStyle}
         >
-          {!PROJECT_STATUSES.includes(task.status) && <option value={task.status}>{task.status}</option>}
-          {PROJECT_STATUSES.map((status: string) => <option key={status}>{status}</option>)}
+          {PROJECT_TASK_STATUSES.map((status) => <option key={status}>{status}</option>)}
         </select>
       </label>
       <label className="space-y-1 sm:col-span-2">
@@ -1073,6 +1111,26 @@ export default function ProjectPage({
       <table className="w-full min-w-[1320px] text-left">
         <thead>
           <tr className="border-b text-[10px] font-bold uppercase tracking-[0.1em]" style={{ borderColor: border, color: muted }}>
+            {showActions && (
+              <th className="w-12 px-4 py-3">
+                <input
+                  type="checkbox"
+                  aria-label="Select all tasks"
+                  checked={items.length > 0 && items.every((item) => selectedTaskIds.has(item.id))}
+                  onChange={(event) => {
+                    setSelectedTaskIds((current) => {
+                      const next = new Set(current);
+                      items.forEach((item) => {
+                        if (event.target.checked) next.add(item.id);
+                        else next.delete(item.id);
+                      });
+                      return next;
+                    });
+                  }}
+                  className="h-4 w-4 accent-blue-700"
+                />
+              </th>
+            )}
             <th className="px-5 py-3">Task Title</th>
             <th className="px-5 py-3">Assigned To</th>
             <th className="px-5 py-3">Planned Start Date</th>
@@ -1088,6 +1146,24 @@ export default function ProjectPage({
         <tbody>
           {items.map((item) => (
             <tr key={item.id} className="border-b last:border-0" style={{ borderColor: border }}>
+              {showActions && (
+                <td className="px-4 py-4">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select task ${item.task_title}`}
+                    checked={selectedTaskIds.has(item.id)}
+                    onChange={(event) => {
+                      setSelectedTaskIds((current) => {
+                        const next = new Set(current);
+                        if (event.target.checked) next.add(item.id);
+                        else next.delete(item.id);
+                        return next;
+                      });
+                    }}
+                    className="h-4 w-4 accent-blue-700"
+                  />
+                </td>
+              )}
               <td className="px-5 py-4 text-xs font-semibold">{item.task_title}</td>
               <td className="px-5 py-4 text-xs" style={{ color: muted }}>
                 {item.assigned_to || manager}
@@ -1106,15 +1182,30 @@ export default function ProjectPage({
               </td>
               <td className="px-5 py-4">
                 <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-20 overflow-hidden rounded-full" style={{ background: dark ? "#334155" : "#E2E8F0" }}>
-                    <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, Number(item.progress) || 0))}%`, background: accent }} />
-                  </div>
-                  <span className="w-8 text-[10px] font-semibold" style={{ color: muted }}>{Number(item.progress || 0)}%</span>
+                  {(() => {
+                    const progressPercent = normalizeProjectTaskProgress(item.progress);
+                    return (
+                      <>
+                        <div className="h-1.5 w-20 overflow-hidden rounded-full" style={{ background: dark ? "#334155" : "#E2E8F0" }}>
+                          <div className="h-full rounded-full" style={{ width: `${progressPercent}%`, background: accent }} />
+                        </div>
+                        <span className="w-9 text-[10px] font-semibold" style={{ color: muted }}>{progressPercent}%</span>
+                      </>
+                    );
+                  })()}
                 </div>
               </td>
               <td className="px-5 py-4">
-                <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ color: statusColor(item.status), background: `${statusColor(item.status)}18` }}>
-                  {normalizeProjectStatus(item.status)}
+                <span
+                  className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                  style={{
+                    color: showActions ? taskStatusColor(item.status) : statusColor(item.status),
+                    background: `${(showActions ? taskStatusColor(item.status) : statusColor(item.status))}18`,
+                  }}
+                >
+                  {showActions
+                    ? normalizeProjectTaskStatus(item.status) || "Not Started"
+                    : normalizeProjectStatus(item.status)}
                 </span>
               </td>
               <td className="max-w-[280px] whitespace-pre-wrap px-5 py-4 text-xs" style={{ color: muted }}>
@@ -1147,7 +1238,7 @@ export default function ProjectPage({
           ))}
           {!items.length && (
             <tr>
-              <td colSpan={showActions ? 10 : 9} className="px-5 py-10 text-center text-xs" style={{ color: muted }}>
+              <td colSpan={showActions ? 11 : 9} className="px-5 py-10 text-center text-xs" style={{ color: muted }}>
                 No project tasks have been recorded yet.
               </td>
             </tr>
@@ -1713,6 +1804,26 @@ export default function ProjectPage({
               <p className="mt-1 text-[11px]" style={{ color: muted }}>{tasks.length} tasks · {completedTasks} completed</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => requestDelete(
+                  selectedTaskCount === tasks.length
+                    ? `Delete all ${tasks.length} project tasks? This action cannot be undone.`
+                    : `Delete ${selectedTaskCount} selected project task${selectedTaskCount === 1 ? "" : "s"}? This action cannot be undone.`,
+                  () => {
+                    setConfirmDialog(null);
+                    void deleteSelectedTasks();
+                  },
+                )}
+                disabled={!selectedTaskCount}
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ borderColor: border }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {selectedTaskCount > 0 && selectedTaskCount === tasks.length
+                  ? `Delete all (${tasks.length})`
+                  : `Delete selected${selectedTaskCount ? ` (${selectedTaskCount})` : ""}`}
+              </button>
               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-semibold" style={{ borderColor: border }}>
                 <Upload className="h-3.5 w-3.5" /> Import tasks
                 <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => {

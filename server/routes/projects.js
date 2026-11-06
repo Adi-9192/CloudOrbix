@@ -8,9 +8,11 @@ import { canAccessProject, isAssignedProjectManager } from '../lib/permissions.j
 import { protectRoute, requireRole } from '../middleware/auth.js';
 import { createProjectExport } from '../lib/project-export.js';
 import { createRiskExport } from '../lib/risk-export.js';
+import { parseTaskWorksheetRecords } from '../lib/task-import.js';
 import { previewProjectUpdateWorkbook } from '../lib/project-update-import.js';
 import { MANDATORY_DOCUMENTS } from '../../shared/project-documents.js';
 import { parseProjectUpdateDate } from '../../shared/project-updates.js';
+import { normalizeProjectTaskStatus } from '../../shared/project-task-status.js';
 import {
   isProjectStatus,
   normalizeProjectStatus,
@@ -635,7 +637,9 @@ router.post('/:clientId/tasks', protectRoute, async (req, res, next) => {
     if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     const body = req.body || {};
     if (!body.taskTitle) return res.status(400).json({ message: 'Task title is required.' });
-    const result = await getPool().query(`INSERT INTO project_tasks(client_id,task_title,assigned_to,expected_start_date,expected_end_date,actual_start_date,actual_end_date,progress,status,remark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`, [project.id, body.taskTitle, body.assignedTo || project.project_manager || project.account_manager || null, body.expectedStartDate || null, body.expectedEndDate || null, body.actualStartDate || null, body.actualEndDate || null, Number(body.progress || 0), body.status || 'Not Started', body.remark || null]);
+    const status = normalizeProjectTaskStatus(body.status || 'Not Started');
+    if (!status) return res.status(400).json({ message: 'Task status must be Not Started, In progress, Completed, or Blocked.' });
+    const result = await getPool().query(`INSERT INTO project_tasks(client_id,task_title,assigned_to,expected_start_date,expected_end_date,actual_start_date,actual_end_date,progress,status,remark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`, [project.id, body.taskTitle, body.assignedTo || project.project_manager || project.account_manager || null, body.expectedStartDate || null, body.expectedEndDate || null, body.actualStartDate || null, body.actualEndDate || null, Number(body.progress || 0), status, body.remark || null]);
     const completion = await syncCompletion(project.id);
     return res.status(201).json({ task: result.rows[0], completion });
   } catch (error) { return next(error); }
@@ -649,17 +653,24 @@ router.post('/:clientId/tasks/import', protectRoute, upload.single('file'), asyn
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(req.file.buffer);
     const sheet = workbook.worksheets[0];
-    const headers = sheet.getRow(1).values.slice(1).map((item) => String(item || '').trim());
-    const records = sheet.getRows(2, Math.max(sheet.rowCount - 1, 0)).map((row) => Object.fromEntries(headers.map((header, index) => {
-      const cell = row.getCell(index + 1).value;
-      return [header, cell instanceof Date ? cell.toISOString().slice(0, 10) : String(cell ?? '')];
-    }))).filter((record) => Object.values(record).some(Boolean));
+    if (!sheet) return res.status(400).json({ message: 'The task workbook contains no worksheet.' });
+    const records = parseTaskWorksheetRecords(sheet);
     if (!records.length) return res.status(400).json({ message: 'The task workbook is empty.' });
     const requiredColumns = ['Task Title', 'Status', 'Progress'];
     const missing = requiredColumns.filter((column) => !Object.prototype.hasOwnProperty.call(records[0], column));
     if (missing.length) return res.status(400).json({ message: `Missing required Excel columns: ${missing.join(', ')}` });
+    const normalizedRecords = [];
+    for (const [index, record] of records.entries()) {
+      const status = normalizeProjectTaskStatus(record.Status || 'Not Started');
+      if (!status) {
+        return res.status(400).json({
+          message: `Row ${index + 2} has an unsupported task status. Use Not Started, In progress, Completed, or Blocked.`,
+        });
+      }
+      normalizedRecords.push({ ...record, Status: status });
+    }
     const inserted = [];
-    for (const record of records) {
+    for (const record of normalizedRecords) {
       const title = String(record['Task Title'] || '').trim();
       if (!title) continue;
       const result = await getPool().query(
@@ -673,7 +684,7 @@ router.post('/:clientId/tasks/import', protectRoute, upload.single('file'), asyn
           record['Actual Start Date'] || record['Actual Start'] || null,
           record['Actual End Date'] || record['Actual End'] || null,
           Math.max(0, Math.min(100, Number(record.Progress) || 0)),
-          record.Status || 'Not Started',
+          record.Status,
           record.Remarks || record.Remark || null,
         ],
       );
@@ -684,12 +695,45 @@ router.post('/:clientId/tasks/import', protectRoute, upload.single('file'), asyn
   } catch (error) { return next(error); }
 });
 
+router.post('/:clientId/tasks/bulk-delete', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
+    const requestedTaskIds = req.body?.taskIds;
+    if (!Array.isArray(requestedTaskIds) || !requestedTaskIds.length || requestedTaskIds.length > 2000) {
+      return res.status(400).json({ message: 'Select between 1 and 2000 project tasks to delete.' });
+    }
+    const taskIds = [...new Set(requestedTaskIds)];
+    if (taskIds.some((id) =>
+      (typeof id !== 'number' && typeof id !== 'string') ||
+      !Number.isSafeInteger(Number(id)) ||
+      Number(id) <= 0
+    )) {
+      return res.status(400).json({ message: 'Select one or more valid project tasks to delete.' });
+    }
+
+    const placeholders = taskIds.map((_, index) => `$${index + 2}`).join(', ');
+    const result = await getPool().query(
+      `DELETE FROM project_tasks WHERE client_id = $1 AND id IN (${placeholders}) RETURNING id`,
+      [project.id, ...taskIds.map(Number)],
+    );
+    if (!result.rows.length) {
+      return res.status(404).json({ message: 'No selected tasks were found for this project.' });
+    }
+    const completion = await syncCompletion(project.id);
+    return res.json({ deleted: result.rows.length, completion });
+  } catch (error) { return next(error); }
+});
+
 router.put('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) => {
   try {
     const project = await projectFor(req.params.clientId);
     if (!project || !canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
     const body = req.body || {};
-    const result = await getPool().query(`UPDATE project_tasks SET task_title=COALESCE($1,task_title),assigned_to=COALESCE($2,assigned_to),expected_start_date=$3,expected_end_date=$4,actual_start_date=$5,actual_end_date=$6,progress=COALESCE($7,progress),status=COALESCE($8,status),remark=$9,updated_at=CURRENT_TIMESTAMP WHERE id=$10 AND client_id=$11 RETURNING *`, [body.taskTitle, body.assignedTo || project.project_manager || project.account_manager, body.expectedStartDate || null, body.expectedEndDate || null, body.actualStartDate || null, body.actualEndDate || null, body.progress === undefined ? null : Number(body.progress), body.status, body.remark || null, req.params.taskId, project.id]);
+    const status = body.status === undefined ? null : normalizeProjectTaskStatus(body.status);
+    if (body.status !== undefined && !status) return res.status(400).json({ message: 'Task status must be Not Started, In progress, Completed, or Blocked.' });
+    const result = await getPool().query(`UPDATE project_tasks SET task_title=COALESCE($1,task_title),assigned_to=COALESCE($2,assigned_to),expected_start_date=$3,expected_end_date=$4,actual_start_date=$5,actual_end_date=$6,progress=COALESCE($7,progress),status=COALESCE($8,status),remark=$9,updated_at=CURRENT_TIMESTAMP WHERE id=$10 AND client_id=$11 RETURNING *`, [body.taskTitle, body.assignedTo || project.project_manager || project.account_manager, body.expectedStartDate || null, body.expectedEndDate || null, body.actualStartDate || null, body.actualEndDate || null, body.progress === undefined ? null : Number(body.progress), status, body.remark || null, req.params.taskId, project.id]);
     if (!result.rows[0]) return res.status(404).json({ message: 'Task not found.' });
     const completion = await syncCompletion(project.id);
     return res.json({ task: result.rows[0], completion });

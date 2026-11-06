@@ -82,6 +82,21 @@ test('returns each approved active project with its completion percentage', () =
   assert.equal(calculateDashboardActiveProjectCompletion(projects).length, calculateDashboardSummary(projects).activeProjects);
 });
 
+test('normalizes fractional completion values to percentages for all active projects', () => {
+  const projects = [
+    { id: 1, client_name: 'Curaleaf', current_status: 'On Hold', completion: 0.06 },
+    { id: 2, client_name: 'Fractional', current_status: 'On Track', completion: 0.5 },
+    { id: 3, client_name: 'Already percent', current_status: 'On Track', completion: 6 },
+    { id: 4, client_name: 'Fully complete', current_status: 'On Track', completion: 1 },
+  ];
+
+  assert.deepEqual(calculateDashboardActiveProjectCompletion(projects), [
+    { id: '2', name: 'Fractional', completion: 50 },
+    { id: '3', name: 'Already percent', completion: 6 },
+    { id: '1', name: 'Curaleaf', completion: 6 },
+  ]);
+});
+
 test('returns an empty active-project chart series if there are no active projects', () => {
   assert.deepEqual(calculateDashboardActiveProjectCompletion([
     { approval_status: 'approved', current_status: 'Completed', completion: 100 },
@@ -113,6 +128,7 @@ test('calculates dashboard project counts from approved status values only', () 
     { status: 'On-track', level: 'High' },
     { status: 'Completed', level: 'High' },
     { status: 'At Risk', level: 'Low' },
+    { status: 'On-track', level: 'Medium' },
   ]);
 
   assert.equal(summary.totalClients, 6);
@@ -123,9 +139,11 @@ test('calculates dashboard project counts from approved status values only', () 
   assert.equal(summary.completedProjects, 1);
   assert.equal(summary.totalRevenue, 1750);
   assert.equal(summary.averageRevenue, 1750 / 7);
-  assert.equal(summary.totalRisks, 3);
-  assert.equal(summary.openRisks, 2);
-  assert.equal(summary.highRisks, 1);
+  assert.equal(summary.totalRisks, 4);
+  assert.equal(summary.openRisks, 3);
+  assert.equal(summary.highRisks, 2);
+  assert.equal(summary.mediumRisks, 1);
+  assert.equal(summary.lowRisks, 1);
 });
 
 test('returns zero-safe dashboard metrics for no approved records', () => {
@@ -143,6 +161,8 @@ test('returns zero-safe dashboard metrics for no approved records', () => {
     totalRisks: 0,
     openRisks: 0,
     highRisks: 0,
+    mediumRisks: 0,
+    lowRisks: 0,
     averageCompletion: 0,
   });
 });
