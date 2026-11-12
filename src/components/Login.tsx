@@ -1,6 +1,9 @@
-import { useState } from "react";
-import { Shield, Cloud, BarChart3, Users, ArrowRight, Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
+import { Shield, Cloud, BarChart3, Users, ArrowRight, Lock, Mail, Eye, EyeOff, X } from "lucide-react";
+import { createPortal } from "react-dom";
 import { showCloudOrbixAlert } from "../alert";
+
+const Portfolio = lazy(() => import("./Portfolio"));
 
 interface LoginProps {
   onLogin: (user: { id: number; email: string; firstName: string; lastName: string; roles: string[]; isActive: boolean }, token: string) => void;
@@ -16,6 +19,79 @@ export default function Login({ onLogin }: LoginProps) {
   const [resetMode, setResetMode] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPortfolio, setShowPortfolio] = useState(false);
+  const portfolioCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const portfolioTriggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!showPortfolio) return;
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    portfolioCloseButtonRef.current?.focus();
+
+    const handleModalKeys = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        const nestedPortfolioDialog = document.querySelector(
+          ".login-portfolio-modal [role='dialog'][aria-modal='true']:not(#login-portfolio-dialog)",
+        );
+        if (nestedPortfolioDialog) return;
+        event.preventDefault();
+        setShowPortfolio(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const modal = document.getElementById("login-portfolio-dialog");
+      const nestedModal = modal?.querySelector<HTMLElement>(
+        "[role='dialog'][aria-modal='true']:not(#login-portfolio-dialog)",
+      );
+      const focusScope = nestedModal || modal;
+      const focusableElements = focusScope
+        ? Array.from(
+            focusScope.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((element) => element.getClientRects().length > 0)
+        : [];
+      if (!focusableElements.length) {
+        event.preventDefault();
+        portfolioCloseButtonRef.current?.focus();
+        return;
+      }
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      if (nestedModal && !nestedModal.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleModalKeys);
+    return () => {
+      window.removeEventListener("keydown", handleModalKeys);
+      document.body.style.overflow = previousOverflow;
+      (previouslyFocused && previouslyFocused !== document.body
+        ? previouslyFocused
+        : portfolioTriggerRef.current
+      )?.focus();
+    };
+  }, [showPortfolio]);
+
+  const openPortfolio = (event: MouseEvent<HTMLButtonElement>) => {
+    portfolioTriggerRef.current = event.currentTarget;
+    setShowPortfolio(true);
+  };
 
   const handleAuth = async (mode: "manual" | "sso") => {
     setLoading(true);
@@ -81,17 +157,15 @@ export default function Login({ onLogin }: LoginProps) {
   // ];
 
   return (
-    <div className="min-h-screen flex" style={{ 
+    <>
+    <div aria-hidden={showPortfolio || undefined} className="min-h-screen flex" style={{
       backgroundImage: "url('/bg.png')",
       backgroundSize: "cover",
       backgroundPosition: "center",
        backgroundRepeat: "no-repeat",
       fontFamily: "var(--font-sans)" }}>
       {/* Left Panel */}
-      <div
-        className="hidden lg:flex flex-col justify-between w-[55%] p-12 relative overflow-hidden"
-        style={{  }}
-      >
+      <div className="relative hidden w-[55%] flex-col justify-between overflow-hidden p-8 lg:flex xl:p-10">
         {/* Background decoration */}
         {/* <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #93C5FD, transparent)" }} />
@@ -104,23 +178,113 @@ export default function Login({ onLogin }: LoginProps) {
           </svg>
         </div> */}
 
-        <div className="relative z-10 ">
-          <div className="flex items-center gap-5 mb-20 ml-0 mt-0">
-              <img src="/CloudOrbix.png" alt="CloudOrbix" className="h-20 w-20 rounded-lg object-contain " />
-            <div>
-              <div className="text-white font-bold text-3xl leading-none">CloudOrbix</div>
-              <div className="text-blue-100 text-xs font-medium">Orbiting Every Project Around Success</div>
+        <div className="relative z-10 flex flex-col items-center">
+          <div
+            className="cloud-orbit relative mb-5 h-[340px] w-[340px] max-w-full"
+          >
+            <div
+              aria-hidden="true"
+              className="cloud-orbit-track absolute inset-0 rounded-full border border-dashed border-cyan-100/35"
+            >
+              <span className="absolute inset-5 rounded-full border border-cyan-100/15" />
+              {[
+                { name: "Microsoft Azure", angle: 0, mark: "Azure", color: "#0078D4" },
+                { name: "Amazon Web Services", angle: 90, mark: "aws", color: "#232F3E" },
+                { name: "Oracle Cloud Infrastructure", angle: 180, mark: "OCI", color: "#C74634" },
+                { name: "Google Cloud", angle: 270, mark: "GCP", color: "#1A5BA0" },
+              ].map((provider) => (
+                <div
+                  key={provider.name}
+                  className="cloud-orbit-provider absolute left-1/2 top-1/2 -ml-11 -mt-[30px]"
+                  style={{ transform: `rotate(${provider.angle}deg) translateY(-142px)` }}
+                >
+                  <div
+                    className="cloud-orbit-provider-angle"
+                    style={{ transform: `rotate(-${provider.angle}deg)` }}
+                  >
+                    <div
+                      className="cloud-orbit-provider-label flex h-[60px] w-[88px] flex-col items-center justify-center rounded-xl border border-slate-200/90 bg-white px-2 shadow-[0_8px_24px_rgba(2,12,32,0.25)]"
+                      style={{ color: provider.color }}
+                    >
+                      {provider.mark === "Azure" && (
+                        <svg aria-hidden="true" viewBox="0 0 24 24" className="mb-0.5 h-5 w-5">
+                          <path fill="currentColor" d="M13.2 2 5.1 17h4.2l2.2-4.1 4.7 7.1H21L13.2 2Zm-4 12.7L7.5 18h5.1l-1.6-2.5 1-1.9-2.8 1.1Z" />
+                        </svg>
+                      )}
+                      {provider.mark === "aws" && (
+                        <svg aria-hidden="true" viewBox="0 0 32 20" className="mb-0.5 h-5 w-7">
+                          <path d="M5 16c6 4 16 4 22-1" fill="none" stroke="#FF9900" strokeLinecap="round" strokeWidth="1.8" />
+                        </svg>
+                      )}
+                      {provider.mark === "OCI" && (
+                        <svg aria-hidden="true" viewBox="0 0 28 20" className="mb-0.5 h-5 w-7">
+                          <path d="M4 5c4-4 16-4 20 0M3 9c5-3 17-3 22 0" fill="none" stroke="#F29111" strokeLinecap="round" strokeWidth="2" />
+                        </svg>
+                      )}
+                      {provider.name === "Google Cloud" && (
+                        <svg aria-hidden="true" viewBox="0 0 24 24" className="mb-0.5 h-5 w-5">
+                          <path fill="#4285F4" d="M19.6 12.2c0-.6-.1-1.2-.2-1.8H12v3.4h4.3a3.7 3.7 0 0 1-1.6 2.4v2.2h2.7c1.5-1.4 2.2-3.6 2.2-6.2Z" />
+                          <path fill="#34A853" d="M12 20c2.2 0 4-.7 5.4-1.9l-2.7-2.2c-.7.5-1.6.8-2.7.8-2.1 0-3.9-1.4-4.6-3.3H4.6v2.3A8.2 8.2 0 0 0 12 20Z" />
+                          <path fill="#FBBC05" d="M7.4 13.4a4.9 4.9 0 0 1 0-3V8.1H4.6a8 8 0 0 0 0 7.6l2.8-2.3Z" />
+                          <path fill="#EA4335" d="M12 7.1c1.2 0 2.3.4 3.1 1.2l2.4-2.4A8 8 0 0 0 4.6 8.1l2.8 2.3c.7-1.9 2.5-3.3 4.6-3.3Z" />
+                        </svg>
+                      )}
+                      <span className="cloud-orbit-provider-name text-[11px] font-bold leading-none">
+                        {provider.mark}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
+            <button
+              type="button"
+              aria-label="About us — open the CloudOrbix portfolio"
+              onClick={openPortfolio}
+              className="absolute left-1/2 top-1/2 z-10 flex h-32 w-32 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/80 bg-white shadow-[0_14px_38px_rgba(1,12,35,0.35)] transition-shadow duration-200 hover:shadow-[0_18px_44px_rgba(1,12,35,0.45)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+            >
+              <img src="/CloudOrbix.png" alt="" className="h-[68px] w-[68px] rounded-xl object-contain" />
+              <span className="mt-1 text-[11px] font-bold tracking-wide text-slate-800">About us</span>
+            </button>
+            <style>{`
+              @keyframes cloud-orbit-spin {
+                to { transform: rotate(360deg); }
+              }
+              @keyframes cloud-orbit-counter {
+                to { transform: rotate(-360deg); }
+              }
+              .cloud-orbit-track {
+                animation: cloud-orbit-spin 42s linear infinite;
+              }
+              .cloud-orbit-provider-label {
+                animation: cloud-orbit-counter 42s linear infinite;
+              }
+              .cloud-orbit-provider-angle {
+                height: 60px;
+                width: 88px;
+              }
+              @media (prefers-reduced-motion: reduce) {
+                .cloud-orbit-track,
+                .cloud-orbit-provider-label {
+                  animation: none;
+                }
+              }
+            `}</style>
+            <span className="sr-only">
+              Microsoft Azure, Amazon Web Services, Oracle Cloud Infrastructure, and Google Cloud
+            </span>
           </div>
 
-          <h1 className="text-3xl font-bold text-white leading-tight mb-4">
+          <div className="w-full">
+          <h1 className="mb-4 text-3xl font-bold leading-tight text-white">
             Manage Projects<br />
             <span className="text-blue-200">Lifecycles</span> with<br />
             Precision.
           </h1>
-          <p className="text-blue-100 text-lg leading-relaxed max-w-md">
+          <p className="max-w-md text-lg leading-relaxed text-blue-100">
             One Platform. Unified Delivery. Measurable Results.
           </p>
+          </div>
         </div>
 
         <div className="relative z-10 space-y-4">
@@ -144,11 +308,19 @@ export default function Login({ onLogin }: LoginProps) {
       </div>
 
       {/* Right Panel */}
-      <div className="flex-1 flex items-center justify-center rounded-xl bg-white/10 backdrop-blur-sm border m-13 " style={{ border:"1px #3ad8f4" ,  borderStyle: "solid", boxShadow: "0 1px 10px rgba(0, 0, 0, 0.1)" }}>
+      <div className="m-4 flex min-w-0 flex-1 items-center justify-center rounded-xl border border-cyan-300/70 bg-white/10 p-4 shadow-[0_12px_36px_rgba(0,0,0,0.18)] backdrop-blur-sm sm:m-5 sm:p-5 lg:m-6 lg:max-w-[560px] lg:p-6">
         <div className="w-full max-w-[400px]">
-          <div className="flex items-center gap-4 mb-30 lg:hidden m-3">
+          <div className="mb-5 lg:hidden">
+            <button
+              type="button"
+              aria-label="About us — open the CloudOrbix portfolio"
+              onClick={openPortfolio}
+              className="flex items-center gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+            >
             <img src="/CloudOrbix.png" alt="CloudOrbix" className="h-8 w-8 rounded-lg object-contain" />
             <span className="font-bold text-slate-200">CloudOrbix</span>
+            <span className="sr-only">About us</span>
+            </button>
           </div>
 
           <div className="mb-8">
@@ -267,9 +439,9 @@ export default function Login({ onLogin }: LoginProps) {
           </button>
           </form>
 
-          <div className="mt-8 p-4 rounded-lg bg-slate-50 border border-slate-100">
+          <div className="mt-6 rounded-lg border border-slate-100 bg-slate-50 p-3 sm:p-4">
             <div className="text-xs text-slate-500 text-center mb-2 font-medium">Need help?</div>
-            <div className="flex justify-center gap-4 text-xs text-blue-600">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-xs text-blue-600">
               <a href="mailto:shivendra.anand-tripathi@capgemini.com?subject=CloudOrbix%20IT%20Support" className="hover:underline">IT Support</a>
               <span className="text-slate-300">|</span>
               <a href="#" onClick={e => { e.preventDefault(); setResetMode(true); setError("Enter your current password above, then choose a new password."); }} className="hover:underline">Reset Password</a>
@@ -279,12 +451,72 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
 
           <p className="text-center text-xs text-slate-400 mt-6">
-            <span>CloudOrbix v1.0.0 · © 2026 Capgemini. All rights reserved.</span>
-            <img src="/Capgemini_Logo_Color_RGB.svg" alt="Capgemini" className="mx-auto mt-3 h-6 w-auto" />
+            <span>CloudOrbix v1.0.1. All rights reserved.</span>
+            {/* <img src="/Capgemini_Logo_Color_RGB.svg" alt="Capgemini" className="mx-auto mt-3 h-6 w-auto" /> */}
           </p>
         </div>
       </div>
-      
     </div>
+    {showPortfolio &&
+      createPortal(
+        <div
+          className="login-portfolio-modal fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-2 backdrop-blur-md sm:p-5"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setShowPortfolio(false);
+          }}
+        >
+          <section
+            id="login-portfolio-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="login-portfolio-title"
+            tabIndex={-1}
+            className="flex h-[min(94dvh,900px)] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl border border-white/60 bg-white shadow-[0_32px_100px_rgba(2,12,32,0.55)] outline-none sm:rounded-3xl"
+          >
+            <header className="relative flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3.5 sm:px-7 sm:py-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <img
+                  src="/CloudOrbix.png"
+                  alt=""
+                  className="h-9 w-9 shrink-0 rounded-lg object-contain sm:h-10 sm:w-10"
+                />
+                <div className="min-w-0">
+                  <h2
+                    id="login-portfolio-title"
+                    className="truncate text-base font-bold tracking-tight text-slate-950 sm:text-lg"
+                  >
+                    About CloudOrbix
+                  </h2>
+                  <p className="hidden text-xs text-slate-500 sm:block">
+                    Explore our cloud professional services
+                  </p>
+                </div>
+              </div>
+              <button
+                ref={portfolioCloseButtonRef}
+                type="button"
+                onClick={() => setShowPortfolio(false)}
+                aria-label="Close portfolio"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <Suspense
+                fallback={
+                  <p className="p-8 text-center text-sm text-slate-500" role="status">
+                    Loading portfolio…
+                  </p>
+                }
+              >
+                <Portfolio hideHeader hideFooter className="!min-h-0" />
+              </Suspense>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

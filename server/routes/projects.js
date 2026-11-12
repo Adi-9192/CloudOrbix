@@ -11,6 +11,11 @@ import { createRiskExport } from '../lib/risk-export.js';
 import { parseTaskWorksheetRecords } from '../lib/task-import.js';
 import { previewProjectUpdateWorkbook } from '../lib/project-update-import.js';
 import { MANDATORY_DOCUMENTS } from '../../shared/project-documents.js';
+import {
+  normalizeTaskDate,
+  reviewTaskImportRecords,
+  taskDateYearFromProjectStart,
+} from '../../shared/task-import.js';
 import { parseProjectUpdateDate } from '../../shared/project-updates.js';
 import { normalizeProjectTaskStatus } from '../../shared/project-task-status.js';
 import {
@@ -24,12 +29,34 @@ async function projectFor(clientId) {
   const pool = getPool();
   const result = await pool.query(`
     SELECT c.*,
+      rfp.id linked_rfp_id,
+      rfp.rfp_code linked_rfp_code,
+      rfp.project_name linked_rfp_project_name,
+      rfp.status linked_rfp_estimate_status,
+      rfp.project_status linked_rfp_project_status,
+      rfp.request_from_by linked_rfp_request_from_by,
+      rfp.requestor_email linked_rfp_requestor_email,
+      rfp.requested_date linked_rfp_requested_date,
+      rfp.region linked_rfp_region,
+      rfp.cloud linked_rfp_cloud,
+      rfp.[year] linked_rfp_year,
+      rfp.currency_code linked_rfp_currency_code,
+      rfp.duration_months linked_rfp_duration_months,
+      rfp.duration_days linked_rfp_duration_days,
+      rfp.allowance_percent linked_rfp_allowance_percent,
+      rfp.project_overview linked_rfp_project_overview,
+      rfp.in_scope linked_rfp_in_scope,
+      rfp.out_of_scope linked_rfp_out_of_scope,
+      rfp.assumption linked_rfp_assumption,
+      rfp_cost.selected_currency_total linked_rfp_revenue,
       COALESCE((SELECT AVG(t.progress) FROM project_tasks t WHERE t.client_id = c.id), c.completion, 0) project_progress,
       (SELECT STRING_AGG(u.email, ',')
        FROM project_temporary_access ta
        JOIN users u ON u.id = ta.manager_user_id
        WHERE ta.client_id = c.id AND ta.status = 'approved' AND u.is_active = 1) temporary_manager_emails
     FROM clients c
+    LEFT JOIN rfp_projects rfp ON rfp.id = c.rfp_project_id
+    LEFT JOIN rfp_cost_summary rfp_cost ON rfp_cost.project_id = rfp.id
     WHERE c.client_id = $1 OR c.id = TRY_CONVERT(INT, $1)
     ORDER BY CASE WHEN c.client_id = $1 THEN 0 ELSE 1 END
   `, [clientId]);
@@ -51,6 +78,30 @@ async function projectFor(clientId) {
   ]);
   return {
     ...project,
+    rfpDetails: project.linked_rfp_id
+      ? {
+          id: project.linked_rfp_id,
+          code: project.linked_rfp_code,
+          projectName: project.linked_rfp_project_name,
+          estimateStatus: project.linked_rfp_estimate_status,
+          projectStatus: project.linked_rfp_project_status,
+          requestFromBy: project.linked_rfp_request_from_by,
+          requestorEmail: project.linked_rfp_requestor_email,
+          requestedDate: project.linked_rfp_requested_date,
+          region: project.linked_rfp_region,
+          cloud: project.linked_rfp_cloud,
+          year: project.linked_rfp_year,
+          currencyCode: project.linked_rfp_currency_code,
+          durationMonths: project.linked_rfp_duration_months,
+          durationDays: project.linked_rfp_duration_days,
+          allowancePercent: project.linked_rfp_allowance_percent,
+          projectOverview: project.linked_rfp_project_overview,
+          inScope: project.linked_rfp_in_scope,
+          outOfScope: project.linked_rfp_out_of_scope,
+          assumption: project.linked_rfp_assumption,
+          revenue: project.linked_rfp_revenue,
+        }
+      : null,
     services: services.rows.map((service) => service.name),
     resources: resources.rows.map((resource) => ({
       resourceName: resource.resource_name,
@@ -67,6 +118,49 @@ async function syncCompletion(clientDbId) {
   const completion = Number(result.rows[0]?.completion || 0);
   await pool.query('UPDATE clients SET completion = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [completion, clientDbId]);
   return completion;
+}
+
+async function importTaskRecords(project, records) {
+  const review = reviewTaskImportRecords(records, {
+    yearForUndated: taskDateYearFromProjectStart(project.estimated_start_date),
+  });
+  if (review.missingColumns.length) {
+    return {
+      error: `Missing required task columns: ${review.missingColumns.join(', ')}`,
+    };
+  }
+  const invalidRows = review.rows.filter((row) => row.error);
+  if (invalidRows.length) {
+    return {
+      error: invalidRows
+        .map((row) => `Row ${row.rowNumber}: ${row.error}`)
+        .join(' '),
+    };
+  }
+
+  const inserted = [];
+  for (const record of review.rows) {
+    if (record.skipped) continue;
+    const result = await getPool().query(
+      'INSERT INTO project_tasks(client_id,task_title,assigned_to,expected_start_date,expected_end_date,actual_start_date,actual_end_date,progress,status,remark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
+      [
+        project.id,
+        record.taskTitle,
+        record.assignedTo || project.project_manager || project.account_manager || null,
+        record.plannedStartDate || null,
+        record.plannedEndDate || null,
+        record.actualStartDate || null,
+        record.actualEndDate || null,
+        record.progress,
+        record.status,
+        record.remarks || null,
+      ],
+    );
+    inserted.push(result.rows[0]);
+  }
+
+  await syncCompletion(project.id);
+  return { tasks: inserted, imported: inserted.length };
 }
 
 router.get('/risks/export', protectRoute, async (req, res, next) => {
@@ -639,7 +733,26 @@ router.post('/:clientId/tasks', protectRoute, async (req, res, next) => {
     if (!body.taskTitle) return res.status(400).json({ message: 'Task title is required.' });
     const status = normalizeProjectTaskStatus(body.status || 'Not Started');
     if (!status) return res.status(400).json({ message: 'Task status must be Not Started, In progress, Completed, or Blocked.' });
-    const result = await getPool().query(`INSERT INTO project_tasks(client_id,task_title,assigned_to,expected_start_date,expected_end_date,actual_start_date,actual_end_date,progress,status,remark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`, [project.id, body.taskTitle, body.assignedTo || project.project_manager || project.account_manager || null, body.expectedStartDate || null, body.expectedEndDate || null, body.actualStartDate || null, body.actualEndDate || null, Number(body.progress || 0), status, body.remark || null]);
+    const taskDates = [
+      ['expectedStartDate', 'Planned start date'],
+      ['expectedEndDate', 'Planned end date'],
+      ['actualStartDate', 'Actual start date'],
+      ['actualEndDate', 'Actual end date'],
+    ].map(([field, label]) => {
+      const result = normalizeTaskDate(
+        body[field],
+        taskDateYearFromProjectStart(project.estimated_start_date),
+      );
+      return { field, label, ...result };
+    });
+    const invalidDate = taskDates.find((date) => date.error);
+    if (invalidDate) {
+      return res.status(400).json({
+        message: `${invalidDate.label}: ${invalidDate.error}`,
+      });
+    }
+    const dateFor = (field) => taskDates.find((date) => date.field === field)?.value || null;
+    const result = await getPool().query(`INSERT INTO project_tasks(client_id,task_title,assigned_to,expected_start_date,expected_end_date,actual_start_date,actual_end_date,progress,status,remark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`, [project.id, body.taskTitle, body.assignedTo || project.project_manager || project.account_manager || null, dateFor('expectedStartDate'), dateFor('expectedEndDate'), dateFor('actualStartDate'), dateFor('actualEndDate'), Number(body.progress || 0), status, body.remark || null]);
     const completion = await syncCompletion(project.id);
     return res.status(201).json({ task: result.rows[0], completion });
   } catch (error) { return next(error); }
@@ -656,42 +769,36 @@ router.post('/:clientId/tasks/import', protectRoute, upload.single('file'), asyn
     if (!sheet) return res.status(400).json({ message: 'The task workbook contains no worksheet.' });
     const records = parseTaskWorksheetRecords(sheet);
     if (!records.length) return res.status(400).json({ message: 'The task workbook is empty.' });
-    const requiredColumns = ['Task Title', 'Status', 'Progress'];
-    const missing = requiredColumns.filter((column) => !Object.prototype.hasOwnProperty.call(records[0], column));
-    if (missing.length) return res.status(400).json({ message: `Missing required Excel columns: ${missing.join(', ')}` });
-    const normalizedRecords = [];
-    for (const [index, record] of records.entries()) {
-      const status = normalizeProjectTaskStatus(record.Status || 'Not Started');
-      if (!status) {
-        return res.status(400).json({
-          message: `Row ${index + 2} has an unsupported task status. Use Not Started, In progress, Completed, or Blocked.`,
-        });
-      }
-      normalizedRecords.push({ ...record, Status: status });
+    const result = await importTaskRecords(project, records);
+    if (result.error) {
+      return res.status(400).json({
+        message: result.error.replace(
+          'Missing required task columns:',
+          'Missing required Excel columns:',
+        ),
+      });
     }
-    const inserted = [];
-    for (const record of normalizedRecords) {
-      const title = String(record['Task Title'] || '').trim();
-      if (!title) continue;
-      const result = await getPool().query(
-        'INSERT INTO project_tasks(client_id,task_title,assigned_to,expected_start_date,expected_end_date,actual_start_date,actual_end_date,progress,status,remark) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
-        [
-          project.id,
-          title,
-          record['Assigned To'] || project.project_manager || project.account_manager || null,
-          record['Planned Start Date'] || record['Expected Start'] || null,
-          record['Planned End Date'] || record['Expected End'] || null,
-          record['Actual Start Date'] || record['Actual Start'] || null,
-          record['Actual End Date'] || record['Actual End'] || null,
-          Math.max(0, Math.min(100, Number(record.Progress) || 0)),
-          record.Status,
-          record.Remarks || record.Remark || null,
-        ],
-      );
-      inserted.push(result.rows[0]);
+    return res.status(201).json(result);
+  } catch (error) { return next(error); }
+});
+
+router.post('/:clientId/tasks/import/pasted', protectRoute, async (req, res, next) => {
+  try {
+    const project = await projectFor(req.params.clientId);
+    if (!project) return res.status(404).json({ message: 'Project not found.' });
+    if (!canAccessProject(req.user, project)) return res.status(403).json({ message: 'Project access denied.' });
+    const records = req.body?.records;
+    if (!Array.isArray(records) || records.some((record) =>
+      !record || typeof record !== 'object' || Array.isArray(record)
+    )) {
+      return res.status(400).json({ message: 'Paste a task table with a header row and task rows.' });
     }
-    await syncCompletion(project.id);
-    return res.status(201).json({ tasks: inserted, imported: inserted.length });
+    if (!records.length) {
+      return res.status(400).json({ message: 'Paste a task table with a header row and task rows.' });
+    }
+    const result = await importTaskRecords(project, records);
+    if (result.error) return res.status(400).json({ message: result.error });
+    return res.status(201).json(result);
   } catch (error) { return next(error); }
 });
 
@@ -733,7 +840,26 @@ router.put('/:clientId/tasks/:taskId', protectRoute, async (req, res, next) => {
     const body = req.body || {};
     const status = body.status === undefined ? null : normalizeProjectTaskStatus(body.status);
     if (body.status !== undefined && !status) return res.status(400).json({ message: 'Task status must be Not Started, In progress, Completed, or Blocked.' });
-    const result = await getPool().query(`UPDATE project_tasks SET task_title=COALESCE($1,task_title),assigned_to=COALESCE($2,assigned_to),expected_start_date=$3,expected_end_date=$4,actual_start_date=$5,actual_end_date=$6,progress=COALESCE($7,progress),status=COALESCE($8,status),remark=$9,updated_at=CURRENT_TIMESTAMP WHERE id=$10 AND client_id=$11 RETURNING *`, [body.taskTitle, body.assignedTo || project.project_manager || project.account_manager, body.expectedStartDate || null, body.expectedEndDate || null, body.actualStartDate || null, body.actualEndDate || null, body.progress === undefined ? null : Number(body.progress), status, body.remark || null, req.params.taskId, project.id]);
+    const taskDates = [
+      ['expectedStartDate', 'Planned start date'],
+      ['expectedEndDate', 'Planned end date'],
+      ['actualStartDate', 'Actual start date'],
+      ['actualEndDate', 'Actual end date'],
+    ].map(([field, label]) => {
+      const result = normalizeTaskDate(
+        body[field],
+        taskDateYearFromProjectStart(project.estimated_start_date),
+      );
+      return { field, label, ...result };
+    });
+    const invalidDate = taskDates.find((date) => date.error);
+    if (invalidDate) {
+      return res.status(400).json({
+        message: `${invalidDate.label}: ${invalidDate.error}`,
+      });
+    }
+    const dateFor = (field) => taskDates.find((date) => date.field === field)?.value || null;
+    const result = await getPool().query(`UPDATE project_tasks SET task_title=COALESCE($1,task_title),assigned_to=COALESCE($2,assigned_to),expected_start_date=$3,expected_end_date=$4,actual_start_date=$5,actual_end_date=$6,progress=COALESCE($7,progress),status=COALESCE($8,status),remark=$9,updated_at=CURRENT_TIMESTAMP WHERE id=$10 AND client_id=$11 RETURNING *`, [body.taskTitle, body.assignedTo || project.project_manager || project.account_manager, dateFor('expectedStartDate'), dateFor('expectedEndDate'), dateFor('actualStartDate'), dateFor('actualEndDate'), body.progress === undefined ? null : Number(body.progress), status, body.remark || null, req.params.taskId, project.id]);
     if (!result.rows[0]) return res.status(404).json({ message: 'Task not found.' });
     const completion = await syncCompletion(project.id);
     return res.json({ task: result.rows[0], completion });

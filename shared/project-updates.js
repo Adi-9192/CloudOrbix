@@ -25,8 +25,91 @@ const monthNumbers = new Map([
   ["december", 12],
 ]);
 
-const datePrefixPattern =
-  /^(\d{4}[./-]\d{1,2}[./-]\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?|\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?|\d{1,2}\s+[A-Za-z]{3,9}(?:\s+\d{2,4})?(?:\s+\d{1,2}:\d{2})?|[A-Za-z]{3,9}\s+\d{1,2}(?:,?\s+\d{2,4})?(?:\s+\d{1,2}:\d{2})?)(?:\s*[:|]\s*|\s*[-–—]\s+|\s+)(.*)$/i;
+const dayPattern = "\\d{1,2}(?:st|nd|rd|th)?";
+const monthPattern = "[A-Za-z]{3,9}";
+const rangeSeparator = "(?:-|–|—|to)";
+const headerSeparator = "(?:\\s*[:|]\\s*|\\s+[-–—]\\s+|\\s+)";
+const dayMonthPattern = `${dayPattern}(?:\\s+|[-/,]\\s*)[A-Za-z]{3,9}(?:\\s+\\d{2,4})?`;
+const dateRangePatterns = [
+  new RegExp(
+    `^(${dayPattern})\\s*${rangeSeparator}\\s*(${dayPattern})\\s+(${monthPattern})(?:\\s+(\\d{2,4}))?${headerSeparator}(.*)$`,
+    "i",
+  ),
+  new RegExp(
+    `^(${dayMonthPattern})\\s*${rangeSeparator}\\s*(${dayMonthPattern})${headerSeparator}(.*)$`,
+    "i",
+  ),
+  new RegExp(
+    `^(${dayMonthPattern})\\s*${rangeSeparator}\\s*(${dayPattern})(?:\\s+(\\d{2,4}))?${headerSeparator}(.*)$`,
+    "i",
+  ),
+  new RegExp(
+    `^(${dayPattern})\\s*${rangeSeparator}\\s*(${dayPattern})${headerSeparator}(.*)$`,
+    "i",
+  ),
+];
+const datePrefixPattern = new RegExp(
+  `^(\\d{4}[./-]\\d{1,2}[./-]\\d{1,2}(?:[ T]\\d{1,2}:\\d{2}(?::\\d{2})?)?|\\d{1,2}[./-]\\d{1,2}(?:[./-]\\d{2,4})?(?:[ T]\\d{1,2}:\\d{2}(?::\\d{2})?)?|${dayPattern}(?:\\s*[-/,.]\\s*|\\s+)${monthPattern}(?:\\s+\\d{2,4})?(?:\\s+\\d{1,2}:\\d{2})?|${monthPattern}\\s+${dayPattern}(?:,?\\s+\\d{2,4})?(?:\\s+\\d{1,2}:\\d{2})?|${dayPattern})(?:\\s*[:|]\\s*|\\s+[-–—]\\s+|\\s+)(.*)$`,
+  "i",
+);
+
+function parseUpdateHeader(line, yearForUndated) {
+  for (const [index, pattern] of dateRangePatterns.entries()) {
+    const match = line.match(pattern);
+    if (!match) continue;
+
+    let startDate;
+    let dateRange;
+    let updateText;
+    if (index === 0) {
+      const [, startDay, endDay, month, year, text] = match;
+      startDate = `${startDay} ${month}${year ? ` ${year}` : ""}`;
+      dateRange = `${startDay}–${endDay} ${month}${year ? ` ${year}` : ""}`;
+      updateText = text;
+    } else if (index === 1) {
+      const [, start, end, text] = match;
+      startDate = start;
+      dateRange = `${start}–${end}`;
+      updateText = text;
+    } else if (index === 2) {
+      const [, start, endDay, year, text] = match;
+      const startMatch = start.match(new RegExp(`^(${dayPattern})(?:\\s+|-)(${monthPattern})(?:\\s+(\\d{2,4}))?$`, "i"));
+      if (!startMatch) continue;
+      const [, startDay, month, startYear] = startMatch;
+      const rangeYear = startYear || year;
+      startDate = `${startDay} ${month}${rangeYear ? ` ${rangeYear}` : ""}`;
+      dateRange = `${start}–${endDay}${rangeYear ? ` ${rangeYear}` : ""}`;
+      updateText = text;
+    } else {
+      const [, startDay, endDay, text] = match;
+      if (!/(?:st|nd|rd|th)/i.test(`${startDay} ${endDay}`)) continue;
+      startDate = startDay;
+      dateRange = `${startDay}–${endDay}`;
+      updateText = text;
+    }
+
+    const createdAt = parseProjectUpdateDate(startDate, yearForUndated);
+    const dayOnly = startDate.match(/^(\d{1,2})(?:st|nd|rd|th)?$/i);
+    const dayOfMonth = dayOnly && Number(dayOnly[1]) <= 31
+      ? Number(dayOnly[1])
+      : undefined;
+    if (createdAt || dayOfMonth) {
+      return { createdAt, dayOfMonth, dateRange, updateText };
+    }
+  }
+
+  const match = line.match(datePrefixPattern);
+  if (!match) return null;
+  const [, dateText, updateText] = match;
+  const createdAt = parseProjectUpdateDate(dateText, yearForUndated);
+  const dayOnly = dateText.match(/^(\d{1,2})(?:st|nd|rd|th)?$/i);
+  const dayOfMonth = dayOnly && Number(dayOnly[1]) <= 31
+    ? Number(dayOnly[1])
+    : undefined;
+  return createdAt || dayOfMonth
+    ? { createdAt, dayOfMonth, updateText }
+    : null;
+}
 
 function toIsoDate(year, month, day, hour = 0, minute = 0, second = 0) {
   const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
@@ -55,7 +138,13 @@ export function parseProjectUpdateDate(value, yearForUndated = new Date().getFul
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value.toISOString();
   }
-  const input = String(value ?? "").trim();
+  const input = String(value ?? "")
+    .trim()
+    .replace(/\b(\d{1,2})(st|nd|rd|th)\b/i, "$1")
+    .replace(
+      /^(\d{1,2}\s*[-/,.]\s*[A-Za-z]{3,9})\s*[-/,.]\s*(\d{2,4})$/i,
+      "$1 $2",
+    );
   if (!input) return null;
 
   const iso = input.match(
@@ -93,7 +182,7 @@ export function parseProjectUpdateDate(value, yearForUndated = new Date().getFul
   }
 
   const dayFirst = input.match(
-    /^(\d{1,2})\s+([A-Za-z]{3,9})(?:\s+(\d{2,4}))?(?:\s+(\d{1,2}):(\d{2}))?$/,
+    /^(\d{1,2})(?:\s+|[-/,.]\s*|,\s*)([A-Za-z]{3,9})(?:\s+(\d{2,4}))?(?:\s+(\d{1,2}):(\d{2}))?$/,
   );
   const monthFirst = input.match(
     /^([A-Za-z]{3,9})\s+(\d{1,2})(?:,?\s+(\d{2,4}))?(?:\s+(\d{1,2}):(\d{2}))?$/,
@@ -122,15 +211,14 @@ export function parseProjectUpdatesText(text, yearForUndated = new Date().getFul
   let current = null;
 
   for (const line of String(text ?? "").split(/\r?\n/)) {
-    const match = line.trim().match(datePrefixPattern);
-    const createdAt = match
-      ? parseProjectUpdateDate(match[1], yearForUndated)
-      : null;
-    if (match && createdAt) {
+    const match = parseUpdateHeader(line.trim(), yearForUndated);
+    if (match) {
       if (current) updates.push(current);
       current = {
-        updateText: match[2].trim(),
-        createdAt,
+        updateText: match.updateText.trim(),
+        createdAt: match.createdAt,
+        ...(match.dayOfMonth ? { dayOfMonth: match.dayOfMonth } : {}),
+        ...(match.dateRange ? { dateRange: match.dateRange } : {}),
       };
     } else if (current && line.trim()) {
       current.updateText = `${current.updateText}\n${line.trim()}`.trim();
