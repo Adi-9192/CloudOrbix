@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Portfolio overview paragraphs",
+    detail:
+      "Fixed the Portfolio overview text and displayed its three sections as separate paragraphs.",
+  },
+  {
     title: "Portfolio preview from sign in",
     detail:
       "Open the interactive service portfolio from the CloudOrbix logo at the center of the Azure, AWS, OCI, and GCP orbit. The compact sign-in panel keeps the preview accessible without leaving the page.",
