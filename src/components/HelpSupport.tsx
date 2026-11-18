@@ -150,9 +150,29 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Dark provider logos and professional services link",
+    detail:
+      "Provider logos sit on dark badges with a soft glow and remain 10% larger. The central CloudOrbix mark is cleanly separated from the orbits, with a Learn more about Professional Services action beneath them.",
+  },
+  {
+    title: "Independent cloud provider orbits",
+    detail:
+      "Five dark-backed provider logos circle the CloudOrbix logo without overlapping, while the world-map backdrop is dimmed for contrast.",
+  },
+  {
+    title: "Centered sign-in messaging",
+    detail:
+      "The sign-in panel presents the project lifecycle headline and platform tagline above a concise Sign in divider.",
+  },
+  {
+    title: "Portfolio overview paragraphs",
+    detail:
+      "Fixed the Portfolio overview text and displayed its three sections as separate paragraphs.",
+  },
+  {
     title: "Portfolio preview from sign in",
     detail:
-      "Open the interactive service portfolio from the CloudOrbix logo at the center of the Azure, AWS, OCI, and GCP orbit. The compact sign-in panel keeps the preview accessible without leaving the page.",
+      "Select Learn more about Professional Services beneath the cloud-provider orbits to open the interactive service portfolio in an accessible pop-up without leaving the sign-in page. Decorative orbit layers do not block the button, and the popup includes a dark/light mode switch.",
   },
   {
     title: "RFP details on project pages",

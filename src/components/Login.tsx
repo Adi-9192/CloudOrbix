@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
-import { Shield, Cloud, BarChart3, Users, ArrowRight, Lock, Mail, Eye, EyeOff, X } from "lucide-react";
+import { Shield, Cloud, BarChart3, Users, ArrowRight, Lock, Mail, Eye, EyeOff, X, Moon, Sun } from "lucide-react";
 import { createPortal } from "react-dom";
 import { showCloudOrbixAlert } from "../alert";
 
@@ -8,6 +8,14 @@ const Portfolio = lazy(() => import("./Portfolio"));
 interface LoginProps {
   onLogin: (user: { id: number; email: string; firstName: string; lastName: string; roles: string[]; isActive: boolean }, token: string) => void;
 }
+
+const cloudProviderOrbits = [
+  { name: "Microsoft Azure", src: "/cloud-providers/azure.svg", diameter: 180, phase: 0, duration: 34, clockwise: true },
+  { name: "Amazon Web Services", src: "/cloud-providers/aws.svg", diameter: 275, phase: 72, duration: 48, clockwise: false },
+  { name: "Oracle Cloud Infrastructure", src: "/cloud-providers/oracle-cloud.svg", diameter: 370, phase: 144, duration: 42, clockwise: true },
+  { name: "Google Cloud", src: "/cloud-providers/gcp.svg", diameter: 465, phase: 216, duration: 56, clockwise: false },
+  { name: "Azure DevOps", src: "/cloud-providers/azure-devops.svg", diameter: 560, phase: 288, duration: 38, clockwise: true },
+];
 
 export default function Login({ onLogin }: LoginProps) {
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
@@ -20,6 +28,7 @@ export default function Login({ onLogin }: LoginProps) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPortfolio, setShowPortfolio] = useState(false);
+  const [portfolioDark, setPortfolioDark] = useState(false);
   const portfolioCloseButtonRef = useRef<HTMLButtonElement>(null);
   const portfolioTriggerRef = useRef<HTMLButtonElement>(null);
 
@@ -158,14 +167,15 @@ export default function Login({ onLogin }: LoginProps) {
 
   return (
     <>
-    <div aria-hidden={showPortfolio || undefined} className="min-h-screen flex" style={{
-      backgroundImage: "url('/bg.png')",
+    <div aria-hidden={showPortfolio || undefined} className="flex min-h-screen items-center justify-center p-4 sm:p-6 lg:p-8" style={{
+      backgroundImage: "linear-gradient(rgba(2, 8, 24, 0.32), rgba(2, 8, 24, 0.32)), url('/bg.png')",
       backgroundSize: "cover",
       backgroundPosition: "center",
        backgroundRepeat: "no-repeat",
       fontFamily: "var(--font-sans)" }}>
+      <div className="relative flex min-h-[calc(100vh-2rem)] w-full max-w-[1440px] overflow-hidden rounded-[2rem] border border-cyan-100/15 bg-slate-950/55 shadow-[0_24px_80px_rgba(0,0,0,0.42)] lg:min-h-[min(820px,calc(100vh-4rem))]">
       {/* Left Panel */}
-      <div className="relative hidden w-[55%] flex-col justify-between overflow-hidden p-8 lg:flex xl:p-10">
+      <div className="relative hidden w-1/2 shrink-0 flex-col justify-between overflow-hidden p-8 lg:flex xl:p-10">
         {/* Background decoration */}
         {/* <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #93C5FD, transparent)" }} />
@@ -180,72 +190,53 @@ export default function Login({ onLogin }: LoginProps) {
 
         <div className="relative z-10 flex flex-col items-center">
           <div
-            className="cloud-orbit relative mb-5 h-[340px] w-[340px] max-w-full"
+            className="cloud-orbit pointer-events-none relative mb-5 h-[620px] w-[620px] max-w-full"
           >
-            <div
-              aria-hidden="true"
-              className="cloud-orbit-track absolute inset-0 rounded-full border border-dashed border-cyan-100/35"
-            >
-              <span className="absolute inset-5 rounded-full border border-cyan-100/15" />
-              {[
-                { name: "Microsoft Azure", angle: 0, mark: "Azure", color: "#0078D4" },
-                { name: "Amazon Web Services", angle: 90, mark: "aws", color: "#232F3E" },
-                { name: "Oracle Cloud Infrastructure", angle: 180, mark: "OCI", color: "#C74634" },
-                { name: "Google Cloud", angle: 270, mark: "GCP", color: "#1A5BA0" },
-              ].map((provider) => (
+            {cloudProviderOrbits.map((provider) => (
+              <div
+                key={provider.name}
+                className="absolute inset-0"
+                style={{ transform: `rotate(${provider.phase}deg)` }}
+              >
                 <div
-                  key={provider.name}
-                  className="cloud-orbit-provider absolute left-1/2 top-1/2 -ml-11 -mt-[30px]"
-                  style={{ transform: `rotate(${provider.angle}deg) translateY(-142px)` }}
+                  className="cloud-provider-orbit absolute left-1/2 top-1/2 rounded-full border-[1.5px] border-dashed border-cyan-100/50"
+                  style={{
+                    width: provider.diameter,
+                    height: provider.diameter,
+                    marginLeft: -provider.diameter / 2,
+                    marginTop: -provider.diameter / 2,
+                    animationDuration: `${provider.duration}s`,
+                    animationDirection: provider.clockwise ? "normal" : "reverse",
+                  }}
                 >
-                  <div
-                    className="cloud-orbit-provider-angle"
-                    style={{ transform: `rotate(-${provider.angle}deg)` }}
-                  >
+                  <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2">
                     <div
-                      className="cloud-orbit-provider-label flex h-[60px] w-[88px] flex-col items-center justify-center rounded-xl border border-slate-200/90 bg-white px-2 shadow-[0_8px_24px_rgba(2,12,32,0.25)]"
-                      style={{ color: provider.color }}
+                      style={{ transform: `rotate(-${provider.phase}deg)` }}
                     >
-                      {provider.mark === "Azure" && (
-                        <svg aria-hidden="true" viewBox="0 0 24 24" className="mb-0.5 h-5 w-5">
-                          <path fill="currentColor" d="M13.2 2 5.1 17h4.2l2.2-4.1 4.7 7.1H21L13.2 2Zm-4 12.7L7.5 18h5.1l-1.6-2.5 1-1.9-2.8 1.1Z" />
-                        </svg>
-                      )}
-                      {provider.mark === "aws" && (
-                        <svg aria-hidden="true" viewBox="0 0 32 20" className="mb-0.5 h-5 w-7">
-                          <path d="M5 16c6 4 16 4 22-1" fill="none" stroke="#FF9900" strokeLinecap="round" strokeWidth="1.8" />
-                        </svg>
-                      )}
-                      {provider.mark === "OCI" && (
-                        <svg aria-hidden="true" viewBox="0 0 28 20" className="mb-0.5 h-5 w-7">
-                          <path d="M4 5c4-4 16-4 20 0M3 9c5-3 17-3 22 0" fill="none" stroke="#F29111" strokeLinecap="round" strokeWidth="2" />
-                        </svg>
-                      )}
-                      {provider.name === "Google Cloud" && (
-                        <svg aria-hidden="true" viewBox="0 0 24 24" className="mb-0.5 h-5 w-5">
-                          <path fill="#4285F4" d="M19.6 12.2c0-.6-.1-1.2-.2-1.8H12v3.4h4.3a3.7 3.7 0 0 1-1.6 2.4v2.2h2.7c1.5-1.4 2.2-3.6 2.2-6.2Z" />
-                          <path fill="#34A853" d="M12 20c2.2 0 4-.7 5.4-1.9l-2.7-2.2c-.7.5-1.6.8-2.7.8-2.1 0-3.9-1.4-4.6-3.3H4.6v2.3A8.2 8.2 0 0 0 12 20Z" />
-                          <path fill="#FBBC05" d="M7.4 13.4a4.9 4.9 0 0 1 0-3V8.1H4.6a8 8 0 0 0 0 7.6l2.8-2.3Z" />
-                          <path fill="#EA4335" d="M12 7.1c1.2 0 2.3.4 3.1 1.2l2.4-2.4A8 8 0 0 0 4.6 8.1l2.8 2.3c.7-1.9 2.5-3.3 4.6-3.3Z" />
-                        </svg>
-                      )}
-                      <span className="cloud-orbit-provider-name text-[11px] font-bold leading-none">
-                        {provider.mark}
-                      </span>
+                      <div
+                        className="cloud-orbit-provider-label flex h-10 w-10 items-center justify-center rounded-full border border-cyan-200/50 bg-slate-950/90 shadow-[0_0_24px_rgba(34,211,238,0.5),0_8px_24px_rgba(0,0,0,0.45)]"
+                        style={{
+                          animationDuration: `${provider.duration}s`,
+                          animationDirection: provider.clockwise ? "normal" : "reverse",
+                        }}
+                      >
+                        <img
+                          src={provider.src}
+                          alt={provider.name}
+                          className="h-[26.4px] w-[26.4px] object-contain"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              aria-label="About us — open the CloudOrbix portfolio"
-              onClick={openPortfolio}
-              className="absolute left-1/2 top-1/2 z-10 flex h-32 w-32 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/80 bg-white shadow-[0_14px_38px_rgba(1,12,35,0.35)] transition-shadow duration-200 hover:shadow-[0_18px_44px_rgba(1,12,35,0.45)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+              </div>
+            ))}
+            <div
+              aria-hidden="true"
+              className="absolute left-1/2 top-1/2 z-10 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-cyan-200/30 bg-slate-950/85 shadow-[0_0_38px_rgba(34,211,238,0.3)]"
             >
-              <img src="/CloudOrbix.png" alt="" className="h-[68px] w-[68px] rounded-xl object-contain" />
-              <span className="mt-1 text-[11px] font-bold tracking-wide text-slate-800">About us</span>
-            </button>
+              <img src="/CloudOrbix.png" alt="" className="h-[74.8px] w-[74.8px] rounded-xl object-contain" />
+            </div>
             <style>{`
               @keyframes cloud-orbit-spin {
                 to { transform: rotate(360deg); }
@@ -253,38 +244,38 @@ export default function Login({ onLogin }: LoginProps) {
               @keyframes cloud-orbit-counter {
                 to { transform: rotate(-360deg); }
               }
-              .cloud-orbit-track {
+              .cloud-provider-orbit {
                 animation: cloud-orbit-spin 42s linear infinite;
               }
               .cloud-orbit-provider-label {
                 animation: cloud-orbit-counter 42s linear infinite;
               }
-              .cloud-orbit-provider-angle {
-                height: 60px;
-                width: 88px;
+              @media (min-width: 1024px) and (max-width: 1151px) {
+                .cloud-orbit {
+                  transform: scale(0.72);
+                }
+              }
+              @media (min-width: 1152px) and (max-width: 1279px) {
+                .cloud-orbit {
+                  transform: scale(0.82);
+                }
               }
               @media (prefers-reduced-motion: reduce) {
-                .cloud-orbit-track,
+                .cloud-provider-orbit,
                 .cloud-orbit-provider-label {
                   animation: none;
                 }
               }
             `}</style>
-            <span className="sr-only">
-              Microsoft Azure, Amazon Web Services, Oracle Cloud Infrastructure, and Google Cloud
-            </span>
           </div>
-
-          <div className="w-full">
-          <h1 className="mb-4 text-3xl font-bold leading-tight text-white">
-            Manage Projects<br />
-            <span className="text-blue-200">Lifecycles</span> with<br />
-            Precision.
-          </h1>
-          <p className="max-w-md text-lg leading-relaxed text-blue-100">
-            One Platform. Unified Delivery. Measurable Results.
-          </p>
-          </div>
+          <button
+            type="button"
+            onClick={openPortfolio}
+            className="inline-flex items-center gap-2 rounded-full border border-cyan-200/30 bg-slate-950/75 px-5 py-3 text-sm font-semibold text-cyan-50 shadow-[0_0_22px_rgba(34,211,238,0.18)] transition hover:border-cyan-200/60 hover:bg-slate-900 hover:shadow-[0_0_28px_rgba(34,211,238,0.32)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+          >
+            Learn more about Professional Services
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
 
         <div className="relative z-10 space-y-4">
@@ -308,25 +299,31 @@ export default function Login({ onLogin }: LoginProps) {
       </div>
 
       {/* Right Panel */}
-      <div className="m-4 flex min-w-0 flex-1 items-center justify-center rounded-xl border border-cyan-300/70 bg-white/10 p-4 shadow-[0_12px_36px_rgba(0,0,0,0.18)] backdrop-blur-sm sm:m-5 sm:p-5 lg:m-6 lg:max-w-[560px] lg:p-6">
+      <div className="relative flex min-w-0 flex-1 items-center justify-center border-cyan-300/20 bg-slate-950/35 p-4 backdrop-blur-sm sm:p-5 lg:w-1/2 lg:flex-none lg:border-l lg:p-8">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-y-[10%] left-0 hidden w-px bg-gradient-to-b from-transparent via-cyan-300/80 to-transparent shadow-[0_0_18px_2px_rgba(34,211,238,0.65)] lg:block" />
         <div className="w-full max-w-[400px]">
           <div className="mb-5 lg:hidden">
             <button
               type="button"
-              aria-label="About us — open the CloudOrbix portfolio"
+              aria-label="Learn more about Professional Services"
               onClick={openPortfolio}
               className="flex items-center gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
             >
-            <img src="/CloudOrbix.png" alt="CloudOrbix" className="h-8 w-8 rounded-lg object-contain" />
+            <img src="/CloudOrbix.png" alt="CloudOrbix" className="h-[35.2px] w-[35.2px] rounded-lg border border-cyan-200/50 bg-slate-950/90 p-1 object-contain shadow-[0_0_18px_rgba(34,211,238,0.5)]" />
             <span className="font-bold text-slate-200">CloudOrbix</span>
-            <span className="sr-only">About us</span>
+            <span className="sr-only">Learn more about Professional Services</span>
             </button>
           </div>
 
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-100 mb-1">Welcome back</h2>
-            <p className="text-slate-100 text-sm">Sign in to your account to continue</p>
-          </div>
+          <h1 className="mx-auto mb-3 max-w-sm text-center text-2xl font-bold leading-tight text-white sm:text-3xl">
+            Manage Projects<br />
+            <span className="text-blue-200">Lifecycles</span> with<br />
+            Precision.
+          </h1>
+
+          <p className="mx-auto mb-5 max-w-sm text-center text-sm font-medium leading-relaxed text-blue-100 sm:text-base">
+            One Platform. Unified Delivery. Measurable Results.
+          </p>
 
           {/* SSO is temporarily disabled until enterprise identity integration is configured. */}
           {/*
@@ -363,7 +360,7 @@ export default function Login({ onLogin }: LoginProps) {
 
           <div className="relative flex items-center gap-4 mb-6">
             <div className="flex-1 h-px bg-cyan-100" />
-              <span className="text-slate-100 text-xs font-medium">Sign in manually</span>
+            <span className="text-slate-100 text-xs font-medium">Sign in</span>
             <div className="flex-1 h-px bg-slate-200" />
           </div>
 
@@ -457,6 +454,7 @@ export default function Login({ onLogin }: LoginProps) {
         </div>
       </div>
     </div>
+    </div>
     {showPortfolio &&
       createPortal(
         <div
@@ -471,9 +469,17 @@ export default function Login({ onLogin }: LoginProps) {
             aria-modal="true"
             aria-labelledby="login-portfolio-title"
             tabIndex={-1}
-            className="flex h-[min(94dvh,900px)] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl border border-white/60 bg-white shadow-[0_32px_100px_rgba(2,12,32,0.55)] outline-none sm:rounded-3xl"
+            className={`flex h-[min(94dvh,900px)] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl border shadow-[0_32px_100px_rgba(2,12,32,0.55)] outline-none sm:rounded-3xl ${
+              portfolioDark
+                ? "border-slate-700 bg-slate-950"
+                : "border-white/60 bg-white"
+            }`}
           >
-            <header className="relative flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3.5 sm:px-7 sm:py-4">
+            <header className={`relative flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3.5 sm:px-7 sm:py-4 ${
+              portfolioDark
+                ? "border-slate-700 bg-slate-950"
+                : "border-slate-200 bg-white"
+            }`}>
               <div className="flex min-w-0 items-center gap-3">
                 <img
                   src="/CloudOrbix.png"
@@ -483,34 +489,66 @@ export default function Login({ onLogin }: LoginProps) {
                 <div className="min-w-0">
                   <h2
                     id="login-portfolio-title"
-                    className="truncate text-base font-bold tracking-tight text-slate-950 sm:text-lg"
+                    className={`truncate text-base font-bold tracking-tight sm:text-lg ${
+                      portfolioDark ? "text-slate-100" : "text-slate-950"
+                    }`}
                   >
-                    About CloudOrbix
+                    Cloud Professional Services 
+
                   </h2>
-                  <p className="hidden text-xs text-slate-500 sm:block">
-                    Explore our cloud professional services
+                  <p className={`hidden text-xs sm:block ${
+                    portfolioDark ? "text-slate-400" : "text-slate-500"
+                  }`}>
+                    Architecting, Transforming & Operating the Modern Enterprise
                   </p>
                 </div>
               </div>
-              <button
-                ref={portfolioCloseButtonRef}
-                type="button"
-                onClick={() => setShowPortfolio(false)}
-                aria-label="Close portfolio"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-              >
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={portfolioDark}
+                  aria-label={`Switch to ${portfolioDark ? "light" : "dark"} mode`}
+                  onClick={() => setPortfolioDark((current) => !current)}
+                  className={`flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+                    portfolioDark
+                      ? "border-slate-600 bg-slate-800 text-amber-200 hover:bg-slate-700"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {portfolioDark ? (
+                    <Sun className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <Moon className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  <span className="hidden sm:inline">{portfolioDark ? "Light mode" : "Dark mode"}</span>
+                </button>
+                <button
+                  ref={portfolioCloseButtonRef}
+                  type="button"
+                  onClick={() => setShowPortfolio(false)}
+                  aria-label="Close portfolio"
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+                    portfolioDark
+                      ? "border-slate-600 bg-slate-900 text-slate-300 hover:border-blue-400 hover:bg-slate-800 hover:text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800"
+                  }`}
+                >
+                  <X className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               <Suspense
                 fallback={
-                  <p className="p-8 text-center text-sm text-slate-500" role="status">
+                  <p className={`p-8 text-center text-sm ${
+                    portfolioDark ? "text-slate-400" : "text-slate-500"
+                  }`} role="status">
                     Loading portfolio…
                   </p>
                 }
               >
-                <Portfolio hideHeader hideFooter className="!min-h-0" />
+                <Portfolio dark={portfolioDark} hideHeader hideFooter className="!min-h-0" />
               </Suspense>
             </div>
           </section>

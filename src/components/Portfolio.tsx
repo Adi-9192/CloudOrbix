@@ -223,7 +223,11 @@ const serviceOrder = new Map([
   ["05", 7],
 ]);
 
-const portfolioAtAGlanceIntro = "Cloud and enterprise technology services are presented across architecture, transformation, observability, security, middleware, databases, backup, and hybrid-cloud management. The portfolio emphasizes governed, automated, secure, and highly available environments spanning Azure, AWS, Google Cloud Platform, Oracle Cloud Infrastructure, on-premises systems, and edge infrastructure.";
+const portfolioAtAGlanceIntro = [
+  "Cloud Professional Services capabilities enable organizations to design, modernize, secure, automate, and optimize complex technology environments across cloud, hybrid, on-premises, and edge platforms. From Cloud architecture and transformation to DevOps, Infrastructure as Code (IaC), observability, middleware, databases, backup, resilience, and hybrid-cloud management, we deliver scalable solutions built around strong governance, automation, security, operational excellence, and high availability.",
+  "Our DevOps and automation capabilities enable standardized infrastructure provisioning, CI/CD-driven deployments, configuration consistency, and repeatable cloud operations, using Infrastructure as Code (IaC) to accelerate delivery while strengthening governance and reducing operational complexity.",
+  "With expertise spanning Microsoft Azure, AWS, Google Cloud, Oracle Cloud Infrastructure, on-premises platforms, and edge environments, we help enterprises accelerate transformation, improve operational resilience, optimize technology investments, and establish a secure, automated, scalable, and future-ready digital foundation.",
+];
 
 export interface PortfolioProps {
   dark?: boolean;
@@ -304,9 +308,11 @@ export default function Portfolio({
         <div className="pointer-events-none absolute -left-32 bottom-0 h-72 w-72 rounded-full bg-[var(--portfolio-primary-light)] opacity-30 blur-3xl" />
 
         <div className="relative mx-auto max-w-none">
-          <p className="w-full text-sm font-medium leading-6 text-[var(--portfolio-body)] md:text-base md:leading-7">
-            {portfolioAtAGlanceIntro}
-          </p>
+          <div className="w-full space-y-4 text-sm font-medium leading-6 text-[var(--portfolio-body)] md:text-base md:leading-7">
+            {portfolioAtAGlanceIntro.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </div>
 
           <div className="mt-7 overflow-hidden rounded-2xl border border-[var(--portfolio-border)] bg-[var(--portfolio-border)] shadow-lg">
             <div className="h-1 bg-[var(--portfolio-accent)]" />
