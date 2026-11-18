@@ -9,6 +9,14 @@ interface LoginProps {
   onLogin: (user: { id: number; email: string; firstName: string; lastName: string; roles: string[]; isActive: boolean }, token: string) => void;
 }
 
+const cloudProviderOrbits = [
+  { name: "Microsoft Azure", src: "/cloud-providers/azure.svg", diameter: 180, phase: 0, duration: 34, clockwise: true },
+  { name: "Amazon Web Services", src: "/cloud-providers/aws.svg", diameter: 275, phase: 72, duration: 48, clockwise: false },
+  { name: "Oracle Cloud Infrastructure", src: "/cloud-providers/oracle-cloud.svg", diameter: 370, phase: 144, duration: 42, clockwise: true },
+  { name: "Google Cloud", src: "/cloud-providers/gcp.svg", diameter: 465, phase: 216, duration: 56, clockwise: false },
+  { name: "Azure DevOps", src: "/cloud-providers/azure-devops.svg", diameter: 560, phase: 288, duration: 38, clockwise: true },
+];
+
 export default function Login({ onLogin }: LoginProps) {
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL as string | undefined;
   const [email, setEmail] = useState("");
@@ -159,7 +167,7 @@ export default function Login({ onLogin }: LoginProps) {
   return (
     <>
     <div aria-hidden={showPortfolio || undefined} className="min-h-screen flex" style={{
-      backgroundImage: "url('/bg.png')",
+      backgroundImage: "linear-gradient(rgba(2, 8, 24, 0.32), rgba(2, 8, 24, 0.32)), url('/bg.png')",
       backgroundSize: "cover",
       backgroundPosition: "center",
        backgroundRepeat: "no-repeat",
@@ -180,63 +188,47 @@ export default function Login({ onLogin }: LoginProps) {
 
         <div className="relative z-10 flex flex-col items-center">
           <div
-            className="cloud-orbit relative mb-5 h-[340px] w-[340px] max-w-full"
+            className="cloud-orbit relative mb-5 h-[620px] w-[620px] max-w-full"
           >
-            <div
-              aria-hidden="true"
-              className="cloud-orbit-track absolute inset-0 rounded-full border border-dashed border-cyan-100/35"
-            >
-              <span className="absolute inset-5 rounded-full border border-cyan-100/15" />
-              {[
-                { name: "Microsoft Azure", angle: 0, mark: "Azure", color: "#0078D4" },
-                { name: "Amazon Web Services", angle: 90, mark: "aws", color: "#232F3E" },
-                { name: "Oracle Cloud Infrastructure", angle: 180, mark: "OCI", color: "#C74634" },
-                { name: "Google Cloud", angle: 270, mark: "GCP", color: "#1A5BA0" },
-              ].map((provider) => (
+            {cloudProviderOrbits.map((provider) => (
+              <div
+                key={provider.name}
+                className="absolute inset-0"
+                style={{ transform: `rotate(${provider.phase}deg)` }}
+              >
                 <div
-                  key={provider.name}
-                  className="cloud-orbit-provider absolute left-1/2 top-1/2 -ml-11 -mt-[30px]"
-                  style={{ transform: `rotate(${provider.angle}deg) translateY(-142px)` }}
+                  className="cloud-provider-orbit absolute left-1/2 top-1/2 rounded-full border-[1.5px] border-dashed border-cyan-100/50"
+                  style={{
+                    width: provider.diameter,
+                    height: provider.diameter,
+                    marginLeft: -provider.diameter / 2,
+                    marginTop: -provider.diameter / 2,
+                    animationDuration: `${provider.duration}s`,
+                    animationDirection: provider.clockwise ? "normal" : "reverse",
+                  }}
                 >
-                  <div
-                    className="cloud-orbit-provider-angle"
-                    style={{ transform: `rotate(-${provider.angle}deg)` }}
-                  >
+                  <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2">
                     <div
-                      className="cloud-orbit-provider-label flex h-[60px] w-[88px] flex-col items-center justify-center rounded-xl border border-slate-200/90 bg-white px-2 shadow-[0_8px_24px_rgba(2,12,32,0.25)]"
-                      style={{ color: provider.color }}
+                      style={{ transform: `rotate(-${provider.phase}deg)` }}
                     >
-                      {provider.mark === "Azure" && (
-                        <svg aria-hidden="true" viewBox="0 0 24 24" className="mb-0.5 h-5 w-5">
-                          <path fill="currentColor" d="M13.2 2 5.1 17h4.2l2.2-4.1 4.7 7.1H21L13.2 2Zm-4 12.7L7.5 18h5.1l-1.6-2.5 1-1.9-2.8 1.1Z" />
-                        </svg>
-                      )}
-                      {provider.mark === "aws" && (
-                        <svg aria-hidden="true" viewBox="0 0 32 20" className="mb-0.5 h-5 w-7">
-                          <path d="M5 16c6 4 16 4 22-1" fill="none" stroke="#FF9900" strokeLinecap="round" strokeWidth="1.8" />
-                        </svg>
-                      )}
-                      {provider.mark === "OCI" && (
-                        <svg aria-hidden="true" viewBox="0 0 28 20" className="mb-0.5 h-5 w-7">
-                          <path d="M4 5c4-4 16-4 20 0M3 9c5-3 17-3 22 0" fill="none" stroke="#F29111" strokeLinecap="round" strokeWidth="2" />
-                        </svg>
-                      )}
-                      {provider.name === "Google Cloud" && (
-                        <svg aria-hidden="true" viewBox="0 0 24 24" className="mb-0.5 h-5 w-5">
-                          <path fill="#4285F4" d="M19.6 12.2c0-.6-.1-1.2-.2-1.8H12v3.4h4.3a3.7 3.7 0 0 1-1.6 2.4v2.2h2.7c1.5-1.4 2.2-3.6 2.2-6.2Z" />
-                          <path fill="#34A853" d="M12 20c2.2 0 4-.7 5.4-1.9l-2.7-2.2c-.7.5-1.6.8-2.7.8-2.1 0-3.9-1.4-4.6-3.3H4.6v2.3A8.2 8.2 0 0 0 12 20Z" />
-                          <path fill="#FBBC05" d="M7.4 13.4a4.9 4.9 0 0 1 0-3V8.1H4.6a8 8 0 0 0 0 7.6l2.8-2.3Z" />
-                          <path fill="#EA4335" d="M12 7.1c1.2 0 2.3.4 3.1 1.2l2.4-2.4A8 8 0 0 0 4.6 8.1l2.8 2.3c.7-1.9 2.5-3.3 4.6-3.3Z" />
-                        </svg>
-                      )}
-                      <span className="cloud-orbit-provider-name text-[11px] font-bold leading-none">
-                        {provider.mark}
-                      </span>
+                      <div
+                        className="cloud-orbit-provider-label flex h-10 w-10 items-center justify-center rounded-full border border-cyan-100/55 bg-slate-950/90 shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+                        style={{
+                          animationDuration: `${provider.duration}s`,
+                          animationDirection: provider.clockwise ? "normal" : "reverse",
+                        }}
+                      >
+                        <img
+                          src={provider.src}
+                          alt={provider.name}
+                          className="h-6 w-6 object-contain"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
             <button
               type="button"
               aria-label="About us — open the CloudOrbix portfolio"
@@ -253,38 +245,31 @@ export default function Login({ onLogin }: LoginProps) {
               @keyframes cloud-orbit-counter {
                 to { transform: rotate(-360deg); }
               }
-              .cloud-orbit-track {
+              .cloud-provider-orbit {
                 animation: cloud-orbit-spin 42s linear infinite;
               }
               .cloud-orbit-provider-label {
                 animation: cloud-orbit-counter 42s linear infinite;
               }
-              .cloud-orbit-provider-angle {
-                height: 60px;
-                width: 88px;
+              @media (min-width: 1024px) and (max-width: 1151px) {
+                .cloud-orbit {
+                  transform: scale(0.8);
+                }
+              }
+              @media (min-width: 1152px) and (max-width: 1279px) {
+                .cloud-orbit {
+                  transform: scale(0.94);
+                }
               }
               @media (prefers-reduced-motion: reduce) {
-                .cloud-orbit-track,
+                .cloud-provider-orbit,
                 .cloud-orbit-provider-label {
                   animation: none;
                 }
               }
             `}</style>
-            <span className="sr-only">
-              Microsoft Azure, Amazon Web Services, Oracle Cloud Infrastructure, and Google Cloud
-            </span>
           </div>
 
-          <div className="w-full">
-          <h1 className="mb-4 text-3xl font-bold leading-tight text-white">
-            Manage Projects<br />
-            <span className="text-blue-200">Lifecycles</span> with<br />
-            Precision.
-          </h1>
-          <p className="max-w-md text-lg leading-relaxed text-blue-100">
-            One Platform. Unified Delivery. Measurable Results.
-          </p>
-          </div>
         </div>
 
         <div className="relative z-10 space-y-4">
@@ -323,10 +308,15 @@ export default function Login({ onLogin }: LoginProps) {
             </button>
           </div>
 
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-100 mb-1">Welcome back</h2>
-            <p className="text-slate-100 text-sm">Sign in to your account to continue</p>
-          </div>
+          <h1 className="mx-auto mb-3 max-w-sm text-center text-2xl font-bold leading-tight text-white sm:text-3xl">
+            Manage Projects<br />
+            <span className="text-blue-200">Lifecycles</span> with<br />
+            Precision.
+          </h1>
+
+          <p className="mx-auto mb-5 max-w-sm text-center text-sm font-medium leading-relaxed text-blue-100 sm:text-base">
+            One Platform. Unified Delivery. Measurable Results.
+          </p>
 
           {/* SSO is temporarily disabled until enterprise identity integration is configured. */}
           {/*
@@ -363,7 +353,7 @@ export default function Login({ onLogin }: LoginProps) {
 
           <div className="relative flex items-center gap-4 mb-6">
             <div className="flex-1 h-px bg-cyan-100" />
-              <span className="text-slate-100 text-xs font-medium">Sign in manually</span>
+            <span className="text-slate-100 text-xs font-medium">Sign in</span>
             <div className="flex-1 h-px bg-slate-200" />
           </div>
 
@@ -485,10 +475,11 @@ export default function Login({ onLogin }: LoginProps) {
                     id="login-portfolio-title"
                     className="truncate text-base font-bold tracking-tight text-slate-950 sm:text-lg"
                   >
-                    About CloudOrbix
+                    Cloud Professional Services 
+
                   </h2>
                   <p className="hidden text-xs text-slate-500 sm:block">
-                    Explore our cloud professional services
+                    Architecting, Transforming & Operating the Modern Enterprise
                   </p>
                 </div>
               </div>

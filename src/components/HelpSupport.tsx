@@ -150,6 +150,16 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Independent cloud provider orbits",
+    detail:
+      "Five dark-backed provider logos circle the CloudOrbix logo without overlapping, while the world-map backdrop is dimmed for contrast.",
+  },
+  {
+    title: "Centered sign-in messaging",
+    detail:
+      "The sign-in panel presents the project lifecycle headline and platform tagline above a concise Sign in divider.",
+  },
+  {
     title: "Portfolio overview paragraphs",
     detail:
       "Fixed the Portfolio overview text and displayed its three sections as separate paragraphs.",
