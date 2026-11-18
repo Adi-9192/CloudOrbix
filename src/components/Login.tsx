@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
-import { Shield, Cloud, BarChart3, Users, ArrowRight, Lock, Mail, Eye, EyeOff, X } from "lucide-react";
+import { Shield, Cloud, BarChart3, Users, ArrowRight, Lock, Mail, Eye, EyeOff, X, Moon, Sun } from "lucide-react";
 import { createPortal } from "react-dom";
 import { showCloudOrbixAlert } from "../alert";
 
@@ -28,6 +28,7 @@ export default function Login({ onLogin }: LoginProps) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPortfolio, setShowPortfolio] = useState(false);
+  const [portfolioDark, setPortfolioDark] = useState(false);
   const portfolioCloseButtonRef = useRef<HTMLButtonElement>(null);
   const portfolioTriggerRef = useRef<HTMLButtonElement>(null);
 
@@ -166,14 +167,15 @@ export default function Login({ onLogin }: LoginProps) {
 
   return (
     <>
-    <div aria-hidden={showPortfolio || undefined} className="min-h-screen flex" style={{
+    <div aria-hidden={showPortfolio || undefined} className="flex min-h-screen items-center justify-center p-4 sm:p-6 lg:p-8" style={{
       backgroundImage: "linear-gradient(rgba(2, 8, 24, 0.32), rgba(2, 8, 24, 0.32)), url('/bg.png')",
       backgroundSize: "cover",
       backgroundPosition: "center",
        backgroundRepeat: "no-repeat",
       fontFamily: "var(--font-sans)" }}>
+      <div className="relative flex min-h-[calc(100vh-2rem)] w-full max-w-[1440px] overflow-hidden rounded-[2rem] border border-cyan-100/15 bg-slate-950/55 shadow-[0_24px_80px_rgba(0,0,0,0.42)] lg:min-h-[min(820px,calc(100vh-4rem))]">
       {/* Left Panel */}
-      <div className="relative hidden w-[55%] flex-col justify-between overflow-hidden p-8 lg:flex xl:p-10">
+      <div className="relative hidden w-1/2 shrink-0 flex-col justify-between overflow-hidden p-8 lg:flex xl:p-10">
         {/* Background decoration */}
         {/* <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #93C5FD, transparent)" }} />
@@ -188,7 +190,7 @@ export default function Login({ onLogin }: LoginProps) {
 
         <div className="relative z-10 flex flex-col items-center">
           <div
-            className="cloud-orbit relative mb-5 h-[620px] w-[620px] max-w-full"
+            className="cloud-orbit pointer-events-none relative mb-5 h-[620px] w-[620px] max-w-full"
           >
             {cloudProviderOrbits.map((provider) => (
               <div
@@ -212,7 +214,7 @@ export default function Login({ onLogin }: LoginProps) {
                       style={{ transform: `rotate(-${provider.phase}deg)` }}
                     >
                       <div
-                        className="cloud-orbit-provider-label flex h-10 w-10 items-center justify-center rounded-full border border-cyan-100/55 bg-slate-950/90 shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+                        className="cloud-orbit-provider-label flex h-10 w-10 items-center justify-center rounded-full border border-cyan-200/50 bg-slate-950/90 shadow-[0_0_24px_rgba(34,211,238,0.5),0_8px_24px_rgba(0,0,0,0.45)]"
                         style={{
                           animationDuration: `${provider.duration}s`,
                           animationDirection: provider.clockwise ? "normal" : "reverse",
@@ -221,7 +223,7 @@ export default function Login({ onLogin }: LoginProps) {
                         <img
                           src={provider.src}
                           alt={provider.name}
-                          className="h-6 w-6 object-contain"
+                          className="h-[26.4px] w-[26.4px] object-contain"
                         />
                       </div>
                     </div>
@@ -229,15 +231,12 @@ export default function Login({ onLogin }: LoginProps) {
                 </div>
               </div>
             ))}
-            <button
-              type="button"
-              aria-label="About us — open the CloudOrbix portfolio"
-              onClick={openPortfolio}
-              className="absolute left-1/2 top-1/2 z-10 flex h-32 w-32 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/80 bg-white shadow-[0_14px_38px_rgba(1,12,35,0.35)] transition-shadow duration-200 hover:shadow-[0_18px_44px_rgba(1,12,35,0.45)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+            <div
+              aria-hidden="true"
+              className="absolute left-1/2 top-1/2 z-10 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-cyan-200/30 bg-slate-950/85 shadow-[0_0_38px_rgba(34,211,238,0.3)]"
             >
-              <img src="/CloudOrbix.png" alt="" className="h-[68px] w-[68px] rounded-xl object-contain" />
-              <span className="mt-1 text-[11px] font-bold tracking-wide text-slate-800">About us</span>
-            </button>
+              <img src="/CloudOrbix.png" alt="" className="h-[74.8px] w-[74.8px] rounded-xl object-contain" />
+            </div>
             <style>{`
               @keyframes cloud-orbit-spin {
                 to { transform: rotate(360deg); }
@@ -253,12 +252,12 @@ export default function Login({ onLogin }: LoginProps) {
               }
               @media (min-width: 1024px) and (max-width: 1151px) {
                 .cloud-orbit {
-                  transform: scale(0.8);
+                  transform: scale(0.72);
                 }
               }
               @media (min-width: 1152px) and (max-width: 1279px) {
                 .cloud-orbit {
-                  transform: scale(0.94);
+                  transform: scale(0.82);
                 }
               }
               @media (prefers-reduced-motion: reduce) {
@@ -269,7 +268,14 @@ export default function Login({ onLogin }: LoginProps) {
               }
             `}</style>
           </div>
-
+          <button
+            type="button"
+            onClick={openPortfolio}
+            className="inline-flex items-center gap-2 rounded-full border border-cyan-200/30 bg-slate-950/75 px-5 py-3 text-sm font-semibold text-cyan-50 shadow-[0_0_22px_rgba(34,211,238,0.18)] transition hover:border-cyan-200/60 hover:bg-slate-900 hover:shadow-[0_0_28px_rgba(34,211,238,0.32)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+          >
+            Learn more about Professional Services
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
 
         <div className="relative z-10 space-y-4">
@@ -293,18 +299,19 @@ export default function Login({ onLogin }: LoginProps) {
       </div>
 
       {/* Right Panel */}
-      <div className="m-4 flex min-w-0 flex-1 items-center justify-center rounded-xl border border-cyan-300/70 bg-white/10 p-4 shadow-[0_12px_36px_rgba(0,0,0,0.18)] backdrop-blur-sm sm:m-5 sm:p-5 lg:m-6 lg:max-w-[560px] lg:p-6">
+      <div className="relative flex min-w-0 flex-1 items-center justify-center border-cyan-300/20 bg-slate-950/35 p-4 backdrop-blur-sm sm:p-5 lg:w-1/2 lg:flex-none lg:border-l lg:p-8">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-y-[10%] left-0 hidden w-px bg-gradient-to-b from-transparent via-cyan-300/80 to-transparent shadow-[0_0_18px_2px_rgba(34,211,238,0.65)] lg:block" />
         <div className="w-full max-w-[400px]">
           <div className="mb-5 lg:hidden">
             <button
               type="button"
-              aria-label="About us — open the CloudOrbix portfolio"
+              aria-label="Learn more about Professional Services"
               onClick={openPortfolio}
               className="flex items-center gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
             >
-            <img src="/CloudOrbix.png" alt="CloudOrbix" className="h-8 w-8 rounded-lg object-contain" />
+            <img src="/CloudOrbix.png" alt="CloudOrbix" className="h-[35.2px] w-[35.2px] rounded-lg border border-cyan-200/50 bg-slate-950/90 p-1 object-contain shadow-[0_0_18px_rgba(34,211,238,0.5)]" />
             <span className="font-bold text-slate-200">CloudOrbix</span>
-            <span className="sr-only">About us</span>
+            <span className="sr-only">Learn more about Professional Services</span>
             </button>
           </div>
 
@@ -447,6 +454,7 @@ export default function Login({ onLogin }: LoginProps) {
         </div>
       </div>
     </div>
+    </div>
     {showPortfolio &&
       createPortal(
         <div
@@ -461,9 +469,17 @@ export default function Login({ onLogin }: LoginProps) {
             aria-modal="true"
             aria-labelledby="login-portfolio-title"
             tabIndex={-1}
-            className="flex h-[min(94dvh,900px)] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl border border-white/60 bg-white shadow-[0_32px_100px_rgba(2,12,32,0.55)] outline-none sm:rounded-3xl"
+            className={`flex h-[min(94dvh,900px)] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl border shadow-[0_32px_100px_rgba(2,12,32,0.55)] outline-none sm:rounded-3xl ${
+              portfolioDark
+                ? "border-slate-700 bg-slate-950"
+                : "border-white/60 bg-white"
+            }`}
           >
-            <header className="relative flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3.5 sm:px-7 sm:py-4">
+            <header className={`relative flex shrink-0 items-center justify-between gap-4 border-b px-4 py-3.5 sm:px-7 sm:py-4 ${
+              portfolioDark
+                ? "border-slate-700 bg-slate-950"
+                : "border-slate-200 bg-white"
+            }`}>
               <div className="flex min-w-0 items-center gap-3">
                 <img
                   src="/CloudOrbix.png"
@@ -473,35 +489,66 @@ export default function Login({ onLogin }: LoginProps) {
                 <div className="min-w-0">
                   <h2
                     id="login-portfolio-title"
-                    className="truncate text-base font-bold tracking-tight text-slate-950 sm:text-lg"
+                    className={`truncate text-base font-bold tracking-tight sm:text-lg ${
+                      portfolioDark ? "text-slate-100" : "text-slate-950"
+                    }`}
                   >
                     Cloud Professional Services 
 
                   </h2>
-                  <p className="hidden text-xs text-slate-500 sm:block">
+                  <p className={`hidden text-xs sm:block ${
+                    portfolioDark ? "text-slate-400" : "text-slate-500"
+                  }`}>
                     Architecting, Transforming & Operating the Modern Enterprise
                   </p>
                 </div>
               </div>
-              <button
-                ref={portfolioCloseButtonRef}
-                type="button"
-                onClick={() => setShowPortfolio(false)}
-                aria-label="Close portfolio"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-              >
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={portfolioDark}
+                  aria-label={`Switch to ${portfolioDark ? "light" : "dark"} mode`}
+                  onClick={() => setPortfolioDark((current) => !current)}
+                  className={`flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+                    portfolioDark
+                      ? "border-slate-600 bg-slate-800 text-amber-200 hover:bg-slate-700"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {portfolioDark ? (
+                    <Sun className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <Moon className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  <span className="hidden sm:inline">{portfolioDark ? "Light mode" : "Dark mode"}</span>
+                </button>
+                <button
+                  ref={portfolioCloseButtonRef}
+                  type="button"
+                  onClick={() => setShowPortfolio(false)}
+                  aria-label="Close portfolio"
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+                    portfolioDark
+                      ? "border-slate-600 bg-slate-900 text-slate-300 hover:border-blue-400 hover:bg-slate-800 hover:text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800"
+                  }`}
+                >
+                  <X className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               <Suspense
                 fallback={
-                  <p className="p-8 text-center text-sm text-slate-500" role="status">
+                  <p className={`p-8 text-center text-sm ${
+                    portfolioDark ? "text-slate-400" : "text-slate-500"
+                  }`} role="status">
                     Loading portfolio…
                   </p>
                 }
               >
-                <Portfolio hideHeader hideFooter className="!min-h-0" />
+                <Portfolio dark={portfolioDark} hideHeader hideFooter className="!min-h-0" />
               </Suspense>
             </div>
           </section>
