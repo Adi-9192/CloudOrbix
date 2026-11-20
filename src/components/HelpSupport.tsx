@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Compact login layout",
+    detail:
+      "The login page now opens in a centered, compact layout matching the reference, with the production version label removed from the lower-left corner.",
+  },
+  {
     title: "Dark portfolio by default from sign in",
     detail:
       "The Professional Services portfolio opened from the sign-in page now starts in dark mode. The in-page theme switch remains available.",
@@ -182,7 +187,7 @@ const releaseNotes = [
   {
     title: "Portfolio preview from sign in",
     detail:
-      "Select Learn more about Professional Services beneath the cloud-provider orbits to open the interactive service portfolio in an accessible pop-up without leaving the sign-in page. Decorative orbit layers do not block the button, and the popup includes a dark/light mode switch.",
+      "The portfolio popup uses a white Cloud and light-blue Professional Services heading matching the reference, with a SERVICE OFFERING subtitle. It opens in dark mode with a light-mode toggle, and switches between the supplied dark logo and the original light-mode logo.",
   },
   {
     title: "RFP details on project pages",
