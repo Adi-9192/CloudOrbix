@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Updated login orbit center logo",
+    detail:
+      "The center of the login-page provider orbit uses the supplied CloudOrbix SVG, clipped to a circle so its corners stay within the badge.",
+  },
+  {
     title: "Compact login layout",
     detail:
       "The login page now opens in a centered, compact layout matching the reference, with the production version label removed from the lower-left corner.",
@@ -160,9 +165,9 @@ const releaseNotes = [
       "The Professional Services portfolio opened from the sign-in page now starts in dark mode. The in-page theme switch remains available.",
   },
   {
-    title: "Connected professional services call to action",
+    title: "Professional Services button glow",
     detail:
-      "The sign-in page's Professional Services action now features a right-pointing hand, restrained cyan glow, and a decorative data-packet trail from the CloudOrbix orbital mark. Motion respects reduced-motion preferences.",
+      "A cyan highlight makes one quick lap around the button's rounded edge, fades at its starting point, and repeats alongside the soft button glow. The login page keeps the orbit cleanly separated from the Learn more action, without the animated pointer.",
   },
   {
     title: "Dark provider logos and professional services link",
