@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
-import { Shield, Cloud, BarChart3, Users, ArrowRight, Lock, Mail, Eye, EyeOff, X, Moon, Sun } from "lucide-react";
+import { Shield, Cloud, BarChart3, Users, Hand, Lock, Mail, Eye, EyeOff, X, Moon, Sun } from "lucide-react";
 import { createPortal } from "react-dom";
 import { showCloudOrbixAlert } from "../alert";
 
@@ -28,7 +28,7 @@ export default function Login({ onLogin }: LoginProps) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPortfolio, setShowPortfolio] = useState(false);
-  const [portfolioDark, setPortfolioDark] = useState(false);
+  const [portfolioDark, setPortfolioDark] = useState(true);
   const portfolioCloseButtonRef = useRef<HTMLButtonElement>(null);
   const portfolioTriggerRef = useRef<HTMLButtonElement>(null);
 
@@ -188,7 +188,7 @@ export default function Login({ onLogin }: LoginProps) {
           </svg>
         </div> */}
 
-        <div className="relative z-10 flex flex-col items-center">
+        <div className="relative z-10 flex w-full flex-col items-center">
           <div
             className="cloud-orbit pointer-events-none relative mb-5 h-[620px] w-[620px] max-w-full"
           >
@@ -268,13 +268,30 @@ export default function Login({ onLogin }: LoginProps) {
               }
             `}</style>
           </div>
+          <svg
+            aria-hidden="true"
+            className="cloud-data-flow pointer-events-none absolute left-1/2 top-0 z-10 h-[690px] w-[620px] -translate-x-1/2 overflow-visible"
+            viewBox="0 0 620 690"
+            preserveAspectRatio="none"
+          >
+            <path
+              className="cloud-data-flow-path"
+              d="M 310 310 C 260 405, 380 525, 310 662"
+            />
+            <circle className="cloud-data-packet cloud-data-packet--lead" r="2.7" />
+            <circle className="cloud-data-packet cloud-data-packet--trail-one" r="1.8" />
+            <circle className="cloud-data-packet cloud-data-packet--trail-two" r="1.3" />
+            <circle className="cloud-data-packet cloud-data-packet--lead cloud-data-packet--second" r="2.7" />
+            <circle className="cloud-data-packet cloud-data-packet--trail-one cloud-data-packet--second" r="1.8" />
+            <circle className="cloud-data-packet cloud-data-packet--trail-two cloud-data-packet--second" r="1.3" />
+          </svg>
           <button
             type="button"
             onClick={openPortfolio}
-            className="inline-flex items-center gap-2 rounded-full border border-cyan-200/30 bg-slate-950/75 px-5 py-3 text-sm font-semibold text-cyan-50 shadow-[0_0_22px_rgba(34,211,238,0.18)] transition hover:border-cyan-200/60 hover:bg-slate-900 hover:shadow-[0_0_28px_rgba(34,211,238,0.32)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+            className="cloud-services-cta relative z-20 inline-flex items-center gap-2 rounded-full border border-cyan-200/30 bg-slate-950/85 px-5 py-3 text-sm font-semibold text-cyan-50 shadow-[0_0_22px_rgba(34,211,238,0.18)] backdrop-blur-md transition-[border-color,background-color,box-shadow] duration-[250ms] hover:border-cyan-200/60 hover:bg-slate-900 hover:shadow-[0_0_30px_rgba(34,211,238,0.36)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
           >
             Learn more about Professional Services
-            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            <Hand className="cloud-services-cta-icon h-[18px] w-[18px]" aria-hidden="true" />
           </button>
         </div>
 
@@ -482,7 +499,7 @@ export default function Login({ onLogin }: LoginProps) {
             }`}>
               <div className="flex min-w-0 items-center gap-3">
                 <img
-                  src="/CloudOrbix.png"
+                  src="/CloudOrbix-d.png"
                   alt=""
                   className="h-9 w-9 shrink-0 rounded-lg object-contain sm:h-10 sm:w-10"
                 />
