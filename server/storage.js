@@ -49,33 +49,24 @@ function getStorageClient() {
  * Test Azure Storage connection.
  */
 export async function initializeStorage() {
-  try {
-    const client = getStorageClient();
+  const client = getStorageClient();
 
-    const exists = await client.exists();
+  const exists = await client.exists();
 
-    if (!exists) {
-      throw new Error(
-        `Azure Storage container "${containerName}" does not exist.`
-      );
-    }
-
-    console.log(
-      `Azure Storage connected successfully. Container: ${containerName}`
+  if (!exists) {
+    throw new Error(
+      `Azure Storage container "${containerName}" does not exist.`
     );
-
-    return {
-      connected: true,
-      containerName: containerName,
-    };
-  } catch (error) {
-    console.error(
-      'Azure Storage connection failed:',
-      error.message
-    );
-
-    throw error;
   }
+
+  console.log(
+    `Azure Storage connected successfully. Container: ${containerName}`
+  );
+
+  return {
+    connected: true,
+    containerName: containerName,
+  };
 }
 
 

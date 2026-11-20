@@ -410,7 +410,7 @@ app.use(
  * Application startup.
  *
  * 1. Connect to Azure SQL
- * 2. Connect to Azure Blob Storage
+ * 2. Check optional Azure Blob Storage availability
  * 3. Start Express
  */
 async function startServer() {
@@ -420,9 +420,8 @@ async function startServer() {
     try {
       await initializeStorage();
     } catch (error) {
-      if (isProduction) throw error;
       console.warn(
-        `Azure Blob Storage is unavailable in development; file operations are disabled: ${error.message}`
+        `Azure Blob Storage is unavailable; file operations are disabled: ${error.message}`
       );
     }
 
