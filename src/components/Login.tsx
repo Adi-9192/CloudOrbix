@@ -28,7 +28,7 @@ export default function Login({ onLogin }: LoginProps) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPortfolio, setShowPortfolio] = useState(false);
-  const [portfolioDark, setPortfolioDark] = useState(false);
+  const [portfolioDark, setPortfolioDark] = useState(true);
   const portfolioCloseButtonRef = useRef<HTMLButtonElement>(null);
   const portfolioTriggerRef = useRef<HTMLButtonElement>(null);
 
@@ -173,9 +173,9 @@ export default function Login({ onLogin }: LoginProps) {
       backgroundPosition: "center",
        backgroundRepeat: "no-repeat",
       fontFamily: "var(--font-sans)" }}>
-      <div className="relative flex min-h-[calc(100vh-2rem)] w-full max-w-[1440px] overflow-hidden rounded-[2rem] border border-cyan-100/15 bg-slate-950/55 shadow-[0_24px_80px_rgba(0,0,0,0.42)] lg:min-h-[min(820px,calc(100vh-4rem))]">
+      <div className="relative flex min-h-[calc(100vh-2rem)] w-full max-w-[1440px] overflow-hidden rounded-[2rem] border border-cyan-100/15 bg-slate-950/55 shadow-[0_24px_80px_rgba(0,0,0,0.42)] lg:h-[88vh] lg:min-h-[640px] lg:max-h-[900px] lg:w-[min(76vw,1200px)]">
       {/* Left Panel */}
-      <div className="relative hidden w-1/2 shrink-0 flex-col justify-between overflow-hidden p-8 lg:flex xl:p-10">
+      <div className="relative hidden w-1/2 shrink-0 flex-col justify-center overflow-hidden p-8 lg:flex xl:p-10">
         {/* Background decoration */}
         {/* <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #93C5FD, transparent)" }} />
@@ -190,7 +190,7 @@ export default function Login({ onLogin }: LoginProps) {
 
         <div className="relative z-10 flex flex-col items-center">
           <div
-            className="cloud-orbit pointer-events-none relative mb-5 h-[620px] w-[620px] max-w-full"
+            className="cloud-orbit pointer-events-none relative mb-5 h-[500px] w-[620px] max-w-full"
           >
             {cloudProviderOrbits.map((provider) => (
               <div
@@ -235,7 +235,7 @@ export default function Login({ onLogin }: LoginProps) {
               aria-hidden="true"
               className="absolute left-1/2 top-1/2 z-10 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-cyan-200/30 bg-slate-950/85 shadow-[0_0_38px_rgba(34,211,238,0.3)]"
             >
-              <img src="/CloudOrbix.png" alt="" className="h-[74.8px] w-[74.8px] rounded-xl object-contain" />
+              <img src="/CloudOrbix-dark.png" alt="" className="h-[74.8px] w-[112px] rounded-xl object-contain" />
             </div>
             <style>{`
               @keyframes cloud-orbit-spin {
@@ -260,6 +260,11 @@ export default function Login({ onLogin }: LoginProps) {
                   transform: scale(0.82);
                 }
               }
+              @media (min-width: 1280px) {
+                .cloud-orbit {
+                  transform: scale(0.82);
+                }
+              }
               @media (prefers-reduced-motion: reduce) {
                 .cloud-provider-orbit,
                 .cloud-orbit-provider-label {
@@ -278,24 +283,6 @@ export default function Login({ onLogin }: LoginProps) {
           </button>
         </div>
 
-        <div className="relative z-10 space-y-4">
-          {/* {features.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="flex items-center gap-4 p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
-              <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
-                <Icon className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <div className="text-white font-semibold text-sm">{title}</div>
-                <div className="text-blue-200 text-xs">{desc}</div>
-              </div>
-            </div>
-          ))} */}
-        </div>
-
-        <div className="relative z-10 flex items-center gap-6 text-blue-200 text-xs">
-          <span>v1.0.0 — Production</span>
-          
-        </div>
       </div>
 
       {/* Right Panel */}
@@ -309,8 +296,7 @@ export default function Login({ onLogin }: LoginProps) {
               onClick={openPortfolio}
               className="flex items-center gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
             >
-            <img src="/CloudOrbix.png" alt="CloudOrbix" className="h-[35.2px] w-[35.2px] rounded-lg border border-cyan-200/50 bg-slate-950/90 p-1 object-contain shadow-[0_0_18px_rgba(34,211,238,0.5)]" />
-            <span className="font-bold text-slate-200">CloudOrbix</span>
+            <img src="/CloudOrbix-dark.png" alt="CloudOrbix" className="h-auto w-16 rounded-lg shadow-[0_0_18px_rgba(34,211,238,0.5)]" />
             <span className="sr-only">Learn more about Professional Services</span>
             </button>
           </div>
@@ -482,24 +468,28 @@ export default function Login({ onLogin }: LoginProps) {
             }`}>
               <div className="flex min-w-0 items-center gap-3">
                 <img
-                  src="/CloudOrbix.png"
-                  alt=""
-                  className="h-9 w-9 shrink-0 rounded-lg object-contain sm:h-10 sm:w-10"
+                  src={portfolioDark ? "/CloudOrbix-dark.png" : "/CloudOrbix.png"}
+                  alt="CloudOrbix"
+                  className={`shrink-0 rounded-lg object-contain ${
+                    portfolioDark
+                      ? "h-auto w-16 sm:w-[72px]"
+                      : "h-9 w-9 sm:h-10 sm:w-10"
+                  }`}
                 />
                 <div className="min-w-0">
                   <h2
                     id="login-portfolio-title"
-                    className={`truncate text-base font-bold tracking-tight sm:text-lg ${
-                      portfolioDark ? "text-slate-100" : "text-slate-950"
-                    }`}
+                    className="truncate text-base font-bold tracking-tight sm:text-lg"
                   >
-                    Cloud Professional Services 
-
+                    <span className={portfolioDark ? "text-white" : "text-slate-950"}>Cloud</span>{" "}
+                    <span className="text-[#8FC1FF]">Professional Services</span>
                   </h2>
                   <p className={`hidden text-xs sm:block ${
-                    portfolioDark ? "text-slate-400" : "text-slate-500"
+                    portfolioDark
+                      ? "font-mono uppercase tracking-[0.18em] text-blue-300"
+                      : "font-mono uppercase tracking-[0.18em] text-blue-600"
                   }`}>
-                    Architecting, Transforming & Operating the Modern Enterprise
+                    Service Offering
                   </p>
                 </div>
               </div>

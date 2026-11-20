@@ -3,7 +3,7 @@ export default function LoadingScreen() {
     <main className="flex min-h-screen items-center justify-center bg-slate-950">
       <div className="flex flex-col items-center gap-4 text-center">
         <img
-          src="/CloudOrbix.png"
+          src="/CloudOrbix-dark.png"
           alt="Loading CloudOrbix"
           className="h-24 w-24 object-contain"
           onError={(event) => {

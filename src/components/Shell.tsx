@@ -402,11 +402,11 @@ export default function Shell({
           title="Go to Home"
         >
           <img
-            src="/CloudOrbix.png"
+            src={dark ? "/CloudOrbix-dark.png" : "/CloudOrbix.png"}
             alt="CloudOrbix"
-            className="h-7 w-7 object-contain"
+            className={dark ? "h-auto w-14 object-contain" : "h-7 w-7 object-contain"}
           />
-          <span className="font-bold text-sm" style={{ color: "#1E40AF" }}>
+          <span className={`font-bold text-sm ${dark ? "sr-only" : ""}`} style={{ color: "#1E40AF" }}>
             CloudOrbix
           </span>
         </button>
