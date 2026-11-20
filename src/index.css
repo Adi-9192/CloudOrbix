@@ -188,3 +188,108 @@ body {
 .project-page [contenteditable="true"] {
   user-select: text;
 }
+
+.cloud-data-flow {
+  overflow: visible;
+}
+
+.cloud-data-flow-path {
+  fill: none;
+  stroke: rgba(103, 232, 249, 0.1);
+  stroke-dasharray: 2 10;
+  stroke-width: 1.25;
+}
+
+.cloud-data-packet {
+  fill: #00e5ff;
+  filter: drop-shadow(0 0 3px #00e5ff) drop-shadow(0 0 8px rgba(0, 229, 255, 0.72));
+  offset-path: path("M 310 310 C 260 405, 380 525, 310 662");
+  offset-rotate: 0deg;
+  animation: cloud-data-packet-travel 6s linear infinite;
+  opacity: 0;
+}
+
+.cloud-data-packet--trail-one {
+  animation-delay: 170ms;
+  opacity: 0;
+}
+
+.cloud-data-packet--trail-two {
+  animation-delay: 280ms;
+  opacity: 0;
+}
+
+.cloud-data-packet--second {
+  animation-delay: 4s;
+}
+
+.cloud-data-packet--second.cloud-data-packet--trail-one {
+  animation-delay: 4.14s;
+}
+
+.cloud-data-packet--second.cloud-data-packet--trail-two {
+  animation-delay: 4.28s;
+}
+
+@keyframes cloud-data-packet-travel {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+
+  3% {
+    opacity: 0.92;
+  }
+
+  56% {
+    opacity: 0.78;
+  }
+
+  62.5% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+.cloud-services-cta-icon {
+  filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.56));
+  animation: cloud-services-cta-glow 3s ease-in-out infinite;
+  transform: rotate(90deg);
+  transition: transform 250ms ease, filter 250ms ease;
+}
+
+.cloud-services-cta:hover .cloud-services-cta-icon {
+  filter: drop-shadow(0 0 7px rgba(34, 211, 238, 0.8));
+  transform: translateX(7px) rotate(90deg);
+}
+
+@keyframes cloud-services-cta-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px rgba(34, 211, 238, 0.38));
+  }
+
+  50% {
+    filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.78));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud-data-flow {
+    display: none;
+  }
+
+  .cloud-services-cta-icon {
+    animation: none;
+    transition: none;
+  }
+
+  .cloud-services-cta:hover .cloud-services-cta-icon {
+    transform: rotate(90deg);
+  }
+}

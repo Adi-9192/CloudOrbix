@@ -155,6 +155,16 @@ const releaseNotes = [
       "The login page now opens in a centered, compact layout matching the reference, with the production version label removed from the lower-left corner.",
   },
   {
+    title: "Dark portfolio by default from sign in",
+    detail:
+      "The Professional Services portfolio opened from the sign-in page now starts in dark mode. The in-page theme switch remains available.",
+  },
+  {
+    title: "Connected professional services call to action",
+    detail:
+      "The sign-in page's Professional Services action now features a right-pointing hand, restrained cyan glow, and a decorative data-packet trail from the CloudOrbix orbital mark. Motion respects reduced-motion preferences.",
+  },
+  {
     title: "Dark provider logos and professional services link",
     detail:
       "Provider logos sit on dark badges with a soft glow and remain 10% larger. The central CloudOrbix mark is cleanly separated from the orbits, with a Learn more about Professional Services action beneath them.",
