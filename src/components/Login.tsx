@@ -190,7 +190,7 @@ export default function Login({ onLogin }: LoginProps) {
 
         <div className="relative z-10 flex w-full flex-col items-center">
           <div
-            className="cloud-orbit pointer-events-none relative mb-5 h-[500px] w-[620px] max-w-full"
+            className="cloud-orbit pointer-events-none relative mb-1 h-[500px] w-[620px] max-w-full"
           >
             {cloudProviderOrbits.map((provider) => (
               <div
@@ -235,7 +235,11 @@ export default function Login({ onLogin }: LoginProps) {
               aria-hidden="true"
               className="absolute left-1/2 top-1/2 z-10 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-cyan-200/30 bg-slate-950/85 shadow-[0_0_38px_rgba(34,211,238,0.3)]"
             >
-              <img src="/CloudOrbix-dark.png" alt="" className="h-[74.8px] w-[112px] rounded-xl object-contain" />
+              <img
+                src="/login-orbit-center.svg"
+                alt=""
+                className="h-24 w-24 rounded-full object-contain"
+              />
             </div>
             <style>{`
               @keyframes cloud-orbit-spin {
@@ -273,31 +277,17 @@ export default function Login({ onLogin }: LoginProps) {
               }
             `}</style>
           </div>
-          <svg
-            aria-hidden="true"
-            className="cloud-data-flow pointer-events-none absolute left-1/2 top-0 z-10 h-[690px] w-[620px] -translate-x-1/2 overflow-visible"
-            viewBox="0 0 620 690"
-            preserveAspectRatio="none"
-          >
-            <path
-              className="cloud-data-flow-path"
-              d="M 310 310 C 260 405, 380 525, 310 662"
-            />
-            <circle className="cloud-data-packet cloud-data-packet--lead" r="2.7" />
-            <circle className="cloud-data-packet cloud-data-packet--trail-one" r="1.8" />
-            <circle className="cloud-data-packet cloud-data-packet--trail-two" r="1.3" />
-            <circle className="cloud-data-packet cloud-data-packet--lead cloud-data-packet--second" r="2.7" />
-            <circle className="cloud-data-packet cloud-data-packet--trail-one cloud-data-packet--second" r="1.8" />
-            <circle className="cloud-data-packet cloud-data-packet--trail-two cloud-data-packet--second" r="1.3" />
-          </svg>
-          <button
-            type="button"
-            onClick={openPortfolio}
-            className="cloud-services-cta relative z-20 inline-flex items-center gap-2 rounded-full border border-cyan-200/30 bg-slate-950/85 px-5 py-3 text-sm font-semibold text-cyan-50 shadow-[0_0_22px_rgba(34,211,238,0.18)] backdrop-blur-md transition-[border-color,background-color,box-shadow] duration-[250ms] hover:border-cyan-200/60 hover:bg-slate-900 hover:shadow-[0_0_30px_rgba(34,211,238,0.36)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
-          >
-            Learn more about Professional Services
-            <Hand className="cloud-services-cta-icon h-[18px] w-[18px]" aria-hidden="true" />
-          </button>
+          <div className="relative z-20 mt-2 flex flex-col items-center">
+            <button
+              type="button"
+              onClick={openPortfolio}
+              className="cloud-services-cta relative inline-flex items-center gap-2 rounded-full border border-cyan-200/30 bg-slate-950/85 px-5 py-3 text-sm font-semibold text-cyan-50 shadow-[0_0_22px_rgba(34,211,238,0.18)] backdrop-blur-md transition-[border-color,background-color,box-shadow] duration-[250ms] hover:border-cyan-200/60 hover:bg-slate-900 hover:shadow-[0_0_30px_rgba(34,211,238,0.36)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+            >
+              <span aria-hidden="true" className="cloud-cta-border-sweep" />
+                <Hand className="cloud-services-cta-icon h-[18px] w-[18px]" aria-hidden="true" />
+                Learn more about Professional Services
+            </button>
+          </div>
         </div>
 
       </div>
