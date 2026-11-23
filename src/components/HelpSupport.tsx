@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "White text in login fields",
+    detail:
+      "Email and password text now appears white while entering credentials on the dark sign-in screen.",
+  },
+  {
     title: "Alphabetic RFP code initials",
     detail:
       "RFP code initials now use only letters from the account name; the established prefix and requested-date format remain unchanged.",
