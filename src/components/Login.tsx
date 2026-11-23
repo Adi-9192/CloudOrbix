@@ -489,12 +489,14 @@ export default function Login({ onLogin }: LoginProps) {
                     className="truncate text-base font-bold tracking-tight sm:text-lg"
                   >
                     <span className={portfolioDark ? "text-white" : "text-slate-950"}>Cloud</span>{" "}
-                    <span className="text-[#8FC1FF]">Professional Services</span>
+                    <span className={portfolioDark ? "text-[#8FC1FF]" : "text-[#3B82F6]"}>
+                      Professional Services
+                    </span>
                   </h2>
                   <p className={`hidden text-xs sm:block ${
                     portfolioDark
                       ? "font-mono uppercase tracking-[0.18em] text-blue-300"
-                      : "font-mono uppercase tracking-[0.18em] text-blue-600"
+                      : "font-mono uppercase tracking-[0.18em] text-[#3B82F6]"
                   }`}>
                     Service Offering
                   </p>
