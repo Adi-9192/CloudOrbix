@@ -379,7 +379,7 @@ export default function Login({ onLogin }: LoginProps) {
                   autoComplete="email"
                   onChange={e => setEmail(e.target.value)}
                   placeholder="you@company.com"
-                  className="w-full pl-10 pr-4 py-3 rounded-lg border text-sm outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-3 rounded-lg border text-sm text-white outline-none transition-all"
                   style={{ borderColor: "#E2E8F0", fontSize: "14px" }}
                   onFocus={e => (e.target.style.borderColor = "#27fbff")}
                   onBlur={e => (e.target.style.borderColor = "#E2E8F0")}
@@ -400,7 +400,7 @@ export default function Login({ onLogin }: LoginProps) {
                   autoComplete="current-password"
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-10 py-3 rounded-lg border text-sm outline-none transition-all"
+                  className="w-full pl-10 pr-10 py-3 rounded-lg border text-sm text-white outline-none transition-all"
                   style={{ borderColor: "#E2E8F0" }}
                   onFocus={e => (e.target.style.borderColor = "#27fbff")}
                   onBlur={e => (e.target.style.borderColor = "#E2E8F0")}
@@ -489,12 +489,14 @@ export default function Login({ onLogin }: LoginProps) {
                     className="truncate text-base font-bold tracking-tight sm:text-lg"
                   >
                     <span className={portfolioDark ? "text-white" : "text-slate-950"}>Cloud</span>{" "}
-                    <span className="text-[#8FC1FF]">Professional Services</span>
+                    <span className={portfolioDark ? "text-[#8FC1FF]" : "text-[#3B82F6]"}>
+                      Professional Services
+                    </span>
                   </h2>
                   <p className={`hidden text-xs sm:block ${
                     portfolioDark
                       ? "font-mono uppercase tracking-[0.18em] text-blue-300"
-                      : "font-mono uppercase tracking-[0.18em] text-blue-600"
+                      : "font-mono uppercase tracking-[0.18em] text-[#3B82F6]"
                   }`}>
                     Service Offering
                   </p>

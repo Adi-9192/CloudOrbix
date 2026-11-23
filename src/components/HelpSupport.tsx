@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "White text in login fields",
+    detail:
+      "Email and password text now appears white while entering credentials on the dark sign-in screen.",
+  },
+  {
     title: "Alphabetic RFP code initials",
     detail:
       "RFP code initials now use only letters from the account name; the established prefix and requested-date format remain unchanged.",
@@ -197,7 +202,7 @@ const releaseNotes = [
   {
     title: "Portfolio preview from sign in",
     detail:
-      "The portfolio popup uses a white Cloud and light-blue Professional Services heading matching the reference, with a SERVICE OFFERING subtitle. It opens in dark mode with a light-mode toggle, and switches between the supplied dark logo and the original light-mode logo.",
+      "The portfolio popup uses a white Cloud and light-blue Professional Services heading matching the reference, with a SERVICE OFFERING subtitle. Both labels use the reference blue in light mode; the popup opens in dark mode with a theme toggle and switches between the supplied dark logo and original light-mode logo.",
   },
   {
     title: "RFP details on project pages",
