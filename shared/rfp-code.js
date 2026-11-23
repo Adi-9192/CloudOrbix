@@ -2,7 +2,7 @@ export function buildRfpCodeBase(projectName, requestedDate) {
   const words = String(projectName || "")
     .trim()
     .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/[^A-Z]+/g, " ")
     .trim()
     .split(/\s+/)
     .filter(Boolean);

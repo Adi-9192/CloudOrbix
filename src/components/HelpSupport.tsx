@@ -150,6 +150,11 @@ const guideByRole: Record<Exclude<HelpRole, "Viewer" | "Reader">, GuideSection[]
 
 const releaseNotes = [
   {
+    title: "Alphabetic RFP code initials",
+    detail:
+      "RFP code initials now use only letters from the account name; the established prefix and requested-date format remain unchanged.",
+  },
+  {
     title: "Updated login orbit center logo",
     detail:
       "The center of the login-page provider orbit uses the supplied CloudOrbix SVG, clipped to a circle so its corners stay within the badge.",

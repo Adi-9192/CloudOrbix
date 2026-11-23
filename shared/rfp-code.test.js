@@ -14,6 +14,10 @@ test("normalizes punctuation and uses the first two words", () => {
   assert.equal(buildRfpCodeBase("Cloud-Orbix Services", "2026-11-06"), "RFP_CO_061126");
 });
 
+test("uses only letters from the account name when generating initials", () => {
+  assert.equal(buildRfpCodeBase("(123) Cloud 9 Orbix", "2026-11-06"), "RFP_CO_061126");
+});
+
 test("returns no preview when the name or requested date is missing", () => {
   assert.equal(buildRfpCodeBase("", "2026-11-06"), "");
   assert.equal(buildRfpCodeBase("CloudOrbix", ""), "");
